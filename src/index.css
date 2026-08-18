@@ -1,0 +1,294 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Poppins:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Background - Very light blue/white from website */
+    --background: 228 33% 98%;
+    /* #F8F9FD */
+    --foreground: 222 47% 11%;
+
+    /* Card - Pure white */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary - Mobino Adjal Yellow #FFCD00 */
+    --primary: 48 100% 50%;
+    --primary-foreground: 222 47% 11%;
+
+    /* Secondary - Light gray/blue */
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent - Omada Blue #0067F2 (Brand Color) */
+    --accent: 215 100% 47%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive - Soft Red */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 24 100% 63%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Border - Subtle cool gray */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 24 100% 63%;
+    /* Orange ring */
+
+    /* Radius - 12px (0.75rem) for a premium, modern app feel (Website uses 6px) */
+    --radius: 0.75rem;
+    --radius-sm: 0.5rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius-full: 9999px;
+
+    /* Status Colors */
+    --status-paid: 142 70% 45%;
+    --status-paid-bg: 142 30% 95%;
+    --status-pending: 24 100% 63%;
+    /* Orange */
+    --status-pending-bg: 24 40% 96%;
+    --status-unpaid: 0 84% 60%;
+    --status-unpaid-bg: 0 30% 96%;
+    --status-draft: 215 16% 47%;
+    --status-draft-bg: 210 20% 96%;
+
+    /* Stats */
+    --stat-positive: 142 70% 45%;
+    --stat-negative: 0 84% 60%;
+
+    /* Sidebar - Premium Dark */
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 95%;
+    /* Subtle off-white text on dark */
+
+    --sidebar-primary: 48 100% 50%;
+    /* Yellow for active items */
+    --sidebar-primary-foreground: 0 0% 10%;
+
+    --sidebar-accent: 0 0% 15%;
+    /* Slightly lighter for hover */
+    --sidebar-accent-foreground: 48 100% 50%;
+
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 48 100% 50%;
+
+    /* Charts */
+    --chart-1: 215 100% 47%;
+    /* Blue */
+    --chart-2: 24 100% 63%;
+    /* Orange */
+    --chart-3: 142 70% 45%;
+    /* Green */
+    --chart-4: 0 84% 60%;
+    /* Red */
+    --chart-5: 262 80% 50%;
+    /* Purple */
+
+    /* Shadows */
+    --shadow-soft: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.02);
+    --shadow-elevated: 0 10px 30px -10px rgba(0, 103, 242, 0.15);
+    /* Blue tinted shadow */
+
+    font-family: 'Space Grotesk', 'Poppins', system-ui, sans-serif;
+  }
+
+  .dark {
+    /* Dark Mode - Deep Blue-Black */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 215 100% 47%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 24 100% 63%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 215 100% 47%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 215 100% 47%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 15%;
+    --sidebar-accent-foreground: 215 100% 47%;
+    --sidebar-border: 217 33% 12%;
+    --sidebar-ring: 215 100% 47%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display font-bold tracking-tight;
+  }
+}
+
+@layer components {
+
+  /* Soft card styling */
+  .soft-card {
+    @apply bg-card rounded-2xl border border-border/50 p-6;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Pill button */
+  .pill-button {
+    @apply rounded-full px-4 py-2 text-sm font-medium transition-all;
+  }
+
+  /* Icon button - circular */
+  .icon-button {
+    @apply w-10 h-10 rounded-full flex items-center justify-center transition-all hover:bg-secondary;
+  }
+
+  /* Soft input */
+  .soft-input {
+    @apply rounded-xl border-border/50 bg-secondary/50 focus:bg-card;
+  }
+
+  /* Stats number */
+  .stat-number {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  /* Filter pill */
+  .filter-pill {
+    @apply rounded-full px-4 py-2 text-sm font-medium bg-secondary hover:bg-secondary/80 transition-all cursor-pointer;
+  }
+
+  .filter-pill-active {
+    @apply bg-foreground text-background;
+  }
+}
+
+
+@layer utilities {
+
+  /* Scrollbar hide */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Print Styles */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  @media print {
+
+    html,
+    body {
+      width: 210mm;
+      height: 297mm;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Hide everything by default */
+    body * {
+      visibility: hidden;
+    }
+
+    /* Hide specific UI elements explicitly to be safe */
+    nav,
+    aside,
+    header,
+    button,
+    .no-print {
+      display: none !important;
+    }
+
+    /* Show the main invoice content */
+    /* Accessing deep structure often requires targeting the main component container */
+    #root,
+    #root>div,
+    main {
+      visibility: visible;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* Target the invoice detail specific print area if using a specific class or ID is better, 
+       but typically ensuring main is visible and resizing touches up most needs. 
+       Let's refine to be more specific to the content we want. */
+
+    /* We want to print the "Invoice Print View" which is hidden in screen but block in print */
+    .print\:block {
+      display: block !important;
+      visibility: visible !important;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+
+    .print\:block * {
+      visibility: visible !important;
+    }
+
+    /* Standard A4 Page container for printing */
+    .print-page {
+      width: 210mm !important;
+      height: 297mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+}

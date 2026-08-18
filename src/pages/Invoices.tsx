@@ -1,0 +1,563 @@
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Search, Plus, MoreHorizontal, Eye, CreditCard, FileDown, MinusCircle, Trash2, FileText, ArrowRightLeft, Edit } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
+import { TableLoading } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
+import { generateInvoicePDF } from "@/lib/pdfGenerator";
+import { toast } from "sonner";
+import { db } from "@/lib/database";
+import { useSettings } from "@/hooks/useSettings";
+import { InvoicePreview } from "@/components/invoice/InvoicePreview";
+
+const tabs = [
+  { label: "Toutes", status: undefined, type: undefined },
+  { label: "Factures", status: undefined, type: "invoice" as InvoiceType },
+  { label: "Proformas", status: undefined, type: "proforma" as InvoiceType },
+  { label: "Avoirs", status: undefined, type: "credit_note" as InvoiceType },
+  { label: "Payées", status: "paid" as InvoiceStatus, type: undefined },
+  { label: "Impayées", status: "issued" as InvoiceStatus, type: undefined },
+];
+
+const statusStyles: Record<string, string> = {
+  paid: "bg-status-paid-bg text-status-paid",
+  partial: "bg-status-pending-bg text-status-pending",
+  unpaid: "bg-status-unpaid-bg text-status-unpaid",
+  draft: "bg-status-draft-bg text-status-draft",
+  overdue: "bg-status-unpaid-bg text-status-unpaid",
+  issued: "bg-status-pending-bg text-status-pending",
+};
+
+const statusLabels: Record<string, string> = {
+  paid: "Payée",
+  partial: "Partielle",
+  unpaid: "Impayée",
+  draft: "Brouillon",
+  overdue: "En retard",
+  issued: "Émise",
+};
+
+export default function InvoicesPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getInitialTab = () => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "proformas") return 2;
+    if (tabParam === "invoices") return 1;
+    if (tabParam === "credit-notes") return 3;
+    return 0;
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab());
+  const { data: invoices, isLoading } = useInvoices(tabs[activeTab].status, tabs[activeTab].type);
+  const deleteInvoice = useDeleteInvoice();
+  const convertProforma = useConvertProforma();
+  const { data: settings } = useSettings();
+  const updateStatus = useUpdateInvoiceStatus();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
+  const [pdfInvoice, setPdfInvoice] = useState<any>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
+
+  const handleTabChange = (index: number) => {
+    setActiveTab(index);
+    setSelectedInvoices([]);
+    const tabName = index === 1 ? "invoices" : index === 2 ? "proformas" : index === 3 ? "credit-notes" : "all";
+    setSearchParams({ tab: tabName });
+  };
+
+  const toggleAll = () => {
+    if (selectedInvoices.length === filteredInvoices?.length) {
+      setSelectedInvoices([]);
+    } else {
+      setSelectedInvoices(filteredInvoices?.map((inv: any) => inv.id) || []);
+    }
+  };
+
+  const toggleInvoice = (id: string) => {
+    if (selectedInvoices.includes(id)) {
+      setSelectedInvoices(selectedInvoices.filter((i) => i !== id));
+    } else {
+      setSelectedInvoices([...selectedInvoices, id]);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (invoiceToDelete) {
+      deleteInvoice.mutate(invoiceToDelete);
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
+      toast.success("Facture supprimée");
+    }
+  };
+
+  const filteredInvoices = invoices?.filter((invoice: any) => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      invoice.invoice_number?.toLowerCase().includes(searchLower) ||
+      invoice.clients?.name?.toLowerCase().includes(searchLower) ||
+      invoice.total_ttc?.toString().includes(searchLower)
+    );
+  })?.sort((a: any, b: any) => {
+    let aValue, bValue;
+    switch (sortConfig.key) {
+      case 'date':
+        aValue = new Date(a.invoice_date).getTime();
+        bValue = new Date(b.invoice_date).getTime();
+        break;
+      case 'number':
+        aValue = a.invoice_number || '';
+        bValue = b.invoice_number || '';
+        break;
+      case 'client':
+        aValue = a.clients?.name?.toLowerCase() || '';
+        bValue = b.clients?.name?.toLowerCase() || '';
+        break;
+      case 'amount':
+        aValue = a.total_ttc || 0;
+        bValue = b.total_ttc || 0;
+        break;
+      default:
+        return 0;
+    }
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("fr-DZ", {
+      style: "currency",
+      currency: "DZD",
+    }).format(amount);
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const handleDownloadPDF = async (invoiceId: string, invoiceSummary: any) => {
+    try {
+      // Fetch full invoice details to get items
+      const fullInvoice = await db.invoices.getById(invoiceId);
+      if (!fullInvoice) {
+        toast.error("Impossible de récupérer les détails de la facture");
+        return;
+      }
+
+      // Fetch invoice items
+      const items = await db.invoices.getItems(invoiceId);
+
+      if (!fullInvoice.client_id) {
+        toast.error("Cette facture n'a pas de client associé");
+        return;
+      }
+
+      // Fetch client details
+      const client = await db.clients.getById(fullInvoice.client_id);
+
+      if (!client) {
+        toast.error("Impossible de récupérer les détails du client");
+        return;
+      }
+
+      // Construct complete invoice object for PDF generator
+      const invoiceForPDF = {
+        ...fullInvoice,
+        invoice_items: items.map(item => ({
+          ...item,
+          products: item.products ? {
+            code: item.products.code,
+            name: item.products.name,
+            description: item.products.description,
+            unit: item.products.unit,
+          } : undefined
+        })),
+        clients: {
+          name: client.name,
+          address: client.address,
+          city: client.city,
+          wilaya: client.wilaya,
+          phone: client.phone,
+          email: client.email,
+          nif: client.nif,
+          nis: client.nis,
+          rc: client.rc,
+          ai: client.ai,
+        }
+      };
+
+      setPdfInvoice(invoiceForPDF);
+
+      const promise = new Promise<string>(async (resolve, reject) => {
+        // Wait for render
+        await new Promise(r => setTimeout(r, 500));
+        try {
+          // Pass download=true by default
+          const res = await generateInvoicePDF(invoiceForPDF, settings);
+      toast.success("PDF téléchargé avec succès");
+          resolve(res);
+        } catch (e) {
+          reject(e);
+        } finally {
+          setPdfInvoice(null);
+        }
+      });
+
+      toast.promise(promise, {
+        loading: "Génération du PDF...",
+        success: "PDF téléchargé",
+        error: "Erreur lors de la génération du PDF",
+      });
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast.error("Erreur inattendue");
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Off-screen Preview for PDF Generation */}
+      <div className="fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]">
+        {pdfInvoice && <InvoicePreview invoice={pdfInvoice} />}
+      </div>
+
+      <Sidebar />
+
+      {/* ... rest of the component ... */}
+
+      <div className="flex-1 flex flex-col">
+        <Header />
+
+        <main className="flex-1 p-8 pt-4">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground tracking-tight">Factures</h1>
+              <p className="text-muted-foreground mt-1">Gérez vos factures et avoirs</p>
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => navigate("/invoices/credit-note/new")}>
+                <MinusCircle className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Avoir</span>
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/proformas/new")}>
+                <Plus className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Proforma</span>
+              </Button>
+              <Button onClick={() => navigate("/invoices/new")}>
+                <Plus className="w-4 h-4 mr-2" />
+                Nouvelle facture
+              </Button>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="flex gap-4 mb-6 overflow-x-auto pb-2">
+            <div className="bg-card rounded-3xl p-5 shadow-card border border-border/30 flex items-center gap-4 min-w-fit">
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center">
+                <FileText className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground tracking-tight">{invoices?.length || 0}</p>
+                <p className="text-sm text-muted-foreground">Total factures</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
+            {/* Tabs and Search */}
+            <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/30">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                {tabs.map((tab, index) => (
+                  <Button
+                    key={tab.label}
+                    variant={activeTab === index ? "default" : "outline"}
+                    onClick={() => handleTabChange(index)}
+                    className={cn(
+                      "rounded-full px-4 border-0",
+                      activeTab === index
+                        ? "bg-primary text-primary-foreground shadow-md"
+                        : "bg-background text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {tab.label}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="flex gap-3 w-full md:w-auto">
+                <Select
+                  value={`${sortConfig.key}-${sortConfig.direction}`}
+                  onValueChange={(val) => {
+                    const [key, direction] = val.split('-');
+                    setSortConfig({ key, direction: direction as 'asc' | 'desc' });
+                  }}
+                >
+                  <SelectTrigger className="w-[180px] h-11 bg-secondary/30 border-border/50 rounded-xl">
+                    <SelectValue placeholder="Trier par..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date-desc">Date (Plus récent)</SelectItem>
+                    <SelectItem value="date-asc">Date (Plus ancien)</SelectItem>
+                    <SelectItem value="number-asc">N° Facture (Croissant)</SelectItem>
+                    <SelectItem value="number-desc">N° Facture (Décroissant)</SelectItem>
+                    <SelectItem value="client-asc">Client (A-Z)</SelectItem>
+                    <SelectItem value="client-desc">Client (Z-A)</SelectItem>
+                    <SelectItem value="amount-desc">Montant (Plus grand)</SelectItem>
+                    <SelectItem value="amount-asc">Montant (Plus petit)</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <div className="relative flex-1 md:w-72">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Rechercher..."
+                    className="pl-11 h-11 bg-secondary/30 border-border/50 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border/30">
+                    <th className="px-5 py-4 text-left">
+                      <Checkbox
+                        checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
+                        onCheckedChange={toggleAll}
+                      />
+                    </th>
+                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">N°</th>
+                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Client</th>
+                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Date</th>
+                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Montant</th>
+                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Statut</th>
+                    <th className="px-5 py-4 w-14"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <TableLoading columns={7} rows={5} />
+                  ) : filteredInvoices?.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <EmptyState
+                          type="invoices"
+                          title="Aucune facture"
+                          description={searchQuery ? "Essayez une autre recherche" : "Créez votre première facture"}
+                          action={!searchQuery ? {
+                            label: "Créer",
+                            onClick: () => navigate("/invoices/new")
+                          } : undefined}
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInvoices?.map((invoice) => {
+                      const isCreditNote = invoice.invoice_type === "credit_note";
+                      const isProforma = invoice.invoice_type === "proforma";
+                      return (
+                        <tr
+                          key={invoice.id}
+                          className="border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/invoices/${invoice.id}`)}
+                        >
+                          <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedInvoices.includes(invoice.id)}
+                              onCheckedChange={() => toggleInvoice(invoice.id)}
+                            />
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{invoice.invoice_number}</span>
+                              {isCreditNote && (
+                                <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">Avoir</span>
+                              )}
+                              {isProforma && (
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Proforma</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-muted-foreground">
+                            {invoice.clients?.name}
+                          </td>
+                          <td className="px-5 py-4 text-muted-foreground hidden md:table-cell">
+                            {formatDate(invoice.invoice_date)}
+                          </td>
+                          <td className={cn(
+                            "px-5 py-4 font-medium",
+                            isCreditNote ? "text-destructive" : ""
+                          )}>
+                            {isCreditNote ? "-" : ""}{formatCurrency(invoice.total_ttc)}
+                          </td>
+                          <td className="px-5 py-4 hidden sm:table-cell">
+                            <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    className={cn(
+                                      "inline-flex px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition-opacity",
+                                      statusStyles[invoice.status || "draft"]
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    {statusLabels[invoice.status || "draft"]}
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="center">
+                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "paid" })}>
+                                    Payée
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "issued" })}>
+                                    Émise (Impayée)
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}>
+                                    Brouillon
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "cancelled" })}>
+                                    Annulée
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadPDF(invoice.id, invoice);
+                                }}
+                                title="Télécharger PDF"
+                              >
+                                <FileDown className="w-4 h-4" />
+                              </button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  Voir détails
+                                </DropdownMenuItem>
+                                {invoice.status !== "paid" && (
+                                  <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Modifier
+                                  </DropdownMenuItem>
+                                )}
+                                {!isCreditNote && invoice.status !== "paid" && (
+                                  <DropdownMenuItem onClick={() => convertProforma.mutate(invoice.id)}>
+                                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                                    Convertir en Facture
+                                  </DropdownMenuItem>
+                                )}
+                                {!isCreditNote && !isProforma && (
+                                  <>
+                                    <DropdownMenuItem onClick={() => navigate(`/payments?invoice=${invoice.id}`)}>
+                                      <CreditCard className="w-4 h-4 mr-2" />
+                                      Paiement
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => navigate(`/invoices/credit-note/new?invoice=${invoice.id}`)}>
+                                      <MinusCircle className="w-4 h-4 mr-2" />
+                                      Avoir
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setInvoiceToDelete(invoice.id);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Supprimer
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette facture ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-full">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

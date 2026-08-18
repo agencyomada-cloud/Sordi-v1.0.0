@@ -1,0 +1,23 @@
+base_folder/
+dist/
+dist-isolation/
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+.DS_Store
+.env
+.env.*.local
+*.log
+
+# Local runtime data / real business records — never belongs in version control
+*.sqlite
+*.sqlite3
+*.db
+*.xlsx
+*.xls
+
+# server/ (Node backend, Phase 1) has its own gitignore-equivalent needs
+server/node_modules/
+server/dist/
+server/.env
+server/.env.*.local
