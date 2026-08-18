@@ -1,28 +1,26 @@
 import { useState, forwardRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Users,
-  FileText,
-  Truck,
-  CreditCard,
-  Package,
-  BarChart3,
-  ChevronDown,
-  ChevronRight,
-  Receipt,
-  LogOut,
-  ClipboardList,
-  Menu,
-  X,
-  Settings,
-  History,
-} from "lucide-react";
+  RiDashboardLine,
+  RiGroupLine,
+  RiFileTextLine,
+  RiTruckLine,
+  RiBankCardLine,
+  RiBox3Line,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiReceiptLine,
+  RiLogoutBoxRLine,
+  RiFileList3Line,
+  RiMenuLine,
+  RiCloseLine,
+  RiSettings3Line,
+  RiHistoryLine,
+} from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
-// Logo is copied to public folder by the copy-logo script
-const logoHorizontal = "/brand/sidebar-logo.png";
+const logoHorizontal = "/brand/logo-horizontal.svg";
 
 interface NavItem {
   icon: React.ElementType;
@@ -32,17 +30,17 @@ interface NavItem {
 }
 
 const menuItems: NavItem[] = [
-  { icon: LayoutDashboard, label: "Tableau de bord", path: "/" },
-  { icon: Users, label: "Clients", path: "/clients" },
-  { icon: ClipboardList, label: "Commandes", path: "/orders" },
-  { icon: FileText, label: "Facturation", path: "/invoices" },
-  { icon: Truck, label: "Livraisons", path: "/deliveries" },
-  { icon: CreditCard, label: "Paiements", path: "/payments" },
-  { icon: Receipt, label: "Charges", path: "/expenses" },
-  { icon: Package, label: "Produits", path: "/products" },
+  { icon: RiDashboardLine, label: "Tableau de bord", path: "/" },
+  { icon: RiGroupLine, label: "Clients", path: "/clients" },
+  { icon: RiFileList3Line, label: "Commandes", path: "/orders" },
+  { icon: RiFileTextLine, label: "Facturation", path: "/invoices" },
+  { icon: RiTruckLine, label: "Livraisons", path: "/deliveries" },
+  { icon: RiBankCardLine, label: "Paiements", path: "/payments" },
+  { icon: RiReceiptLine, label: "Charges", path: "/expenses" },
+  { icon: RiBox3Line, label: "Produits", path: "/products" },
 
-  { icon: Settings, label: "Paramètres", path: "/settings" },
-  { icon: History, label: "Historique", path: "/history" },
+  { icon: RiSettings3Line, label: "Paramètres", path: "/settings" },
+  { icon: RiHistoryLine, label: "Historique", path: "/history" },
 ];
 
 interface SidebarProps {
@@ -86,7 +84,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
         <div className="p-6">
           <img
             src={logoHorizontal}
-            alt="MOBINO"
+            alt="Sordi"
             className="w-full h-auto object-contain max-h-16"
           />
         </div>
@@ -115,8 +113,8 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
                   <span className="flex-1 text-left font-medium">{item.label}</span>
                   {item.children && (
                     expandedItems.includes(item.label)
-                      ? <ChevronDown className="w-4 h-4 opacity-40" />
-                      : <ChevronRight className="w-4 h-4 opacity-40" />
+                      ? <RiArrowDownSLine className="w-4 h-4 opacity-40" />
+                      : <RiArrowRightSLine className="w-4 h-4 opacity-40" />
                   )}
                 </button>
                 {item.children && expandedItems.includes(item.label) && (
@@ -154,7 +152,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-sidebar-foreground/70 hover:text-destructive hover:bg-sidebar-accent/50 transition-all rounded-xl"
           >
-            <LogOut className="w-5 h-5" />
+            <RiLogoutBoxRLine className="w-5 h-5" />
             <span className="font-medium">Déconnexion</span>
           </button>
         </div>
@@ -168,7 +166,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
           className="fixed top-4 left-4 z-50 lg:hidden w-11 h-11 bg-card rounded-full shadow-card flex items-center justify-center transition-all hover:bg-secondary"
           onClick={() => setIsMobileOpen(!isMobileOpen)}
         >
-          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {isMobileOpen ? <RiCloseLine className="w-5 h-5" /> : <RiMenuLine className="w-5 h-5" />}
         </button>
 
         {/* Mobile Overlay */}

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Poppins:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,143 +6,138 @@
 
 @layer base {
   :root {
-    /* Background - Very light blue/white from website */
-    --background: 228 33% 98%;
-    /* #F8F9FD */
-    --foreground: 222 47% 11%;
+    /* Background - Sordi Gray #F8F8F8 */
+    --background: 0 0% 97%;
+    --foreground: 0 0% 9%;
 
-    /* Card - Pure white */
+    /* Card - Pure white, sits a level above the page background */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 0 0% 9%;
 
-    /* Primary - Mobino Adjal Yellow #FFCD00 */
-    --primary: 48 100% 50%;
-    --primary-foreground: 222 47% 11%;
+    /* Primary - Sordi Blue #476CFF */
+    --primary: 228 100% 64%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Light gray/blue */
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222 47% 11%;
+    /* Secondary - neutral black-based gray, no secondary hue */
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 9%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
 
-    /* Accent - Omada Blue #0067F2 (Brand Color) */
-    --accent: 215 100% 47%;
+    /* Accent - same Sordi Blue; one brand color, used consistently */
+    --accent: 228 100% 64%;
     --accent-foreground: 0 0% 100%;
 
-    /* Destructive - Soft Red */
+    /* Destructive - Red */
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --warning: 24 100% 63%;
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Border - Subtle cool gray */
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 24 100% 63%;
-    /* Orange ring */
+    /* Border - neutral black-based gray */
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 228 100% 64%;
 
-    /* Radius - 12px (0.75rem) for a premium, modern app feel (Website uses 6px) */
-    --radius: 0.75rem;
-    --radius-sm: 0.5rem;
-    --radius-lg: 1rem;
-    --radius-xl: 1.5rem;
+    /* Radius - 8px, minimal/corporate rather than the previous rounded-pill feel */
+    --radius: 0.5rem;
+    --radius-sm: 0.375rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --radius-full: 9999px;
 
     /* Status Colors */
     --status-paid: 142 70% 45%;
     --status-paid-bg: 142 30% 95%;
-    --status-pending: 24 100% 63%;
-    /* Orange */
-    --status-pending-bg: 24 40% 96%;
+    --status-pending: 38 92% 50%;
+    --status-pending-bg: 38 60% 95%;
     --status-unpaid: 0 84% 60%;
     --status-unpaid-bg: 0 30% 96%;
-    --status-draft: 215 16% 47%;
-    --status-draft-bg: 210 20% 96%;
+    --status-draft: 0 0% 45%;
+    --status-draft-bg: 0 0% 94%;
 
     /* Stats */
     --stat-positive: 142 70% 45%;
     --stat-negative: 0 84% 60%;
 
-    /* Sidebar - Premium Dark */
-    --sidebar-background: 0 0% 10%;
-    --sidebar-foreground: 0 0% 95%;
-    /* Subtle off-white text on dark */
+    /* Sidebar - minimal, white/corporate rather than premium-dark */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 9%;
 
-    --sidebar-primary: 48 100% 50%;
-    /* Yellow for active items */
-    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-primary: 228 100% 64%;
+    --sidebar-primary-foreground: 0 0% 100%;
 
-    --sidebar-accent: 0 0% 15%;
-    /* Slightly lighter for hover */
-    --sidebar-accent-foreground: 48 100% 50%;
+    --sidebar-accent: 228 100% 96%;
+    /* Faint blue tint for hover/active */
+    --sidebar-accent-foreground: 228 100% 64%;
 
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 48 100% 50%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 228 100% 64%;
 
-    /* Charts */
-    --chart-1: 215 100% 47%;
+    /* Charts - primary blue first, distinct hues after for series legibility */
+    --chart-1: 228 100% 64%;
     /* Blue */
-    --chart-2: 24 100% 63%;
-    /* Orange */
+    --chart-2: 38 92% 50%;
+    /* Amber */
     --chart-3: 142 70% 45%;
     /* Green */
     --chart-4: 0 84% 60%;
     /* Red */
-    --chart-5: 262 80% 50%;
+    --chart-5: 262 60% 55%;
     /* Purple */
 
     /* Shadows */
     --shadow-soft: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.02);
-    --shadow-elevated: 0 10px 30px -10px rgba(0, 103, 242, 0.15);
-    /* Blue tinted shadow */
+    --shadow-elevated: 0 10px 30px -10px rgba(71, 108, 255, 0.18);
+    /* Sordi blue tinted shadow */
 
-    font-family: 'Space Grotesk', 'Poppins', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   .dark {
-    /* Dark Mode - Deep Blue-Black */
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
+    /* Dark Mode - kept in step with the light palette above (no toggle wired up yet) */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
 
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 222 47% 10%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 215 100% 47%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 228 100% 68%;
+    --primary-foreground: 0 0% 9%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 24 100% 63%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 228 100% 68%;
+    --accent-foreground: 0 0% 9%;
 
-    --destructive: 0 62% 30%;
+    --destructive: 0 62% 40%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 215 100% 47%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 228 100% 68%;
 
-    --sidebar-background: 222 47% 8%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 215 100% 47%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 15%;
-    --sidebar-accent-foreground: 215 100% 47%;
-    --sidebar-border: 217 33% 12%;
-    --sidebar-ring: 215 100% 47%;
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 228 100% 68%;
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 228 100% 68%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 228 100% 68%;
   }
 }
 

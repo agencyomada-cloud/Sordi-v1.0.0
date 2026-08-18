@@ -58,11 +58,11 @@ const Auth = () => {
           <div className="text-center mb-8 flex flex-col items-center">
             <img
               src="/brand/logo-horizontal.svg"
-              alt="MOBINO"
+              alt="Sordi"
               className="h-12 w-auto mb-6"
             />
             <h1 className="text-2xl font-bold text-foreground tracking-tight mb-2">
-              {needsSetup ? "Configuration initiale" : "Bienvenue sur MOBINO"}
+              {needsSetup ? "Configuration initiale" : "Bienvenue sur Sordi"}
             </h1>
             <p className="text-muted-foreground">
               {needsSetup
@@ -116,12 +116,12 @@ const Auth = () => {
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              {needsSetup ? "Configurer MOBINO" : "Se connecter"}
+              {needsSetup ? "Configurer Sordi" : "Se connecter"}
             </Button>
           </form>
         </div>
         <p className="text-center mt-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} MOBINO • Données stockées localement
+          © {new Date().getFullYear()} Sordi V1.0.0 • Données stockées localement
         </p>
       </div>
     </div>

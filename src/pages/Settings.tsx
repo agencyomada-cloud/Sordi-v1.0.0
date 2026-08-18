@@ -10,7 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { toast } from "sonner";
-import { Plus, Loader2, Save, Lock, ShieldCheck, KeyRound } from "lucide-react";
+import { 
+  RiAddLine as Plus, 
+  RiLoader4Line as Loader2, 
+  RiSaveLine as Save, 
+  RiLockLine as Lock, 
+  RiShieldCheckLine as ShieldCheck, 
+  RiKeyLine as KeyRound 
+} from "@remixicon/react";
 import { invoke } from "@tauri-apps/api/core";
 
 export default function SettingsPage() {
@@ -692,7 +699,7 @@ export default function SettingsPage() {
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-muted-foreground">Logo affiché en bas à droite de la facture (Remplacera MOBINO GROUP).</p>
+                                                <p className="text-xs text-muted-foreground">Logo affiché en bas à droite de la facture (Remplacera SORDI).</p>
                                             </div>
 
                                             {/* Pattern Body Background Image */}
