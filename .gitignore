@@ -21,3 +21,5 @@ server/node_modules/
 server/dist/
 server/.env
 server/.env.*.local
+server/.pgdata/
+server/*.log
