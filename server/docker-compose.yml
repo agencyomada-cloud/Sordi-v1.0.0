@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mobino
+      POSTGRES_PASSWORD: mobino_dev_password
+      POSTGRES_DB: mobino
+    ports:
+      # Mapped to 5434 (not the default 5432) so this never collides with a
+      # Postgres instance you might already be running locally.
+      - "5434:5432"
+    volumes:
+      - mobino_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobino -d mobino"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mobino_pg_data:
