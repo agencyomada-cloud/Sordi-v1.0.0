@@ -6,9 +6,7 @@ import {
   RiDownloadLine as Download, 
   RiAddLine as Plus 
 } from "@remixicon/react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input, Button, Checkbox } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 
 type InvoiceStatus = "Paid" | "Pending" | "Unpaid" | "Draft";

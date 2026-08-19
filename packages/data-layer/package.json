@@ -1,0 +1,14 @@
+{
+  "name": "@sordi/data-layer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

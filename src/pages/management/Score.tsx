@@ -10,22 +10,11 @@ import {
     RiDeleteBinLine as Trash2, 
     RiSaveLine as Save 
 } from "@remixicon/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Input, Badge } from "@sordi/ui";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useProjects } from "@/hooks/useProjects";
 import { useScores } from "@/hooks/useScores";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 
 const months = [
     { label: "Janvier", value: "01" },

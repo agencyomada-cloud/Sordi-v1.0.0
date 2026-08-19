@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useClients } from "@/hooks/useClients";

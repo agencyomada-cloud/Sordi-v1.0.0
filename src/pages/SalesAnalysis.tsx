@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MultiSelect } from "@/components/ui/multi-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { ClientProductPivotTable } from "@/components/dashboard/ClientProductPivotTable";
 import { ClientCumulativeTable } from "@/components/dashboard/ClientCumulativeTable";

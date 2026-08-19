@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input, Button, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
 import { 
     RiAddLine as Plus, 
     RiDeleteBinLine as Trash2, 
@@ -10,27 +9,7 @@ import {
 import { numberToWords } from "@/lib/numberToWords";
 import { useSettings } from "@/hooks/useSettings";
 import { chunkItems } from "@/lib/paginationUtils";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
 import { useProducts } from "@/hooks/useProducts";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 
 interface OrderEditablePreviewProps {

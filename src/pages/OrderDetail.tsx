@@ -7,14 +7,13 @@ import {
   RiEditLine as Edit, 
   RiLoader4Line as Loader2 
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
+import { Button, Badge } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useOrder, useOrderItems } from "@/hooks/useOrders";
 import { generateOrderPDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/hooks/useSettings";
 import { OrderEditablePreview } from "@/components/order/OrderEditablePreview";
 

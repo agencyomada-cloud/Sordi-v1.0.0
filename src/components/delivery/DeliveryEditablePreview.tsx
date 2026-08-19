@@ -1,14 +1,6 @@
 import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
+import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
 import { useSettings } from "@/hooks/useSettings";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { 
     RiAddLine as Plus, 
     RiDeleteBinLine as Trash2, 
@@ -17,19 +9,6 @@ import {
 } from "@remixicon/react";
 import { chunkItems } from "@/lib/paginationUtils";
 import { numberToWords } from "@/lib/numberToWords";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 
 interface DeliveryEditablePreviewProps {

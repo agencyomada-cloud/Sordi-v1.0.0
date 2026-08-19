@@ -7,11 +7,7 @@ import { RiNotification3Line, RiCheckDoubleLine, RiArrowRightSLine } from "@remi
 import { db } from "@/lib/database";
 import { getEntityConfig, getEntityRoute } from "@/lib/activityLog";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@sordi/ui";
 
 const LAST_SEEN_KEY = "sordi_notifications_last_seen";
 

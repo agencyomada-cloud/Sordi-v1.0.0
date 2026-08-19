@@ -15,14 +15,7 @@ import {
   RiMore2Fill as MoreVertical
 } from "@remixicon/react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/database";
 import { Sidebar } from "@/components/layout/Sidebar";

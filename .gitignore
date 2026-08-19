@@ -16,10 +16,7 @@ src-tauri/gen/
 *.xlsx
 *.xls
 
-# server/ (Node backend, Phase 1) has its own gitignore-equivalent needs
-server/node_modules/
-server/dist/
-server/.env
-server/.env.*.local
-server/.pgdata/
-server/*.log
+# node_modules/, dist/, .env, and *.log above already match at any depth
+# (no leading slash), so they already cover apps/*, packages/* too — only
+# the local Postgres data directory needs its own explicit entry.
+apps/api/.pgdata/

@@ -12,22 +12,27 @@ import {
     RiDownloadLine as Download
 } from "@remixicon/react";
 import { getActionColor, getActionLabel, getEntityConfig } from "@/lib/activityLog";
-import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { exportToCSV } from "../lib/csvUtils";
 import {
+    Button,
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "../components/ui/select";
-import { Badge } from "../components/ui/badge";
-import { MultiSelect } from "@/components/ui/multi-select";
+    Badge,
+    MultiSelect,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@sordi/ui";
 
 import { Sidebar } from "../components/layout/Sidebar";
 import { Header } from "../components/layout/Header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function History() {
     const [limit, setLimit] = useState(500); // Increased limit as we do client-side filtering

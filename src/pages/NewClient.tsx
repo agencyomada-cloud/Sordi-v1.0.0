@@ -13,10 +13,7 @@ import {
   RiDeleteBinLine as Trash2,
   RiLoader4Line as Loader2,
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Button, Input, Label, Textarea } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useClient, useCreateClient, useUpdateClient, type CreateClientData } from "@/hooks/useClients";

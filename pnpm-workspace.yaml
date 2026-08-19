@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  # All four are pre-existing, already-trusted dependencies (SWC/esbuild are
+  # Vite's own toolchain, sharp was already an explicit dependency, core-js
+  # is a standard polyfill) — approved so their native install scripts run,
+  # matching how npm already ran them before this workspace migration.
+  '@swc/core': true
+  # Pre-existing dependency (password hashing in server/), needed for its
+  # native binary to build — same reasoning as the four above.
+  argon2: true
+  core-js: true
+  esbuild: true
+  sharp: true

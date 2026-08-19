@@ -6,7 +6,7 @@ import {
   RiDownloadLine as Download, 
   RiLoader4Line as Loader2 
 } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useClients } from "@/hooks/useClients";

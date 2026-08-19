@@ -1,21 +1,10 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
 import {
   RiAddLine as Plus,
   RiDeleteBinLine as Trash2,
   RiCheckLine as Check,
   RiExpandUpDownLine as ChevronsUpDown
 } from "@remixicon/react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { numberToWords } from "@/lib/numberToWords";
 import { getCompanyPhones, formatPhone, resolveLegalFields } from "./invoiceHtmlShared";

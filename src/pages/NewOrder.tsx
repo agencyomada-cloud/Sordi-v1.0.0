@@ -3,7 +3,7 @@ import { useClients } from "@/hooks/useClients";
 import { useNavigate } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
+import { Button } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useCreateOrder, useNextOrderNumber } from "@/hooks/useOrders";

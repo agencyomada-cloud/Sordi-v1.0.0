@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button, Input } from "@sordi/ui";
 import { Loader2, Lock, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
 
