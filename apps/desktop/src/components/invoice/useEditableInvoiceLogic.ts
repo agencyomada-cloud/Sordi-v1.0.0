@@ -106,6 +106,11 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
       }
       newTimbre = amount * rate;
       if (newTimbre < 5) newTimbre = 5;
+      // PLACEHOLDER: this 20,000 DA cap doesn't exist in the real formula —
+      // calculate_timbre() in src-tauri/src/database.rs has no ceiling, only
+      // the 5 DA floor above. Intentional simplification for UI dev speed,
+      // not a bug. This whole block is a live-preview estimate only; the
+      // authoritative value is computed server-side by Rust on save.
       if (newTimbre > 20000) newTimbre = 20000;
     }
 

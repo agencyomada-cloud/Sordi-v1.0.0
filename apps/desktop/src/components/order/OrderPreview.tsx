@@ -267,7 +267,7 @@ export function OrderPreview({ order }: OrderPreviewProps) {
                             {/* Footer - Locked at the absolute bottom */}
                             <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 p-6 text-center bg-white">
                                 <p className="text-[8px] text-black font-mono text-center w-full">
-                                    {settings?.company_rib || "RIB : 004.00364.400.000.4811.36 CPA SETIF • Agence 364 CPA BD. CHELIHI KOUIDER, 19000"}
+                                    {settings?.company_rib ? `RIB : ${settings.company_rib}` : ""}
                                 </p>
                             </div>
                         </div>

@@ -315,7 +315,7 @@ export function CumulativesPDFDocument({ records, totals, periodLabel, settings 
   });
 
   return (
-    <Document title="Cumul Ventes Clients" author={settings?.company_name || "Mobino Accounting"}>
+    <Document title="Cumul Ventes Clients" author={settings?.company_name || "Sordi"}>
       <Page size="A4" orientation="landscape" style={styles.page}>
         
         {/* Background Pattern */}
@@ -331,14 +331,14 @@ export function CumulativesPDFDocument({ records, totals, periodLabel, settings 
             {settings?.logo_data ? (
               <Image src={settings.logo_data} style={styles.headerLogo} />
             ) : (
-              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 16 }}>{settings?.company_name || "MOBINO"}</Text>
+              <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 16 }}>{settings?.company_name || "SORDI"}</Text>
             )}
           </View>
           <View style={styles.headerTitleBox}>
             <Text style={styles.headerTitleText}>CUMUL VENTES</Text>
           </View>
           <View style={styles.companyNameBadge}>
-            <Text style={styles.companyNameText}>{settings?.company_name || "MOBINO GROUP"}</Text>
+            <Text style={styles.companyNameText}>{settings?.company_name || "SORDI"}</Text>
           </View>
         </View>
 
@@ -418,7 +418,7 @@ export function CumulativesPDFDocument({ records, totals, periodLabel, settings 
                   {settings?.footer_logo_data ? (
                     <Image src={settings.footer_logo_data} style={{ height: '100%', objectFit: 'contain' }} />
                   ) : (
-                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: '#b91c1c' }}>MOBINO</Text>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: '#b91c1c' }}>SORDI</Text>
                   )}
                 </View>
                 <View style={styles.qrBox}>

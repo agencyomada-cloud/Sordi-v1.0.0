@@ -6,7 +6,70 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/api:
+    dependencies:
+      '@sordi/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      argon2:
+        specifier: ^0.41.1
+        version: 0.41.1
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
+      express:
+        specifier: ^4.21.1
+        version: 4.22.2(supports-color@7.2.0)
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.3
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/cookie-parser':
+        specifier: ^1.4.7
+        version: 1.4.10(@types/express@4.17.25)
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/jsonwebtoken':
+        specifier: ^9.0.7
+        version: 9.0.10
+      '@types/node':
+        specifier: ^22.16.5
+        version: 22.16.5
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.23.1
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+
+  apps/desktop:
     dependencies:
       '@fontsource/space-grotesk':
         specifier: ^5.2.10
@@ -20,9 +83,12 @@ importers:
       '@remixicon/react':
         specifier: ^4.9.0
         version: 4.9.0(react@18.3.1)
+      '@sordi/data-layer':
+        specifier: workspace:*
+        version: link:../../packages/data-layer
       '@sordi/ui':
         specifier: workspace:*
-        version: link:packages/ui
+        version: link:../../packages/ui
       '@tanstack/react-query':
         specifier: ^5.83.0
         version: 5.83.0(react@18.3.1)
@@ -129,67 +195,6 @@ importers:
       vite:
         specifier: ^5.4.19
         version: 5.4.19(@types/node@22.16.5)
-
-  apps/api:
-    dependencies:
-      '@sordi/schema':
-        specifier: workspace:*
-        version: link:../../packages/schema
-      argon2:
-        specifier: ^0.41.1
-        version: 0.41.1
-      cookie-parser:
-        specifier: ^1.4.7
-        version: 1.4.7
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.6
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
-      drizzle-orm:
-        specifier: ^0.45.2
-        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
-      express:
-        specifier: ^4.21.1
-        version: 4.22.2(supports-color@7.2.0)
-      jsonwebtoken:
-        specifier: ^9.0.2
-        version: 9.0.3
-      pg:
-        specifier: ^8.13.1
-        version: 8.23.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      '@types/cookie-parser':
-        specifier: ^1.4.7
-        version: 1.4.10(@types/express@4.17.25)
-      '@types/cors':
-        specifier: ^2.8.17
-        version: 2.8.19
-      '@types/express':
-        specifier: ^4.17.21
-        version: 4.17.25
-      '@types/jsonwebtoken':
-        specifier: ^9.0.7
-        version: 9.0.10
-      '@types/node':
-        specifier: ^22.16.5
-        version: 22.16.5
-      '@types/pg':
-        specifier: ^8.11.10
-        version: 8.23.1
-      drizzle-kit:
-        specifier: ^0.31.10
-        version: 0.31.10
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.12
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
 
   packages/data-layer:
     dependencies:

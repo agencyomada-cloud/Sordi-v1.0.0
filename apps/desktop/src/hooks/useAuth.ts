@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 // Placeholder web credentials until real backend auth (signup/login against
-// the server/ API) is wired into the frontend — see server/README.md.
+// the apps/api API) is wired into the frontend — see apps/api/README.md.
 const WEB_DEMO_LOGIN = 'admin';
 const WEB_DEMO_PASSWORD = 'admin';
 

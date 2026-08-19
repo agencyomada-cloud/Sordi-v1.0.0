@@ -4062,3 +4062,185 @@ pub fn delete_client_advance(db: State<'_, Mutex<Connection>>, id: String) -> Re
     Ok(())
 }
 
+
+// ============================================================================
+// IPC ARG-BRIDGING SMOKE TEST
+//
+// Verifies, via a real Tauri mock app (tauri::test::mock_builder) rather
+// than a running desktop window, the one thing that couldn't be confirmed by
+// reading source alone: whether camelCase JSON arg names sent by the
+// frontend (e.g. `invoiceType`) actually bind to snake_case Rust command
+// parameters (e.g. `invoice_type`). Everything else this test touches
+// (struct field names, which commands exist, that totals are server-
+// computed) was already confirmed by direct source reading — this test's
+// job is narrowly the IPC arg-name boundary.
+//
+// NOT YET COMPILED OR RUN — written against the API documented at
+// docs.rs/tauri/2.9.5/tauri/test, not executed, since this environment has
+// no Rust toolchain. Expect to need at least a small fix on first
+// `cargo test` run; please paste back the first compiler error verbatim
+// if it doesn't build clean.
+// ============================================================================
+#[cfg(test)]
+mod ipc_arg_bridging_smoke_test {
+    use super::*;
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
+    use tauri::webview::InvokeRequest;
+    use tauri::{Manager, WebviewWindowBuilder};
+
+    fn build_test_app() -> tauri::App<tauri::test::MockRuntime> {
+        let app = mock_builder()
+            .invoke_handler(tauri::generate_handler![
+                crate::commands::get_clients,
+                crate::commands::create_client,
+                crate::commands::get_products,
+                crate::commands::create_product,
+                crate::commands::get_invoices,
+                crate::commands::create_invoice,
+            ])
+            // NOT tauri::generate_context!() — that macro embeds macOS
+            // bundle metadata (Info.plist) via a symbol meant to exist once
+            // per binary. lib.rs::run() already calls it for the real app;
+            // since `cargo test` links that same non-test code into the test
+            // binary alongside this module, a second real generate_context!()
+            // call here would redefine that symbol and fail to link. This is
+            // the test-only equivalent Tauri ships specifically to avoid that.
+            .build(mock_context(noop_assets()))
+            .expect("failed to build mock Tauri app");
+
+        // In-memory SQLite, isolated per test — never touches the real
+        // user database (app_data_dir()/database.db). init_database() also runs
+        // `PRAGMA foreign_keys = ON`, confirmed from database.rs — so client
+        // and product rows must exist before an invoice can reference them.
+        let conn = crate::database::init_database(":memory:")
+            .expect("failed to init in-memory test database");
+        app.manage(std::sync::Mutex::new(conn));
+
+        app
+    }
+
+    fn invoke_json(
+        webview: &tauri::WebviewWindow<tauri::test::MockRuntime>,
+        cmd: &str,
+        args: serde_json::Value,
+    ) -> serde_json::Value {
+        let response = get_ipc_response(
+            webview,
+            InvokeRequest {
+                cmd: cmd.into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "http://tauri.localhost".parse().unwrap(),
+                body: InvokeBody::Json(args),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .unwrap_or_else(|e| panic!("invoke({}) failed at the IPC layer: {:?}", cmd, e));
+
+        response
+            .deserialize::<serde_json::Value>()
+            .unwrap_or_else(|e| panic!("invoke({}) response failed to deserialize: {:?}", cmd, e))
+    }
+
+    #[test]
+    fn get_invoices_accepts_camelcase_arg_names() {
+        let app = build_test_app();
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        // THE key assertion: Rust's get_invoices(status, invoice_type) takes
+        // a snake_case parameter, but we send camelCase — exactly what
+        // LocalAdapter.ts sends today (and what database.ts already sends in
+        // production). If this doesn't error, the bridging is confirmed.
+        let result = invoke_json(
+            &webview,
+            "get_invoices",
+            serde_json::json!({ "status": "all", "invoiceType": "invoice" }),
+        );
+
+        println!("SMOKE_TEST get_invoices(camelCase args) response: {}", result);
+
+        assert!(
+            result.is_array(),
+            "expected get_invoices to return a JSON array (even if empty) proving \
+             {{status, invoiceType}} bound correctly to (status, invoice_type); got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn create_invoice_full_roundtrip_computes_totals_server_side() {
+        let app = build_test_app();
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        // Prerequisite client (FK-enforced) — snake_case payload, matching
+        // what LocalAdapter.ts's toSnakeCase() would send.
+        let client = invoke_json(
+            &webview,
+            "create_client",
+            serde_json::json!({ "data": { "name": "Client Smoke Test SARL" } }),
+        );
+        println!("SMOKE_TEST create_client response: {}", client);
+        let client_id = client["id"].as_str().expect("client response missing id").to_string();
+
+        // Prerequisite product.
+        let product = invoke_json(
+            &webview,
+            "create_product",
+            serde_json::json!({
+                "data": { "code": "GRAV-001", "name": "Gravier 0/31.5", "unit_price": 5000.0 }
+            }),
+        );
+        println!("SMOKE_TEST create_product response: {}", product);
+        let product_id = product["id"].as_str().expect("product response missing id").to_string();
+
+        // The actual test: snake_case nested `data` payload for create_invoice,
+        // paying in cash ("especes") to force a non-zero stamp duty, exactly
+        // as LocalAdapter.ts's toSnakeCase(stripWriteMeta(input)) would build it.
+        let invoice = invoke_json(
+            &webview,
+            "create_invoice",
+            serde_json::json!({
+                "data": {
+                    "client_id": client_id,
+                    "invoice_date": "2026-08-19",
+                    "payment_method": "especes",
+                    "items": [
+                        {
+                            "product_id": product_id,
+                            "quantity": 12.0,
+                            "unit_price": 5000.0,
+                            "tva_rate": 19.0
+                        }
+                    ]
+                }
+            }),
+        );
+        println!("SMOKE_TEST create_invoice response:\n{}", serde_json::to_string_pretty(&invoice).unwrap());
+
+        // Corrected against the real recalculate_invoice_totals/calculate_timbre
+        // (database.rs) after the first run caught this test's own wrong
+        // assumptions: the timbre base is per-item (HT + TVA) summed for
+        // non-exempt items — NOT subtotal_ht alone — and calculate_timbre has
+        // no upper cap at all (only a 5 DA floor). Matches
+        // CONFORMITE_FACTURATION_ALGERIE.md's documented brackets/minimum too.
+        //
+        // subtotal_ht = 12 * 5000 = 60000
+        // tva_amount = 60000 * 0.19 = 11400
+        // timbre base = subtotal_ht + tva_amount = 71400 (30k < base <= 100k -> 1.5%)
+        // timbre = 71400 * 0.015 = 1071.0 (no cap)
+        // total_ttc = 60000 + 11400 + 1071 = 72471
+        assert_eq!(invoice["subtotal_ht"].as_f64(), Some(60000.0), "subtotal_ht mismatch — items not summed as expected");
+        assert_eq!(invoice["tva_amount"].as_f64(), Some(11400.0), "tva_amount mismatch — 19% TVA not applied as expected");
+        assert_eq!(invoice["timbre"].as_f64(), Some(1071.0), "timbre mismatch — base should be (subtotal_ht + tva_amount), 1.5% bracket, no cap");
+        assert_eq!(invoice["total_ttc"].as_f64(), Some(72471.0), "total_ttc mismatch — confirms Rust recalculates totals server-side, matching database.rs::recalculate_invoice_totals / calculate_timbre");
+        // Confirms the earlier static-read finding: no `items` key on the
+        // returned Invoice — it truly lives elsewhere (get_invoice_items).
+        assert!(invoice.get("items").is_none(), "Invoice response unexpectedly includes an `items` field — contradicts the struct definition read earlier");
+    }
+}

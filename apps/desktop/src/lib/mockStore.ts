@@ -850,7 +850,7 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
     driver_name: "Mourad Brahimi",
     deliverer_name: "Dépôt Central",
     deliverer_nin: "1980160900124",
-    transporter_name: "Trans Mobino Express",
+    transporter_name: "Trans Sordi Express",
     transporter_nin: "1985160900456",
     delivery_location: "Alger Oued Smar",
     client_received_date: "2025-01-14",
@@ -942,9 +942,9 @@ const INITIAL_ORDERS: Order[] = [
     id: "ord-001",
     order_number: "BC-2025-0001",
     client_id: "cli-001",
-    supplier_name: "SARL MOBINO CARRIERES",
+    supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
-    supplier_email: "contact@mobino.dz",
+    supplier_email: "contact@sordi.dz",
     supplier_phone: "021 55 44 33",
     supplier_rc: "16/00-0984123B18",
     supplier_nif: "001816098745231",
@@ -969,9 +969,9 @@ const INITIAL_ORDERS: Order[] = [
     id: "ord-002",
     order_number: "BC-2025-0002",
     client_id: "cli-002",
-    supplier_name: "SARL MOBINO CARRIERES",
+    supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
-    supplier_email: "contact@mobino.dz",
+    supplier_email: "contact@sordi.dz",
     supplier_phone: "021 55 44 33",
     supplier_rc: "16/00-0984123B18",
     supplier_nif: "001816098745231",
@@ -996,9 +996,9 @@ const INITIAL_ORDERS: Order[] = [
     id: "ord-003",
     order_number: "BC-2025-0003",
     client_id: "cli-003",
-    supplier_name: "SARL MOBINO CARRIERES",
+    supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
-    supplier_email: "contact@mobino.dz",
+    supplier_email: "contact@sordi.dz",
     supplier_phone: "021 55 44 33",
     supplier_rc: "16/00-0984123B18",
     supplier_nif: "001816098745231",
@@ -1022,10 +1022,10 @@ const INITIAL_ORDERS: Order[] = [
 ];
 
 const INITIAL_EMPLOYEES: Employee[] = [
-  { id: "emp-001", name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@mobino.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-002", name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@mobino.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-003", name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@mobino.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-004", name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@mobino.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" }
+  { id: "emp-001", name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@sordi.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
+  { id: "emp-002", name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@sordi.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
+  { id: "emp-003", name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@sordi.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
+  { id: "emp-004", name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@sordi.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" }
 ];
 
 export const mockStore = {
@@ -1206,6 +1206,11 @@ export const mockStore = {
       const rate = item.tva_rate ?? 19;
       return sum + (item.quantity * item.unit_price * (rate / 100));
     }, 0);
+    // PLACEHOLDER stamp-duty calc (flat 1% of subtotal_ht, capped 2500) —
+    // intentional simplification for UI dev speed, not a bug. Source of truth
+    // is calculate_timbre() in src-tauri/src/database.rs (graduated 1%/1.5%/2%
+    // brackets on subtotal_ht+tva_amount, 5 DA floor, no cap). Must be
+    // replaced with the real logic before this path goes to production.
     const timbre = data.payment_method === "especes" ? Math.min(2500, Math.round(subtotal_ht * 0.01)) : 0;
     const total_ttc = subtotal_ht + tva_amount + timbre;
     const amount_paid = data.amount_paid || 0;
@@ -1277,6 +1282,11 @@ export const mockStore = {
       const rate = item.tva_rate ?? 19;
       return sum + (item.quantity * item.unit_price * (rate / 100));
     }, 0);
+    // PLACEHOLDER stamp-duty calc (flat 1% of subtotal_ht, capped 2500) —
+    // intentional simplification for UI dev speed, not a bug. Source of truth
+    // is calculate_timbre() in src-tauri/src/database.rs (graduated 1%/1.5%/2%
+    // brackets on subtotal_ht+tva_amount, 5 DA floor, no cap). Must be
+    // replaced with the real logic before this path goes to production.
     const timbre = data.payment_method === "especes" ? Math.min(2500, Math.round(subtotal_ht * 0.01)) : 0;
     const total_ttc = subtotal_ht + tva_amount + timbre;
     const amount_paid = data.amount_paid ?? existing.amount_paid ?? 0;
@@ -1503,9 +1513,9 @@ export const mockStore = {
       id: "ord-" + Date.now(),
       order_number: data.order_number || `BC-${new Date().getFullYear()}-${(list.length + 1).toString().padStart(4, "0")}`,
       client_id: data.client_id || "cli-001",
-      supplier_name: data.supplier_name || "SARL MOBINO",
+      supplier_name: data.supplier_name || "SARL SORDI",
       supplier_address: data.supplier_address || "Zone Industrielle Oued Smar",
-      supplier_email: data.supplier_email || "contact@mobino.dz",
+      supplier_email: data.supplier_email || "contact@sordi.dz",
       supplier_phone: data.supplier_phone || "021 55 44 33",
       supplier_rc: data.supplier_rc || "16/00-0984123B18",
       supplier_nif: data.supplier_nif || "001816098745231",
