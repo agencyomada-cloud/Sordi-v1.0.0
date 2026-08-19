@@ -77,6 +77,7 @@ const sanitizeCssValue = (value: string): string | null => {
     /^hsla\(\s*[\d.]+\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+\s*\)$/, // hsla()
     /^[a-zA-Z]+$/, // named colors (e.g., "red", "blue")
     /^var\(--[a-zA-Z0-9-]+\)$/, // CSS variables
+    /^hsl\(\s*var\(--[a-zA-Z0-9-]+\)\s*\)$/, // hsl(var(--token)) — theme tokens store bare "H S% L%"
   ];
   
   const trimmed = value.trim();

@@ -7,7 +7,12 @@ import { useCreateClient, useDeleteClient } from "@/hooks/useClients";
 import { useCreateProduct } from "@/hooks/useProducts";
 import { useCreateInvoice, useDeleteInvoice } from "@/hooks/useInvoices";
 import { db } from "@/lib/database";
-import { Check, X, Loader2, Play } from "lucide-react";
+import { 
+    RiCheckLine as Check, 
+    RiCloseLine as X, 
+    RiLoader4Line as Loader2, 
+    RiPlayLine as Play 
+} from "@remixicon/react";
 
 interface TestStep {
     id: string;

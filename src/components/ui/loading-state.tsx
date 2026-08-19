@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { RiLoader4Line as Loader2 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 
 interface LoadingStateProps {

@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { User, Phone, Mail, MapPin, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { 
+    RiUserLine as User, 
+    RiPhoneLine as Phone, 
+    RiMailLine as Mail, 
+    RiMapPinLine as MapPin, 
+    RiAddLine as Plus, 
+    RiPencilLine as Pencil, 
+    RiDeleteBinLine as Trash2, 
+    RiMoreFill as MoreHorizontal 
+} from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {

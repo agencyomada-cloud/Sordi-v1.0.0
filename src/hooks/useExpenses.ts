@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { expenseSchema } from "@/lib/validations";
 import { mapErrorToUserMessage, isValidationError } from "@/lib/errorMapper";
 import { logError } from "@/lib/errorLogger";
@@ -31,7 +31,6 @@ export function useExpenses(monthPeriod?: string) {
 
 export function useCreateExpense() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (expense: CreateExpenseData) => {
@@ -39,16 +38,25 @@ export function useCreateExpense() {
       const validated = expenseSchema.parse(expense);
       return await db.expenses.create(validated);
     },
-    onSuccess: () => {
+    onSuccess: (expense) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast({ title: "Charge ajoutée avec succès" });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "EXPENSE",
+        entity_id: expense?.id || null,
+        description: `Charge de ${expense?.amount || ""} DA ajoutée (${expense?.category || ""})`,
+      });
+
+      toast.success("Charge ajoutée avec succès");
     },
     onError: (error: unknown) => {
       if (isValidationError(error)) {
-        toast({ title: "Erreur de validation", description: error.issues[0]?.message, variant: "destructive" });
+        toast.error(error.issues[0]?.message || "Erreur de validation");
       } else {
-        toast({ title: "Erreur", description: mapErrorToUserMessage(error), variant: "destructive" });
+        toast.error(mapErrorToUserMessage(error));
       }
       logError("Expense creation error", error);
     },
@@ -57,19 +65,27 @@ export function useCreateExpense() {
 
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (id: string) => {
       await db.expenses.delete(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast({ title: "Charge supprimée" });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "EXPENSE",
+        entity_id: id,
+        description: `Charge supprimée`,
+      });
+
+      toast.success("Charge supprimée avec succès");
     },
     onError: (error: unknown) => {
-      toast({ title: "Erreur", description: mapErrorToUserMessage(error), variant: "destructive" });
+      toast.error(mapErrorToUserMessage(error));
       logError("Expense deletion error", error);
     },
   });

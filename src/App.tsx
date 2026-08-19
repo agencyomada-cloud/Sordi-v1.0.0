@@ -7,6 +7,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Clients from "./pages/Clients";
+import NewClient from "./pages/NewClient";
 import ClientDetail from "./pages/ClientDetail";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
@@ -19,6 +20,7 @@ import NewDelivery from "./pages/NewDelivery";
 import EditDelivery from "./pages/EditDelivery";
 import Payments from "./pages/Payments";
 import Products from "./pages/Products";
+import SalesAnalysis from "./pages/SalesAnalysis";
 import History from "./pages/History";
 import Expenses from "./pages/Expenses";
 
@@ -45,6 +47,8 @@ const App = () => (
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
           <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+          <Route path="/clients/new" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
+          <Route path="/clients/:id/edit" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
           <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
           <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
           <Route path="/invoices/new" element={<ProtectedRoute><NewInvoice /></ProtectedRoute>} />
@@ -59,6 +63,7 @@ const App = () => (
           <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
           <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
           <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+          <Route path="/analyses" element={<ProtectedRoute><SalesAnalysis /></ProtectedRoute>} />
 
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />

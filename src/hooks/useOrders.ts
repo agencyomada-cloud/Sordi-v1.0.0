@@ -141,8 +141,17 @@ export function useCreateOrder() {
     mutationFn: async (data: CreateOrderData) => {
       return await db.orders.create(data as DbCreateOrderData);
     },
-    onSuccess: () => {
+    onSuccess: (order) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "ORDER",
+        entity_id: order?.id || null,
+        description: `Bon de commande ${order?.order_number || ""} créé avec succès`,
+      });
+
       toast.success("Bon de commande créé avec succès");
     },
     onError: (error) => {
@@ -150,7 +159,6 @@ export function useCreateOrder() {
       logError("Create order error", error);
     },
   });
-
 }
 
 export function useUpdateOrder() {
@@ -158,14 +166,19 @@ export function useUpdateOrder() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: CreateOrderData }) => {
-      // Note: We might want to validate data here if there's a schema for updation
-      // For now assuming passed data matches interface
       return await db.orders.update(id, data as DbCreateOrderData);
     },
-    onSuccess: () => {
+    onSuccess: (order) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      // Invalidate specific order query as well
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "ORDER",
+        entity_id: order?.id || null,
+        description: `Bon de commande ${order?.order_number || ""} modifié avec succès`,
+      });
+
       toast.success("Bon de commande modifié avec succès");
     },
     onError: (error) => {
@@ -182,8 +195,17 @@ export function useUpdateOrderStatus() {
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       await db.orders.updateStatus(id, status);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "ORDER",
+        entity_id: variables.id,
+        description: `Statut commande mis à jour : ${variables.status}`,
+      });
+
       toast.success("Statut mis à jour");
     },
     onError: (error) => {
@@ -200,12 +222,21 @@ export function useDeleteOrder() {
     mutationFn: async (id: string) => {
       await db.orders.delete(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      toast.success("Bon de commande supprimé");
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "ORDER",
+        entity_id: id,
+        description: `Commande supprimée`,
+      });
+
+      toast.success("Commande supprimée avec succès");
     },
     onError: (error) => {
-      toast.error(mapErrorToUserMessage(error));
+      toast.error("Erreur lors de la suppression");
       logError("Delete order error", error);
     },
   });

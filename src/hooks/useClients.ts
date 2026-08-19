@@ -34,8 +34,17 @@ export function useCreateClient() {
       const validated = clientSchema.parse(client);
       return await db.clients.create(validated as CreateClientData);
     },
-    onSuccess: () => {
+    onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "CLIENT",
+        entity_id: client?.id || null,
+        description: `Nouveau client ${client?.name || ""} créé avec succès`,
+      });
+
       toast.success("Client créé avec succès");
     },
     onError: (error: any) => {
@@ -58,8 +67,17 @@ export function useUpdateClient() {
       const validated = clientSchema.partial().parse(client);
       return await db.clients.update(id, validated as CreateClientData);
     },
-    onSuccess: () => {
+    onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "CLIENT",
+        entity_id: client?.id || null,
+        description: `Client ${client?.name || ""} mis à jour avec succès`,
+      });
+
       toast.success("Client mis à jour avec succès");
     },
     onError: (error: any) => {
@@ -80,8 +98,17 @@ export function useDeleteClient() {
     mutationFn: async (id: string) => {
       await db.clients.delete(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "CLIENT",
+        entity_id: id,
+        description: `Client supprimé`,
+      });
+
       toast.success("Client supprimé avec succès");
     },
     onError: (error) => {

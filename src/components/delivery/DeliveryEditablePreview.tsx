@@ -9,7 +9,12 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Check, ChevronsUpDown } from "lucide-react";
+import { 
+    RiAddLine as Plus, 
+    RiDeleteBinLine as Trash2, 
+    RiCheckLine as Check, 
+    RiExpandUpDownLine as ChevronsUpDown 
+} from "@remixicon/react";
 import { chunkItems } from "@/lib/paginationUtils";
 import { numberToWords } from "@/lib/numberToWords";
 import {

@@ -1,9 +1,28 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Plus, MoreHorizontal, Eye, CreditCard, FileDown, MinusCircle, Trash2, FileText, ArrowRightLeft, Edit } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { 
+  RiAddLine as Plus,
+  RiMoreFill as MoreHorizontal, 
+  RiEyeLine as Eye, 
+  RiBankCardLine as CreditCard, 
+  RiDownloadLine as FileDown, 
+  RiSubtractLine as MinusCircle, 
+  RiDeleteBinLine as Trash2, 
+  RiFileTextLine as FileText, 
+  RiArrowLeftRightLine as ArrowRightLeft, 
+  RiEditLine as Edit 
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SearchInput } from "@/components/ui/search-input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -268,8 +287,9 @@ export default function InvoicesPage() {
         <Header />
 
         <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Factures</h1>
               <p className="text-muted-foreground mt-1">Gérez vos factures et avoirs</p>
@@ -292,8 +312,8 @@ export default function InvoicesPage() {
           </div>
 
           {/* Stats row */}
-          <div className="flex gap-4 mb-6 overflow-x-auto pb-2">
-            <div className="bg-card rounded-3xl p-5 shadow-card border border-border/30 flex items-center gap-4 min-w-fit">
+          <div className="flex gap-4 mb-6 overflow-x-auto pb-2 animate-fade-in-up animation-delay-100">
+            <div className="bg-card rounded-3xl p-5 shadow-card border border-border/30 flex items-center gap-4 min-w-fit card-hover">
               <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center">
                 <FileText className="w-6 h-6 text-primary-foreground" />
               </div>
@@ -304,7 +324,7 @@ export default function InvoicesPage() {
             </div>
           </div>
 
-          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
+          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden animate-fade-in-up animation-delay-200">
             {/* Tabs and Search */}
             <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/30">
               <div className="flex items-center gap-2 overflow-x-auto">
@@ -348,146 +368,144 @@ export default function InvoicesPage() {
                   </SelectContent>
                 </Select>
                 
-                <div className="relative flex-1 md:w-72">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Rechercher..."
-                    className="pl-11 h-11 bg-secondary/30 border-border/50 rounded-xl"
-                  />
-                </div>
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  containerClassName="flex-1 md:w-72"
+                />
               </div>
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/30">
-                    <th className="px-5 py-4 text-left">
-                      <Checkbox
-                        checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
-                        onCheckedChange={toggleAll}
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="[&:has([role=checkbox])]:pl-5">
+                    <Checkbox
+                      checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
+                  <TableHead>N°</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead className="hidden md:table-cell">Date</TableHead>
+                  <TableHead>Montant</TableHead>
+                  <TableHead className="hidden sm:table-cell">Statut</TableHead>
+                  <TableHead className="w-14"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableLoading columns={7} rows={5} />
+                ) : filteredInvoices?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <EmptyState
+                        type="invoices"
+                        title="Aucune facture"
+                        description={searchQuery ? "Essayez une autre recherche" : "Créez votre première facture"}
+                        action={searchQuery ? {
+                          label: "Effacer la recherche",
+                          onClick: () => setSearchQuery(""),
+                        } : {
+                          label: "Créer",
+                          onClick: () => navigate("/invoices/new"),
+                        }}
                       />
-                    </th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">N°</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Client</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Date</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Montant</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Statut</th>
-                    <th className="px-5 py-4 w-14"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <TableLoading columns={7} rows={5} />
-                  ) : filteredInvoices?.length === 0 ? (
-                    <tr>
-                      <td colSpan={7}>
-                        <EmptyState
-                          type="invoices"
-                          title="Aucune facture"
-                          description={searchQuery ? "Essayez une autre recherche" : "Créez votre première facture"}
-                          action={!searchQuery ? {
-                            label: "Créer",
-                            onClick: () => navigate("/invoices/new")
-                          } : undefined}
-                        />
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredInvoices?.map((invoice) => {
-                      const isCreditNote = invoice.invoice_type === "credit_note";
-                      const isProforma = invoice.invoice_type === "proforma";
-                      return (
-                        <tr
-                          key={invoice.id}
-                          className="border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                          onClick={() => navigate(`/invoices/${invoice.id}`)}
-                        >
-                          <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={selectedInvoices.includes(invoice.id)}
-                              onCheckedChange={() => toggleInvoice(invoice.id)}
-                            />
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{invoice.invoice_number}</span>
-                              {isCreditNote && (
-                                <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">Avoir</span>
-                              )}
-                              {isProforma && (
-                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Proforma</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-5 py-4 text-muted-foreground">
-                            {invoice.clients?.name}
-                          </td>
-                          <td className="px-5 py-4 text-muted-foreground hidden md:table-cell">
-                            {formatDate(invoice.invoice_date)}
-                          </td>
-                          <td className={cn(
-                            "px-5 py-4 font-medium",
-                            isCreditNote ? "text-destructive" : ""
-                          )}>
-                            {isCreditNote ? "-" : ""}{formatCurrency(invoice.total_ttc)}
-                          </td>
-                          <td className="px-5 py-4 hidden sm:table-cell">
-                            <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    className={cn(
-                                      "inline-flex px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition-opacity",
-                                      statusStyles[invoice.status || "draft"]
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      e.preventDefault();
-                                    }}
-                                  >
-                                    {statusLabels[invoice.status || "draft"]}
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="center">
-                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "paid" })}>
-                                    Payée
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "issued" })}>
-                                    Émise (Impayée)
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}>
-                                    Brouillon
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "cancelled" })}>
-                                    Annulée
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadPDF(invoice.id, invoice);
-                                }}
-                                title="Télécharger PDF"
-                              >
-                                <FileDown className="w-4 h-4" />
-                              </button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredInvoices?.map((invoice) => {
+                    const isCreditNote = invoice.invoice_type === "credit_note";
+                    const isProforma = invoice.invoice_type === "proforma";
+                    return (
+                      <TableRow
+                        key={invoice.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/invoices/${invoice.id}`)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedInvoices.includes(invoice.id)}
+                            onCheckedChange={() => toggleInvoice(invoice.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{invoice.invoice_number}</span>
+                            {isCreditNote && (
+                              <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">Avoir</span>
+                            )}
+                            {isProforma && (
+                              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Proforma</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {invoice.clients?.name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground hidden md:table-cell">
+                          {formatDate(invoice.invoice_date)}
+                        </TableCell>
+                        <TableCell className={cn(
+                          "font-medium tabular-nums",
+                          isCreditNote ? "text-destructive" : ""
+                        )}>
+                          {isCreditNote ? "-" : ""}{formatCurrency(invoice.total_ttc)}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  className={cn(
+                                    "inline-flex px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition-opacity",
+                                    statusStyles[invoice.status || "draft"]
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                  }}
+                                >
+                                  {statusLabels[invoice.status || "draft"]}
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center">
+                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "paid" })}>
+                                  Payée
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "issued" })}>
+                                  Émise (Impayée)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}>
+                                  Brouillon
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "cancelled" })}>
+                                  Annulée
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadPDF(invoice.id, invoice);
+                              }}
+                              title="Télécharger PDF"
+                            >
+                              <FileDown className="w-4 h-4" />
+                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
                                   <Eye className="mr-2 h-4 w-4" />
                                   Voir détails
@@ -529,15 +547,15 @@ export default function InvoicesPage() {
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
           </div>
         </main>
       </div>

@@ -1,5 +1,15 @@
 import { useState, useMemo } from "react";
-import { TrendingUp, Award, Target, Zap, ChevronRight, User, Plus, Trash2, Save } from "lucide-react";
+import { 
+    RiArrowRightUpLine as TrendingUp, 
+    RiAwardLine as Award, 
+    RiTargetLine as Target, 
+    RiFlashlightLine as Zap, 
+    RiArrowRightSLine as ChevronRight, 
+    RiUserLine as User, 
+    RiAddLine as Plus, 
+    RiDeleteBinLine as Trash2, 
+    RiSaveLine as Save 
+} from "@remixicon/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {

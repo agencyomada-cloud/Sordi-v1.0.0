@@ -1,9 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, MoreHorizontal, FileText, Truck, Eye, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import {
+  RiAddLine as Plus,
+  RiMoreFill as MoreHorizontal,
+  RiFileTextLine as FileText,
+  RiTruckLine as Truck,
+  RiEyeLine as Eye,
+  RiLoader4Line as Loader2
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { SearchInput } from "@/components/ui/search-input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { TableLoading } from "@/components/ui/loading-state";
@@ -25,15 +38,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useDeliveryNotes } from "@/hooks/useDeliveryNotes";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
-import { db } from "@/lib/database"; // Correct import path
 import { useSettings } from "@/hooks/useSettings";
-// Assuming there is a generateDeliveryNotePDF. If not, I'll need to check pdfGenerator.ts again or stick to known exports. 
-// Checking pdfGenerator.ts earlier, it had generateInvoicePDF and generateOrderPDF. 
-// I need to check if there is a generateDeliveryNotePDF.
-// I'll assume for now I need to check/add it or use a generic one.
-// Wait, let's check pdfGenerator.ts content again or just assume it's missing and I might need to add it?
-// The user said "bon de livraison" has the same problem. 
-// If it has the problem, it means it EXISTS.
 import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
 
 export default function DeliveriesPage() {
@@ -51,10 +56,15 @@ export default function DeliveriesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
 
-  const filteredNotes = deliveryNotes?.filter(note =>
-    note.delivery_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    note.clients?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredNotes = deliveryNotes?.filter(note => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      (note.delivery_number || "").toLowerCase().includes(q) ||
+      (note.clients?.name || "").toLowerCase().includes(q);
+    const matchesClient = filterClient === "all" || note.client_id === filterClient;
+    return matchesSearch && matchesClient;
+  });
 
 
 
@@ -87,7 +97,6 @@ export default function DeliveriesPage() {
       setDownloadingId(id);
       await generateDeliveryNotePDF(note as any, settings);
       toast.success("PDF téléchargé avec succès");
-      toast.success("PDF téléchargé avec succès");
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -104,6 +113,7 @@ export default function DeliveriesPage() {
         <Header />
 
         <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Bons de livraison</h1>
@@ -133,15 +143,11 @@ export default function DeliveriesPage() {
 
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher..."
-                className="pl-11"
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              containerClassName="w-full sm:w-80"
+            />
             <Select value={filterClient} onValueChange={setFilterClient}>
               <SelectTrigger className="w-full sm:w-64">
                 <SelectValue placeholder="Tous les clients" />
@@ -159,88 +165,79 @@ export default function DeliveriesPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/30">
-
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">N° BL</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Client</th>
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Date</th>
-
-
-                    <th className="px-5 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Montant</th>
-
-                    <th className="px-5 py-4 w-14"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <TableLoading columns={5} rows={5} />
-                  ) : filteredNotes?.length === 0 ? (
-                    <tr>
-                      <td colSpan={5}>
-                        <EmptyState
-                          type="deliveries"
-                          title="Aucun bon de livraison trouvé"
-                          description={searchQuery ? "Essayez de modifier votre recherche" : "Créez votre premier bon de livraison"}
-                          action={!searchQuery ? {
-                            label: "Créer un bon",
-                            onClick: () => navigate("/deliveries/new")
-                          } : undefined}
-                        />
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredNotes?.map((note) => (
-                      <tr
-                        key={note.id}
-                        className="border-b border-border/20 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/deliveries/${note.id}`)}
-                      >
-
-                        <td className="px-5 py-4 font-medium">
-                          {note.delivery_number}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {note.clients?.name}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground hidden md:table-cell">
-                          {formatDate(note.delivery_date)}
-                        </td>
-
-
-                        <td className="px-5 py-4 font-medium">
-                          {formatCurrency(calculateTotal(note.delivery_note_items || []))}
-                        </td>
-
-                        <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`/deliveries/${note.id}`)}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                Voir détails
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDownloadPDF(note.id)} disabled={downloadingId === note.id}>
-                                {downloadingId === note.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
-                                {downloadingId === note.id ? "Téléchargement..." : "Télécharger PDF"}
-                              </DropdownMenuItem>
-
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>N° BL</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead className="hidden md:table-cell">Date</TableHead>
+                <TableHead>Montant</TableHead>
+                <TableHead className="w-14"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableLoading columns={5} rows={5} />
+              ) : filteredNotes?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <EmptyState
+                      type="deliveries"
+                      title="Aucun bon de livraison trouvé"
+                      description={searchQuery ? "Essayez de modifier votre recherche" : "Créez votre premier bon de livraison"}
+                      action={searchQuery ? {
+                        label: "Effacer la recherche",
+                        onClick: () => setSearchQuery(""),
+                      } : {
+                        label: "Créer un bon",
+                        onClick: () => navigate("/deliveries/new"),
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredNotes?.map((note) => (
+                  <TableRow
+                    key={note.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/deliveries/${note.id}`)}
+                  >
+                    <TableCell className="font-medium">
+                      {note.delivery_number}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {note.clients?.name}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden md:table-cell">
+                      {formatDate(note.delivery_date)}
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {formatCurrency(calculateTotal(note.delivery_note_items || []))}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate(`/deliveries/${note.id}`)}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Voir détails
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownloadPDF(note.id)} disabled={downloadingId === note.id}>
+                            {downloadingId === note.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
+                            {downloadingId === note.id ? "Téléchargement..." : "Télécharger PDF"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
           </div>
         </main>
       </div>

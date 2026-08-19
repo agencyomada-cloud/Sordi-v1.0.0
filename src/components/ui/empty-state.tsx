@@ -1,8 +1,16 @@
-import { LucideIcon, FileX, Users, Package, FileText, Truck, CreditCard, Receipt } from "lucide-react";
+import { 
+  RiFileCloseLine as FileX, 
+  RiGroupLine as Users, 
+  RiBox3Line as Package, 
+  RiFileTextLine as FileText, 
+  RiTruckLine as Truck, 
+  RiBankCardLine as CreditCard, 
+  RiReceiptLine as Receipt 
+} from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const defaultIcons: Record<string, LucideIcon> = {
+const defaultIcons: Record<string, React.ElementType> = {
   invoices: FileText,
   clients: Users,
   products: Package,
@@ -15,7 +23,7 @@ const defaultIcons: Record<string, LucideIcon> = {
 interface EmptyStateProps {
   title: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: React.ElementType;
   type?: keyof typeof defaultIcons;
   action?: {
     label: string;

@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Printer, CreditCard, MinusCircle, Eye, FileText, ArrowRightLeft, Edit, Truck, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
-import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
-import { InvoicePreview } from "@/components/invoice/InvoicePreview";
-import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64 } from "@/lib/pdfGenerator";
-import { PDFViewerModal } from "@/components/pdf/PDFViewerModal";
+import {
+  RiArrowLeftLine as ArrowLeft,
+  RiDownloadLine as Download,
+  RiPrinterLine as Printer,
+  RiBankCardLine as CreditCard,
+  RiSubtractLine as MinusCircle,
+  RiEyeLine as Eye,
+  RiFileTextLine as FileText,
+  RiArrowLeftRightLine as ArrowRightLeft,
+  RiEditLine as Edit,
+  RiTruckLine as Truck,
+  RiLoader4Line as Loader2,
+  RiMore2Fill as MoreVertical
+} from "@remixicon/react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { useSettings } from "@/hooks/useSettings";
-import { db } from "@/lib/database";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +23,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { db } from "@/lib/database";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
+import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
+import { useSettings } from "@/hooks/useSettings";
+import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64 } from "@/lib/pdfGenerator";
+import { InvoicePreview } from "@/components/invoice/InvoicePreview";
+import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
+import { PDFViewerModal } from "@/components/pdf/PDFViewerModal";
 
 const statusStyles: Record<string, string> = {
   paid: "bg-status-paid-bg text-status-paid",
@@ -293,7 +305,7 @@ export default function InvoiceDetailPage() {
 
               <Button
                 variant="outline"
-                className="rounded-full bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-300"
+                className="rounded-full bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
                 onClick={handleOpenVectorPreview}
                 disabled={isGenerating}
               >
@@ -391,7 +403,7 @@ export default function InvoiceDetailPage() {
 
           {/* Toggle between Preview and Detail View */}
           <div className={showPreview ? "block" : "fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]"}>
-            <div className="bg-gray-100/50 dark:bg-gray-900/20 rounded-2xl p-4 sm:p-8 flex justify-center w-full">
+            <div className="bg-muted/50 rounded-2xl p-4 sm:p-8 flex justify-center w-full">
               <div className="w-full max-w-4xl shadow-xl bg-white dark:bg-zinc-950 rounded-lg overflow-hidden border border-border/20">
                 <InvoicePreview invoice={invoice} />
               </div>
@@ -403,17 +415,17 @@ export default function InvoiceDetailPage() {
             <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
               <div className="p-8">
                 {/* Summary Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                   <div className="bg-secondary/30 rounded-2xl p-4">
                     <p className="text-sm text-muted-foreground">Sous-total H.T</p>
                     <p className="text-xl font-bold text-foreground">{formatCurrency(invoice.subtotal_ht)}</p>
                   </div>
                   {(invoice.discount > 0 || (invoice.discount_type === 'percent' && invoice.discount_value > 0) || (invoice.discount_type === 'amount' && invoice.discount_value > 0)) && (
-                    <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-4">
-                      <p className="text-sm text-red-600 dark:text-red-400">
+                    <div className="bg-destructive/10 rounded-2xl p-4">
+                      <p className="text-sm text-destructive">
                         Remise {invoice.discount_type === 'percent' ? `(${invoice.discount_value}%)` : ''}
                       </p>
-                      <p className="text-xl font-bold text-red-600 dark:text-red-400">
+                      <p className="text-xl font-bold text-destructive">
                         -{formatCurrency(invoice.discount || (invoice.discount_type === 'amount' ? invoice.discount_value : 0))}
                       </p>
                     </div>

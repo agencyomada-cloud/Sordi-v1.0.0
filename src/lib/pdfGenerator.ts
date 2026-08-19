@@ -4,10 +4,20 @@ import { jsPDF } from 'jspdf';
 import { pdf } from '@react-pdf/renderer';
 import { invoke } from '@tauri-apps/api/core';
 import { Settings } from "@/hooks/useSettings";
-import { InvoicePDFDocument, PDFInvoice, PDFSettings, PDFInvoiceItem } from "@/components/pdf/InvoicePDFDocument";
+import { InvoicePDFDocument } from "@/components/pdf/InvoicePDFDocument";
+import { InvoiceTemplateEpure } from "@/components/pdf/InvoiceTemplateEpure";
+import { InvoiceTemplateModerne } from "@/components/pdf/InvoiceTemplateModerne";
+import { PDFInvoice, PDFSettings, PDFInvoiceItem, InvoicePdfTheme } from "@/components/pdf/invoicePdfShared";
 import { CumulativesPDFDocument, ClientCumulativeRecord } from "@/components/pdf/CumulativesPDFDocument";
 
 export type { PDFInvoiceItem, PDFInvoice, PDFSettings };
+
+/** The three selectable invoice PDF themes, chosen in Settings. */
+const INVOICE_PDF_TEMPLATES: Record<InvoicePdfTheme, typeof InvoicePDFDocument> = {
+  structure: InvoicePDFDocument,
+  epure: InvoiceTemplateEpure,
+  moderne: InvoiceTemplateModerne,
+};
 
 export type AnyDocument = Partial<PDFInvoice> & Record<string, unknown>;
 
@@ -115,22 +125,26 @@ export const generateInvoicePDFBlob = async (
       company_phone: settings.company_phone,
       company_phones: settings.company_phones,
       company_email: settings.company_email,
+      company_website: settings.company_website,
       company_nif: settings.company_nif,
       company_nis: settings.company_nis,
       company_rc: settings.company_rc,
       company_ai: settings.company_ai,
+      company_capital: settings.company_capital,
       company_rib: settings.company_rib,
+      company_bank_agency: settings.company_bank_agency,
       logo_data: settings.logo_data,
       footer_logo_data: settings.footer_logo_data,
       qr_code_data: settings.qr_code_data,
       body_pattern_data: settings.body_pattern_data,
       stamp_data: settings.stamp_data,
       primary_color: settings.primary_color,
-      logo_bg_color: settings.logo_bg_color,
-      logo_text_color: settings.logo_text_color,
     } : {};
 
-    const instance = pdf(React.createElement(InvoicePDFDocument, { invoice: formattedInvoice, settings: pdfSettings }));
+    const theme = (settings?.invoice_pdf_theme as InvoicePdfTheme) || 'structure';
+    const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
+
+    const instance = pdf(React.createElement(Template, { invoice: formattedInvoice, settings: pdfSettings }));
     const blob = await instance.toBlob();
     return blob;
   } catch (error) {

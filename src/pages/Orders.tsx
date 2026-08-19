@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, Eye, Search, ClipboardList } from "lucide-react";
+import {
+  RiAddLine as Plus,
+  RiDeleteBinLine as Trash2,
+  RiEyeLine as Eye,
+  RiFileList3Line as ClipboardList
+} from "@remixicon/react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import {
   Table,
   TableBody,
@@ -48,10 +53,14 @@ export default function OrdersPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredOrders = orders?.filter(order =>
-    order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    order.clients?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredOrders = orders?.filter(order => {
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      !q ||
+      (order.order_number || "").toLowerCase().includes(q) ||
+      (order.clients?.name || "").toLowerCase().includes(q)
+    );
+  });
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-DZ", {
@@ -118,7 +127,6 @@ export default function OrdersPage() {
 
       await generateOrderPDF(orderForPDF, settings);
       toast.success("PDF téléchargé avec succès");
-      toast.success("PDF téléchargé");
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -133,6 +141,7 @@ export default function OrdersPage() {
         <Header />
 
         <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Bons de Commande</h1>
@@ -159,15 +168,12 @@ export default function OrdersPage() {
 
           {/* Search */}
           <div className="mb-6">
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher une commande..."
-                className="pl-11"
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Rechercher une commande..."
+              containerClassName="w-full md:w-80"
+            />
           </div>
 
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
@@ -193,10 +199,13 @@ export default function OrdersPage() {
                         type="default"
                         title="Aucun bon de commande"
                         description={searchQuery ? "Essayez de modifier votre recherche" : "Créez votre premier bon de commande"}
-                        action={!searchQuery ? {
+                        action={searchQuery ? {
+                          label: "Effacer la recherche",
+                          onClick: () => setSearchQuery(""),
+                        } : {
                           label: "Créer une commande",
-                          onClick: () => navigate("/orders/new")
-                        } : undefined}
+                          onClick: () => navigate("/orders/new"),
+                        }}
                       />
                     </TableCell>
                   </TableRow>
@@ -219,7 +228,7 @@ export default function OrdersPage() {
                             ? format(new Date(order.delivery_date), "dd MMM yyyy", { locale: fr })
                             : "-"}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium tabular-nums">
                           {formatCurrency(order.total_ttc || 0)}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -229,19 +238,22 @@ export default function OrdersPage() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => navigate(`/orders/${order.id}`)}
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
+                              title="Voir"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDownloadPDF(order.id)}
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
+                              title="Télécharger PDF"
                             >
                               <ClipboardList className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setDeleteId(order.id)}
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
+                              title="Supprimer"
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </button>
@@ -253,6 +265,7 @@ export default function OrdersPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
           </div>
         </main>
       </div>

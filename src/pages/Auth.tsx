@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Lock, ShieldCheck } from 'lucide-react';
+import { Loader2, Lock, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Auth = () => {
-  const { user, loading, needsSetup, signIn } = useAuth();
+  const { user, loading, needsSetup, isTauri, signIn } = useAuth();
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,18 +22,22 @@ const Auth = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isTauri && !login) {
+      toast.error("Veuillez entrer votre identifiant");
+      return;
+    }
     if (!password) {
       toast.error("Veuillez entrer un mot de passe");
       return;
     }
-
     if (needsSetup && password !== confirmPassword) {
       toast.error("Les mots de passe ne correspondent pas");
       return;
     }
 
     setIsSubmitting(true);
-    const result = await signIn(password);
+    const result = await signIn(password, login);
     setIsSubmitting(false);
 
     if (result.error) {
@@ -54,7 +59,7 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md p-8">
-        <div className="bg-card rounded-3xl p-8 shadow-card border border-border/30">
+        <div className="bg-card rounded-[6px] p-8 shadow-card border border-border/30">
           <div className="text-center mb-8 flex flex-col items-center">
             <img
               src="/brand/logo-horizontal.svg"
@@ -72,6 +77,26 @@ const Auth = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {!isTauri && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground ml-1">
+                  Identifiant
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="admin"
+                    className="pl-10"
+                    value={login}
+                    onChange={(e) => setLogin(e.target.value)}
+                    autoFocus
+                    autoComplete="username"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">
                 {needsSetup ? "Nouveau mot de passe" : "Mot de passe"}
@@ -84,7 +109,8 @@ const Auth = () => {
                   className="pl-10"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoFocus
+                  autoFocus={isTauri}
+                  autoComplete="current-password"
                 />
               </div>
             </div>
@@ -121,7 +147,7 @@ const Auth = () => {
           </form>
         </div>
         <p className="text-center mt-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Sordi V1.0.0 • Données stockées localement
+          © {new Date().getFullYear()} Sordi V1.0.0{isTauri ? " • Données stockées localement" : ""}
         </p>
       </div>
     </div>
@@ -129,4 +155,3 @@ const Auth = () => {
 };
 
 export default Auth;
-

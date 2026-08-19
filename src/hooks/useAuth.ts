@@ -1,21 +1,27 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
+// Placeholder web credentials until real backend auth (signup/login against
+// the server/ API) is wired into the frontend — see server/README.md.
+const WEB_DEMO_LOGIN = 'admin';
+const WEB_DEMO_PASSWORD = 'admin';
+
 export function useAuth() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
 
+  const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
         if (!isTauri) {
-          // Web Mode: auto-login or allow setup
+          // Web Mode: only restore a session already established via signIn
+          // in this browser session — no auto-login.
           const savedAuth = sessionStorage.getItem('omada_authenticated');
-          if (savedAuth === 'true' || true) { // Auto login in browser dev mode
+          if (savedAuth === 'true') {
             setUser({ id: "local-user", email: "user@local" });
-            sessionStorage.setItem('omada_authenticated', 'true');
           }
           setLoading(false);
           return;
@@ -40,14 +46,21 @@ export function useAuth() {
     };
 
     checkAuth();
-  }, []);
+  }, [isTauri]);
 
-  const signIn = async (password?: string) => {
-    const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+  /**
+   * Desktop calls signIn(password). Web calls signIn(password, login) — the
+   * hardcoded admin/admin check above stands in until login/signup hit the
+   * real API.
+   */
+  const signIn = async (password?: string, login?: string) => {
     if (!isTauri) {
-      setUser({ id: "local-user", email: "user@local" });
-      sessionStorage.setItem('omada_authenticated', 'true');
-      return { error: null };
+      if (login === WEB_DEMO_LOGIN && password === WEB_DEMO_PASSWORD) {
+        setUser({ id: "local-user", email: "user@local" });
+        sessionStorage.setItem('omada_authenticated', 'true');
+        return { error: null };
+      }
+      return { error: new Error("Identifiant ou mot de passe incorrect") };
     }
 
     if (needsSetup && password) {
@@ -93,6 +106,7 @@ export function useAuth() {
     user,
     loading,
     needsSetup,
+    isTauri,
     signIn,
     signOut,
   };

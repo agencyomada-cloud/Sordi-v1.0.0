@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, Download, X, Eye } from "lucide-react";
+import { 
+  RiPrinterLine as Printer, 
+  RiDownloadLine as Download, 
+  RiCloseLine as X, 
+  RiEyeLine as Eye 
+} from "@remixicon/react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 

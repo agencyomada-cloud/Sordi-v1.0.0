@@ -143,8 +143,17 @@ export function useCreateDeliveryNote() {
       const validated = createDeliveryNoteSchema.parse(data);
       return await db.deliveryNotes.create(validated as DbCreateDeliveryNoteData);
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
       queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "DELIVERY",
+        entity_id: note?.id || null,
+        description: `Bon de livraison ${note?.delivery_number || ""} créé avec succès`,
+      });
+
       toast.success("Bon de livraison créé avec succès");
     },
     onError: (error: any) => {
@@ -167,9 +176,18 @@ export function useUpdateDeliveryNote() {
       const validated = createDeliveryNoteSchema.parse(data);
       return await db.deliveryNotes.update(id, validated as DbCreateDeliveryNoteData);
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
       queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
       queryClient.invalidateQueries({ queryKey: ["delivery-note"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "DELIVERY",
+        entity_id: note?.id || null,
+        description: `Bon de livraison ${note?.delivery_number || ""} modifié avec succès`,
+      });
+
       toast.success("Bon de livraison modifié avec succès");
     },
     onError: (error: any) => {

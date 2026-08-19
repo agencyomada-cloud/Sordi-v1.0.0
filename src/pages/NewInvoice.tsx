@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FileText, Download, Loader2 } from "lucide-react";
+import { 
+  RiArrowLeftLine as ArrowLeft, 
+  RiFileTextLine as FileText, 
+  RiDownloadLine as Download, 
+  RiLoader4Line as Loader2 
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -571,7 +576,7 @@ export default function NewInvoicePage() {
 
             {/* Live Stats */}
             <div className="bg-card rounded-xl border border-border p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-secondary/30 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">Sous-total H.T</p>
                   <p className="text-sm font-bold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
@@ -592,7 +597,7 @@ export default function NewInvoicePage() {
             </div>
 
             {/* Editable Preview */}
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 250px)', minHeight: '500px' }}>
+            <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 250px)', minHeight: '500px' }}>
               <div className="flex justify-center">
                 <div className="shadow-2xl">
                   <EditableInvoicePreview

@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useSettings } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { db, ClientCumulativeRecord } from "@/lib/database";
@@ -13,7 +13,16 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, FileDown, Table as TableIcon, Loader2 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
+import {
+    RiDownloadLine as Download,
+    RiDownloadLine as FileDown,
+    RiTableLine as TableIcon,
+    RiLoader4Line as Loader2,
+    RiArrowUpSLine,
+    RiArrowDownSLine,
+    RiExpandUpDownLine,
+} from "@remixicon/react";
 import { generateCumulativesPDF } from "@/lib/pdfGenerator";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +31,15 @@ interface ClientCumulativeTableProps {
     months: string[];
 }
 
+type SortKey = keyof Pick<ClientCumulativeRecord, "client_name" | "invoice_count" | "total_quantity" | "total_ht" | "total_tva" | "total_timbre" | "total_ttc">;
+
 export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
     year,
     months,
 }) => {
     const { data: settings } = useSettings();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "total_ttc", direction: "desc" });
     const { data, isLoading } = useQuery({
         queryKey: ["client-cumulatives", year, months],
         queryFn: () => db.dashboard.getClientCumulatives(year, months),
@@ -37,22 +50,38 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
         return new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 0 }).format(amount) + " DA";
     };
 
-    const totals = useMemo(() => {
-        if (!data) return { ht: 0, tva: 0, timbre: 0, ttc: 0, quantity: 0, invoices: 0 };
-        return data.reduce((acc, curr) => ({
-            ht: acc.ht + curr.total_ht,
-            tva: acc.tva + curr.total_tva,
-            timbre: acc.timbre + curr.total_timbre,
-            ttc: acc.ttc + curr.total_ttc,
-            quantity: acc.quantity + curr.total_quantity,
-            invoices: acc.invoices + curr.invoice_count
-        }), { ht: 0, tva: 0, timbre: 0, ttc: 0, quantity: 0, invoices: 0 });
-    }, [data]);
+    const toggleSort = (key: SortKey) => {
+        setSort((prev) => prev.key === key
+            ? { key, direction: prev.direction === "asc" ? "desc" : "asc" }
+            : { key, direction: "desc" });
+    };
+
+    const rows = useMemo(() => {
+        const list = data ?? [];
+        const q = searchQuery.trim().toLowerCase();
+        const filtered = q ? list.filter(r => r.client_name.toLowerCase().includes(q)) : list;
+
+        return [...filtered].sort((a, b) => {
+            const av = a[sort.key];
+            const bv = b[sort.key];
+            const cmp = typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+            return sort.direction === "asc" ? cmp : -cmp;
+        });
+    }, [data, searchQuery, sort]);
+
+    const totals = useMemo(() => rows.reduce((acc, curr) => ({
+        ht: acc.ht + curr.total_ht,
+        tva: acc.tva + curr.total_tva,
+        timbre: acc.timbre + curr.total_timbre,
+        ttc: acc.ttc + curr.total_ttc,
+        quantity: acc.quantity + curr.total_quantity,
+        invoices: acc.invoices + curr.invoice_count
+    }), { ht: 0, tva: 0, timbre: 0, ttc: 0, quantity: 0, invoices: 0 }), [rows]);
 
     const exportToCSV = () => {
         if (!data) return;
         const headers = ["Client", "Factures", "Total Quantité", "Total HT", "Total TVA", "Total Timbre", "Total TTC"];
-        const rows = data.map(r => [
+        const csvRows = rows.map(r => [
             r.client_name,
             r.invoice_count,
             r.total_quantity,
@@ -61,11 +90,11 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
             r.total_timbre,
             r.total_ttc
         ]);
-        rows.push(["TOTAL", totals.invoices, totals.quantity, totals.ht, totals.tva, totals.timbre, totals.ttc]);
+        csvRows.push(["TOTAL", totals.invoices, totals.quantity, totals.ht, totals.tva, totals.timbre, totals.ttc]);
 
         const csvContent = [
             headers.join(","),
-            ...rows.map(r => r.join(","))
+            ...csvRows.map(r => r.join(","))
         ].join("\n");
 
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -93,78 +122,133 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
         }
     };
 
+    const SortHeader = ({ label, sortKey, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "center" | "right" }) => (
+        <TableHead
+            className={cn(
+                "cursor-pointer select-none hover:text-foreground transition-colors",
+                align === "right" && "text-right",
+                align === "center" && "text-center"
+            )}
+            onClick={() => toggleSort(sortKey)}
+        >
+            <span className={cn(
+                "inline-flex items-center gap-1",
+                align === "right" && "flex-row-reverse",
+                align === "center" && "flex-row-reverse"
+            )}>
+                {label}
+                {sort.key === sortKey ? (
+                    sort.direction === "asc" ? <RiArrowUpSLine className="w-3.5 h-3.5" /> : <RiArrowDownSLine className="w-3.5 h-3.5" />
+                ) : (
+                    <RiExpandUpDownLine className="w-3.5 h-3.5 opacity-30" />
+                )}
+            </span>
+        </TableHead>
+    );
+
     if (isLoading) {
         return (
-            <Card className="mt-6 border-none shadow-lg">
-                <CardContent className="h-64 flex flex-col items-center justify-center gap-4">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-muted-foreground">Calcul des rapports clients...</p>
+            <Card>
+                <CardContent className="h-64 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Calcul des rapports clients...</p>
                 </CardContent>
             </Card>
         );
     }
 
     return (
-        <Card className="mt-6 border-none shadow-elevated bg-card/50 overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-primary" />
-            <CardHeader className="flex flex-row items-center justify-between border-b px-6 py-4">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                        <TableIcon className="w-5 h-5 text-primary" />
-                    </div>
+        <Card>
+            <CardHeader className="flex flex-col gap-4">
+                <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
                     <div>
-                        <CardTitle className="text-base font-bold">Rapport Détaillé par Client</CardTitle>
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Cumuls HT, TVA, Timbre et TTC</p>
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                            <TableIcon className="w-4 h-4 text-muted-foreground" />
+                            Rapport Détaillé par Client
+                        </CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">Cumuls HT, TVA, Timbre et TTC</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={exportToCSV} className="h-9 text-xs gap-2">
+                            <FileDown className="w-4 h-4" />
+                            CSV
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={exportToPDF} disabled={isExportingPDF} className="h-9 text-xs gap-2">
+                            {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            PDF
+                        </Button>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={exportToCSV} className="h-9 text-xs gap-2">
-                        <FileDown className="w-4 h-4" />
-                        Exporter CSV
-                    </Button>
-                    <Button variant="default" size="sm" onClick={exportToPDF} disabled={isExportingPDF} className="h-9 text-xs gap-2 shadow-none">
-                        {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                        Exporter PDF
-                    </Button>
-                </div>
+                <SearchInput
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Rechercher un client..."
+                    containerClassName="w-full sm:w-72"
+                />
             </CardHeader>
 
             <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                    <Table className="w-full text-[13px]">
+                <div className="overflow-x-auto border-t border-border">
+                    <Table className="w-full text-sm">
                         <TableHeader>
-                            <TableRow className="bg-muted/30">
-                                <TableHead className="py-4 px-6 font-bold">Client</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-center">Factures</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-center">Qté Totale</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-right">Total HT</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-right">Total TVA</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-right text-orange-600">Timbre</TableHead>
-                                <TableHead className="py-4 px-6 font-bold text-right text-primary">Total TTC</TableHead>
+                            <TableRow>
+                                <SortHeader label="Client" sortKey="client_name" />
+                                <SortHeader label="Factures" sortKey="invoice_count" align="center" />
+                                <SortHeader label="Qté Totale" sortKey="total_quantity" align="center" />
+                                <SortHeader label="Total HT" sortKey="total_ht" align="right" />
+                                <SortHeader label="Total TVA" sortKey="total_tva" align="right" />
+                                <SortHeader label="Timbre" sortKey="total_timbre" align="right" />
+                                <TableHead className="text-right text-primary">
+                                    <span
+                                        className="inline-flex items-center gap-1 flex-row-reverse cursor-pointer select-none"
+                                        onClick={() => toggleSort("total_ttc")}
+                                    >
+                                        Total TTC
+                                        {sort.key === "total_ttc" ? (
+                                            sort.direction === "asc" ? <RiArrowUpSLine className="w-3.5 h-3.5" /> : <RiArrowDownSLine className="w-3.5 h-3.5" />
+                                        ) : (
+                                            <RiExpandUpDownLine className="w-3.5 h-3.5 opacity-30" />
+                                        )}
+                                    </span>
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {data?.map((record, idx) => (
-                                <TableRow key={record.client_name} className={cn(idx % 2 === 0 ? "bg-transparent" : "bg-muted/5", "hover:bg-primary/5 transition-colors")}>
-                                    <TableCell className="py-3 px-6 font-semibold">{record.client_name}</TableCell>
-                                    <TableCell className="py-3 px-6 text-center text-muted-foreground">{record.invoice_count}</TableCell>
-                                    <TableCell className="py-3 px-6 text-center tabular-nums font-medium">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
-                                    <TableCell className="py-3 px-6 text-right tabular-nums">{formatCurrency(record.total_ht)}</TableCell>
-                                    <TableCell className="py-3 px-6 text-right tabular-nums">{formatCurrency(record.total_tva)}</TableCell>
-                                    <TableCell className="py-3 px-6 text-right tabular-nums font-medium text-orange-600/80">{formatCurrency(record.total_timbre)}</TableCell>
-                                    <TableCell className="py-3 px-6 text-right tabular-nums font-bold text-primary/80">{formatCurrency(record.total_ttc)}</TableCell>
+                            {rows.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
+                                        {searchQuery ? "Aucun résultat pour cette recherche" : "Aucune vente sur cette période"}
+                                    </TableCell>
                                 </TableRow>
-                            ))}
-                            <TableRow className="bg-primary/5 font-bold border-t-2 border-primary/20">
-                                <TableCell className="py-4 px-6 uppercase text-primary">TOTAL GÉNÉRAL</TableCell>
-                                <TableCell className="py-4 px-6 text-center text-primary">{totals.invoices}</TableCell>
-                                <TableCell className="py-4 px-6 text-center text-primary font-bold">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
-                                <TableCell className="py-3 px-6 text-right tabular-nums text-primary">{formatCurrency(totals.ht)}</TableCell>
-                                <TableCell className="py-3 px-6 text-right tabular-nums text-primary">{formatCurrency(totals.tva)}</TableCell>
-                                <TableCell className="py-3 px-6 text-right tabular-nums text-orange-600">{formatCurrency(totals.timbre)}</TableCell>
-                                <TableCell className="py-3 px-6 text-right tabular-nums text-primary text-base font-black">{formatCurrency(totals.ttc)}</TableCell>
-                            </TableRow>
+                            ) : (
+                                rows.map((record) => (
+                                    <TableRow key={record.client_name}>
+                                        <TableCell className="font-medium">{record.client_name}</TableCell>
+                                        <TableCell className="text-center text-muted-foreground tabular-nums">{record.invoice_count}</TableCell>
+                                        <TableCell className="text-center tabular-nums">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
+                                        <TableCell className="text-right tabular-nums">{formatCurrency(record.total_ht)}</TableCell>
+                                        <TableCell className="text-right tabular-nums">{formatCurrency(record.total_tva)}</TableCell>
+                                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(record.total_timbre)}</TableCell>
+                                        <TableCell className="text-right tabular-nums font-semibold text-primary">{formatCurrency(record.total_ttc)}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
+                        {rows.length > 0 && (
+                            <tfoot>
+                                <TableRow className="bg-primary/5 hover:bg-primary/5 font-semibold border-t border-border">
+                                    <TableCell className="uppercase tracking-wide text-xs text-primary">
+                                        Total {searchQuery ? "(filtré)" : "Général"}
+                                    </TableCell>
+                                    <TableCell className="text-center text-primary tabular-nums">{totals.invoices}</TableCell>
+                                    <TableCell className="text-center text-primary tabular-nums">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.ht)}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.tva)}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.timbre)}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-primary text-base">{formatCurrency(totals.ttc)}</TableCell>
+                                </TableRow>
+                            </tfoot>
+                        )}
                     </Table>
                 </div>
             </CardContent>

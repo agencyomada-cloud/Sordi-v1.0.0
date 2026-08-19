@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
-import { Pencil, Plus, Package, Trash2 } from "lucide-react";
+import { 
+  RiPencilLine as Pencil, 
+  RiAddLine as Plus, 
+  RiBox3Line as Package, 
+  RiDeleteBinLine as Trash2 
+} from "@remixicon/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,10 +40,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { TableLoading } from "@/components/ui/loading-state";
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from "@/hooks/useProducts";
 import type { CreateProductData, Product } from "@/lib/database";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
+
+import { SearchInput } from "@/components/ui/search-input";
 
 export default function ProductsPage() {
   const { data: products, isLoading } = useProducts();
@@ -46,9 +54,21 @@ export default function ProductsPage() {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const filteredProducts = products?.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (p.code || "").toLowerCase().includes(q) ||
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.description || "").toLowerCase().includes(q) ||
+      (p.unit || "").toLowerCase().includes(q)
+    );
+  });
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
@@ -173,6 +193,7 @@ export default function ProductsPage() {
         <Header />
 
         <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Produits</h1>
@@ -190,7 +211,7 @@ export default function ProductsPage() {
                   <DialogTitle>Ajouter un produit</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm text-muted-foreground">Code *</Label>
                       <Input
@@ -334,7 +355,7 @@ export default function ProductsPage() {
                   <DialogTitle>Modifier le produit</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm text-muted-foreground">Code *</Label>
                       <Input
@@ -472,8 +493,8 @@ export default function ProductsPage() {
             </Dialog>
           </div>
 
-          {/* Stats */}
-          <div className="mb-6">
+          {/* Stats & Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="bg-card rounded-3xl p-6 shadow-card border border-border/30 flex items-center gap-5 w-fit">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
                 <Package className="w-7 h-7 text-primary-foreground" />
@@ -483,6 +504,13 @@ export default function ProductsPage() {
                 <p className="text-sm text-muted-foreground">Produits actifs</p>
               </div>
             </div>
+
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Rechercher par code, nom ou description..."
+              containerClassName="w-full sm:w-80"
+            />
           </div>
 
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
@@ -499,13 +527,15 @@ export default function ProductsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
+                  <TableLoading columns={6} rows={5} />
+                ) : filteredProducts?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      Chargement...
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      Aucun produit trouvé
                     </TableCell>
                   </TableRow>
                 ) : (
-                  products?.map((product) => (
+                  filteredProducts?.map((product) => (
                     <TableRow key={product.id}>
                       <TableCell className="font-mono font-medium">{product.code}</TableCell>
                       <TableCell className="font-medium">{product.name}</TableCell>
@@ -518,7 +548,7 @@ export default function ProductsPage() {
                         <div className="flex items-center gap-1 justify-end">
                           <button
                             onClick={() => startEdit(product)}
-                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                            className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
                             title="Modifier"
                           >
                             <Pencil className="w-4 h-4" />
@@ -528,7 +558,7 @@ export default function ProductsPage() {
                               setProductToDelete(product.id);
                               setDeleteDialogOpen(true);
                             }}
-                            className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-red-50 text-destructive/70 hover:text-destructive transition-all"
+                            className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-destructive/10 text-destructive/70 hover:text-destructive transition-all"
                             title="Supprimer"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -540,6 +570,7 @@ export default function ProductsPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
           </div>
         </main>
       </div>

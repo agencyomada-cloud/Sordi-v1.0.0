@@ -134,6 +134,7 @@ export function useCreateInvoice() {
     onSuccess: (invoice, variables) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
       // Invalidate client products cache for this client
       if (invoice.client_id) {
         queryClient.invalidateQueries({ queryKey: ["client-products", invoice.client_id] });
@@ -141,6 +142,14 @@ export function useCreateInvoice() {
       const message = variables.invoice_type === "credit_note"
         ? "Facture d'avoir créée avec succès"
         : "Facture créée avec succès";
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "INVOICE",
+        entity_id: invoice.id,
+        description: `${message} ${invoice.invoice_number ? `(${invoice.invoice_number})` : ""}`.trim(),
+      });
+
       toast.success(message);
     },
     onError: (error: any) => {
@@ -167,11 +176,19 @@ export function useUpdateInvoice() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["invoices", invoice.id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
 
       const inv = invoice as any;
       if (inv?.client_id) {
         queryClient.invalidateQueries({ queryKey: ["client-products", inv.client_id] });
       }
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "INVOICE",
+        entity_id: invoice.id,
+        description: `Facture ${invoice.invoice_number || ""} modifiée avec succès`,
+      });
 
       toast.success("Facture mise à jour avec succès");
     },
@@ -193,14 +210,23 @@ export function useUpdateInvoiceStatus() {
     mutationFn: async ({ id, status }: { id: string; status: InvoiceStatus }) => {
       return await db.invoices.updateStatus(id, status);
     },
-    onSuccess: (invoice) => {
+    onSuccess: (invoice, variables) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
       // Invalidate client products cache for this client
       const inv = invoice as any;
       if (inv?.client_id) {
         queryClient.invalidateQueries({ queryKey: ["client-products", inv.client_id] });
       }
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "INVOICE",
+        entity_id: variables.id,
+        description: `Statut facture mis à jour : ${variables.status}`,
+      });
+
       toast.success("Statut mis à jour");
     },
     onError: (error) => {
@@ -217,12 +243,24 @@ export function useDeleteInvoice() {
     mutationFn: async (id: string) => {
       await db.invoices.delete(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["client-products"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "INVOICE",
+        entity_id: id,
+        description: `Facture supprimée`,
+      });
+
+      toast.success("Facture supprimée avec succès");
     },
     onError: (error) => {
-      logError("Invoice delete error", error);
+      toast.error("Erreur lors de la suppression de la facture");
+      logError("Invoice deletion error", error);
     },
   });
 }
@@ -237,13 +275,20 @@ export function useConvertProforma() {
     onSuccess: (invoice) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      // Invalidate specific invoice query to update detailed view immediately
-      queryClient.invalidateQueries({ queryKey: ["invoices", invoice.id] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CONVERT",
+        entity_type: "INVOICE",
+        entity_id: invoice.id,
+        description: `Proforma convertie en Facture ${invoice.invoice_number || ""}`,
+      });
+
       toast.success("Proforma convertie en facture avec succès");
     },
     onError: (error) => {
-      toast.error("Erreur lors de la conversion");
-      logError("Invoice conversion error", error);
+      toast.error("Erreur lors de la conversion de la proforma");
+      logError("Proforma conversion error", error);
     },
   });
 }

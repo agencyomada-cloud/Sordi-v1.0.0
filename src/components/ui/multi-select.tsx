@@ -1,8 +1,9 @@
 import * as React from "react";
-import { X, ChevronDown } from "lucide-react";
+import { RiCloseLine as X, RiArrowDownSLine as ChevronDown } from "@remixicon/react";
 import { Badge } from "@/components/ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Command as CommandPrimitive } from "cmdk";
+import { cn } from "@/lib/utils";
 
 type Option = {
     label: string;
@@ -37,9 +38,9 @@ export function MultiSelect({ options, selected, onChange, placeholder = "Select
     const selectedLabels = selected.map(s => options.find(o => o.value === s)?.label).filter(Boolean);
 
     return (
-        <Command className={`overflow-visible bg-transparent h-auto ${className}`}>
+        <Command className={cn("overflow-visible bg-transparent h-auto relative", open && "z-50", className)}>
             <div
-                className="group flex min-h-11 w-full items-center justify-between rounded-xl border border-border/50 bg-secondary/30 px-4 py-2 text-sm ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:bg-card cursor-text transition-colors"
+                className="group flex min-h-11 w-full items-center justify-between rounded-[6px] border border-border/50 bg-secondary/30 px-3.5 py-2 text-sm ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary focus-within:bg-card cursor-text transition-all duration-200"
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -51,7 +52,7 @@ export function MultiSelect({ options, selected, onChange, placeholder = "Select
                     {selected.map((item) => {
                         const option = options.find((o) => o.value === item);
                         return (
-                            <Badge key={item} variant="secondary" className="hover:bg-secondary bg-background/50 border-border/50">
+                            <Badge key={item} variant="secondary" className="hover:bg-secondary bg-background border-border/50 rounded-[4px] py-0.5 px-1.5 text-xs font-medium">
                                 {option?.label ?? item}
                                 <button
                                     className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -79,13 +80,13 @@ export function MultiSelect({ options, selected, onChange, placeholder = "Select
                     onBlur={() => setOpen(false)}
                     onFocus={() => setOpen(true)}
                     placeholder={selected.length === 0 ? placeholder : undefined}
-                    className="bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[50px] py-1"
+                    className="bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[50px] py-1 text-sm"
                 />
                 <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
             </div>
-            <div className="relative mt-2">
+            <div className="relative mt-1.5 z-50">
                 {open && options.length > 0 ? (
-                    <div className="absolute w-full z-10 top-0 rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in">
+                    <div className="absolute w-full z-50 top-0 rounded-[6px] border border-border/60 bg-popover text-popover-foreground shadow-elevated outline-none animate-in fade-in-0 zoom-in-95 duration-150">
                         {/* Prevent blur when clicking on the list */}
                         <CommandList
                             onMouseDown={(e) => {

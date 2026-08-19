@@ -1,24 +1,33 @@
 import { useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Search,
-  Plus,
-  CreditCard,
-  Banknote,
-  Building2,
-  Receipt,
-  MoreVertical,
-  Calendar,
-  Filter,
-  X,
-  ChevronDown
-} from "lucide-react";
+  RiAddLine as Plus,
+  RiBankCardLine as CreditCard,
+  RiCashLine as Banknote,
+  RiBuildingLine as Building2,
+  RiReceiptLine as Receipt,
+  RiMore2Fill as MoreVertical,
+  RiCalendarLine as Calendar,
+  RiFilter3Line as Filter,
+  RiCloseLine as X,
+} from "@remixicon/react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { SearchInput } from "@/components/ui/search-input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { TableLoading } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,10 +51,10 @@ import {
 } from "@/components/ui/select";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { StatsCard } from "@/components/dashboard/StatsCard";
 import { usePayments, useCreatePayment } from "@/hooks/usePayments";
 import { useInvoices, useUpdateInvoiceStatus } from "@/hooks/useInvoices";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export default function PaymentsPage() {
   const navigate = useNavigate();
@@ -112,18 +121,21 @@ export default function PaymentsPage() {
   }, [enrichedInvoices]);
 
   const filteredInvoices = useMemo(() => {
-    return enrichedInvoices.filter(invoice => {
-      const search = searchQuery.toLowerCase();
-      const invoiceNumber = invoice.invoice_number.toLowerCase();
-      const clientName = invoice.clients?.name?.toLowerCase() || "";
-      const matchesSearch = invoiceNumber.includes(search) || clientName.includes(search) || search === "";
+    const endOfDay = dateEnd ? new Date(dateEnd) : null;
+    if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
 
-      const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
+    return enrichedInvoices.filter(invoice => {
+      const search = searchQuery.toLowerCase().trim();
+      const invoiceNumber = (invoice.invoice_number || "").toLowerCase();
+      const clientName = (invoice.clients?.name || "").toLowerCase();
+      const matchesSearch = !search || invoiceNumber.includes(search) || clientName.includes(search);
+
+      const matchesStatus = statusFilter === "all" || invoice.status?.toLowerCase() === statusFilter.toLowerCase();
       const matchesClient = clientFilter === "all" || clientName === clientFilter.toLowerCase();
 
       const iDate = new Date(invoice.invoice_date);
       const matchesDateStart = !dateStart || iDate >= new Date(dateStart);
-      const matchesDateEnd = !dateEnd || iDate <= new Date(dateEnd);
+      const matchesDateEnd = !endOfDay || iDate <= endOfDay;
 
       return matchesSearch && matchesStatus && matchesClient && matchesDateStart && matchesDateEnd;
     });
@@ -237,6 +249,7 @@ export default function PaymentsPage() {
         <Header />
 
         <main className="flex-1 p-6 overflow-y-auto">
+          <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
             <div>
@@ -256,41 +269,22 @@ export default function PaymentsPage() {
               value={formatCurrency(stats.total)}
               subValue={`${stats.count} paiements`}
               icon={Receipt}
-              className="bg-primary text-primary-foreground"
-              iconClassName="text-primary bg-primary-foreground/20"
+              highlighted
             />
-            <StatsCard
-              title="Espèces"
-              value={formatCurrency(stats.cash)}
-              icon={Banknote}
-              iconClassName="text-green-500 bg-green-500/10"
-            />
-            <StatsCard
-              title="Chèques"
-              value={formatCurrency(stats.cheque)}
-              icon={CreditCard}
-              iconClassName="text-blue-500 bg-blue-500/10"
-            />
-            <StatsCard
-              title="Virements"
-              value={formatCurrency(stats.transfer)}
-              icon={Building2}
-              iconClassName="text-purple-500 bg-purple-500/10"
-            />
+            <StatsCard title="Espèces" value={formatCurrency(stats.cash)} icon={Banknote} />
+            <StatsCard title="Chèques" value={formatCurrency(stats.cheque)} icon={CreditCard} />
+            <StatsCard title="Virements" value={formatCurrency(stats.transfer)} icon={Building2} />
           </div>
 
           {/* Filters */}
           <div className="bg-card rounded-2xl border shadow-sm p-4 mb-6 space-y-4">
             <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Rechercher facture, client..."
-                  className="pl-9 bg-background"
-                />
-              </div>
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Rechercher facture, client..."
+                containerClassName="flex-1"
+              />
 
               <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
                 <Select value={clientFilter} onValueChange={setClientFilter}>
@@ -345,87 +339,93 @@ export default function PaymentsPage() {
           </div>
 
           {/* Table - Invoice Centric */}
-          <div className="bg-card rounded-2xl border shadow-sm overflow-hidden flex-1">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-white border-b">
-                    <th className="px-6 py-4 text-left font-bold text-gray-400 uppercase text-xs tracking-wider">N° FACTURE</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-400 uppercase text-xs tracking-wider">DATE</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-400 uppercase text-xs tracking-wider">ÉCHÉANCE</th>
-                    <th className="px-6 py-4 text-right font-bold text-gray-400 uppercase text-xs tracking-wider">MONTANT TTC</th>
-                    <th className="px-6 py-4 text-right font-bold text-gray-400 uppercase text-xs tracking-wider">PAYÉ</th>
-                    <th className="px-6 py-4 text-right font-bold text-gray-400 uppercase text-xs tracking-wider">SOLDE</th>
-                    <th className="px-6 py-4 text-left font-bold text-gray-400 uppercase text-xs tracking-wider w-40">STATUT</th>
-                    <th className="px-4 py-4 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {isLoadingInvoices ? (
-                    <tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Chargement...</td></tr>
-                  ) : filteredInvoices.length === 0 ? (
-                    <tr><td colSpan={8} className="p-12 text-center text-muted-foreground">Aucune facture trouvée</td></tr>
-                  ) : (
-                    filteredInvoices.map((invoice: any) => {
-                      const paid = invoice.calculated_paid || 0;
-                      const total = invoice.total_ttc || 0;
-                      const balance = invoice.calculated_balance || 0;
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>N° Facture</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="hidden md:table-cell">Échéance</TableHead>
+                <TableHead className="text-right">Montant TTC</TableHead>
+                <TableHead className="text-right">Payé</TableHead>
+                <TableHead className="text-right">Solde</TableHead>
+                <TableHead className="w-40">Statut</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingInvoices ? (
+                <TableLoading columns={8} rows={5} />
+              ) : filteredInvoices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8}>
+                    <EmptyState
+                      type="invoices"
+                      title="Aucune facture trouvée"
+                      description={searchQuery ? "Essayez une autre recherche" : undefined}
+                      action={searchQuery ? { label: "Effacer la recherche", onClick: () => setSearchQuery("") } : undefined}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredInvoices.map((invoice: any) => {
+                  const paid = invoice.calculated_paid || 0;
+                  const total = invoice.total_ttc || 0;
+                  const balance = invoice.calculated_balance || 0;
 
-                      return (
-                        <tr key={invoice.id} className="hover:bg-gray-50/80 transition-colors group">
-                          <td className="px-6 py-4 font-bold text-gray-900">{invoice.invoice_number}</td>
-                          <td className="px-6 py-4 text-gray-600">{formatDate(invoice.invoice_date)}</td>
-                          <td className="px-6 py-4 text-gray-600">{formatDate(invoice.due_date)}</td>
-                          <td className="px-6 py-4 text-right font-bold text-gray-900 tabular-nums">
-                            {formatCurrency(total)}
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium text-emerald-500 tabular-nums">
-                            {formatCurrency(paid)}
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium tabular-nums">
-                            <span className={balance > 0 ? "text-red-500" : "text-gray-400"}>
-                              {formatCurrency(balance)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <Select
-                              value={invoice.status || 'sent'}
-                              onValueChange={(val) => handleStatusChange(invoice.id, val)}
-                            >
-                              <SelectTrigger className="h-9 border-gray-200 bg-gray-50/50 hover:bg-white transition-colors">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {statusOptions.map(opt => (
-                                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-4 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreVertical className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openPaymentDialog(invoice.id)}>
-                                  <CreditCard className="w-4 h-4 mr-2" /> Ajouter un paiement
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
-                                  <Receipt className="w-4 h-4 mr-2" /> Voir la facture
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  return (
+                    <TableRow key={invoice.id} className="group">
+                      <TableCell className="font-semibold">{invoice.invoice_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(invoice.invoice_date)}</TableCell>
+                      <TableCell className="text-muted-foreground hidden md:table-cell">{formatDate(invoice.due_date)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatCurrency(total)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-stat-positive tabular-nums">
+                        {formatCurrency(paid)}
+                      </TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        <span className={balance > 0 ? "text-destructive" : "text-muted-foreground"}>
+                          {formatCurrency(balance)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={invoice.status || 'sent'}
+                          onValueChange={(val) => handleStatusChange(invoice.id, val)}
+                        >
+                          <SelectTrigger className="h-9 bg-secondary/30">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {statusOptions.map(opt => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openPaymentDialog(invoice.id)}>
+                              <CreditCard className="w-4 h-4 mr-2" /> Ajouter un paiement
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
+                              <Receipt className="w-4 h-4 mr-2" /> Voir la facture
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
           </div>
         </main>
 
@@ -457,7 +457,7 @@ export default function PaymentsPage() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Montant</Label>
                   <Input
@@ -543,21 +543,6 @@ export default function PaymentsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
-    </div>
-  );
-}
-
-function StatsCard({ title, value, subValue, icon: Icon, className, iconClassName }: any) {
-  return (
-    <div className={`p-6 rounded-3xl border shadow-sm flex items-center gap-4 ${className || "bg-card"}`}>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${iconClassName || "bg-secondary"}`}>
-        <Icon className="w-6 h-6" />
-      </div>
-      <div>
-        <p className="text-sm font-medium opacity-80">{title}</p>
-        <p className="text-2xl font-bold tracking-tight">{value}</p>
-        {subValue && <p className="text-xs opacity-60 mt-0.5">{subValue}</p>}
       </div>
     </div>
   );

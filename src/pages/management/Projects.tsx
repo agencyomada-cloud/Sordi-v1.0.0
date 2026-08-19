@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, MoreHorizontal, Briefcase, User, Target } from "lucide-react";
+import { 
+    RiAddLine as Plus, 
+    RiPencilLine as Pencil, 
+    RiDeleteBinLine as Trash2, 
+    RiMoreFill as MoreHorizontal, 
+    RiBriefcaseLine as Briefcase, 
+    RiUserLine as User, 
+    RiTargetLine as Target 
+} from "@remixicon/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -167,7 +175,7 @@ const ProjectsSection = () => {
                                         className="mt-1.5 rounded-xl"
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <Label>Statut</Label>
                                         <Select

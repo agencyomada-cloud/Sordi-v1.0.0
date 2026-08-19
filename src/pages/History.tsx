@@ -4,9 +4,14 @@ import { db } from "../lib/database";
 import { format, getMonth, getYear, parseISO, startOfYear, endOfYear } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
-    History as HistoryIcon, Loader2, RefreshCw, Filter, X,
-    User, FileText, Truck, Settings, Database, Receipt, Download
-} from "lucide-react";
+    RiHistoryLine as HistoryIcon,
+    RiLoader4Line as Loader2,
+    RiRefreshLine as RefreshCw,
+    RiFilter3Line as Filter,
+    RiCloseLine as X,
+    RiDownloadLine as Download
+} from "@remixicon/react";
+import { getActionColor, getActionLabel, getEntityConfig } from "@/lib/activityLog";
 import { Button } from "../components/ui/button";
 import { toast } from "sonner";
 import { exportToCSV } from "../lib/csvUtils";
@@ -73,74 +78,6 @@ export default function History() {
         return selectedMonths.includes(month);
     });
 
-    const getActionColor = (action: string) => {
-        switch (action) {
-            case "CREATE": return "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-900";
-            case "UPDATE": return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-900";
-            case "DELETE": return "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-900";
-            case "CONVERT": return "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-900";
-            default: return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-800";
-        }
-    };
-
-    const getActionLabel = (action: string) => {
-        switch (action) {
-            case "CREATE": return "Création";
-            case "UPDATE": return "Modification";
-            case "DELETE": return "Suppression";
-            case "CONVERT": return "Conversion";
-            default: return action;
-        }
-    };
-
-    const getEntityConfig = (type: string) => {
-        switch (type) {
-            case "CLIENT":
-                return {
-                    label: "Client",
-                    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-                    icon: <User className="w-4 h-4" />
-                };
-            case "INVOICE":
-                return {
-                    label: "Facture",
-                    color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-                    icon: <FileText className="w-4 h-4" />
-                };
-            case "DELIVERY":
-                return {
-                    label: "Livraison",
-                    color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-                    icon: <Truck className="w-4 h-4" />
-                };
-
-            case "PRODUCT":
-                return {
-                    label: "Produit",
-                    color: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-                    icon: <Database className="w-4 h-4" />
-                };
-            case "SETTINGS":
-                return {
-                    label: "Paramètres",
-                    color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400",
-                    icon: <Settings className="w-4 h-4" />
-                };
-            case "EXPENSE":
-                return {
-                    label: "Dépense",
-                    color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-                    icon: <Receipt className="w-4 h-4" />
-                };
-            default:
-                return {
-                    label: type,
-                    color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
-                    icon: <HistoryIcon className="w-4 h-4" />
-                };
-        }
-    };
-
     const clearFilters = () => {
         setEntityType("all");
         setAction("all");
@@ -200,7 +137,7 @@ export default function History() {
                     </div>
 
                     {/* Filters Bar */}
-                    <div className="flex flex-wrap gap-4 items-center bg-card p-4 rounded-3xl border border-border/30 shadow-sm">
+                    <div className="flex flex-wrap gap-4 items-center bg-card p-4 rounded-3xl border border-border/30 shadow-sm relative z-30">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
                             <Filter className="w-4 h-4" />
                             <span className="font-medium">Filtres:</span>
@@ -214,10 +151,11 @@ export default function History() {
                                 <SelectItem value="all">Toutes les entités</SelectItem>
                                 <SelectItem value="CLIENT">Clients</SelectItem>
                                 <SelectItem value="INVOICE">Factures</SelectItem>
-                                <SelectItem value="PRODUCT">Produits</SelectItem>
+                                <SelectItem value="ORDER">Commandes</SelectItem>
                                 <SelectItem value="DELIVERY">Livraisons</SelectItem>
-
+                                <SelectItem value="PAYMENT">Paiements</SelectItem>
                                 <SelectItem value="EXPENSE">Dépenses</SelectItem>
+                                <SelectItem value="PRODUCT">Produits</SelectItem>
                                 <SelectItem value="SETTINGS">Paramètres</SelectItem>
                             </SelectContent>
                         </Select>

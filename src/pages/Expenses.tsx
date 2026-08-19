@@ -1,15 +1,24 @@
 import { useState } from "react";
-import { Plus, Trash2, Search, Receipt, Wallet } from "lucide-react";
+import {
+  RiAddLine as Plus,
+  RiDeleteBinLine as Trash2,
+  RiReceiptLine as Receipt,
+  RiWallet3Line as Wallet
+} from "@remixicon/react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/ui/search-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableLoading } from "@/components/ui/loading-state";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { StatsCard } from "@/components/dashboard/StatsCard";
 import { useExpenses, useCreateExpense, useDeleteExpense, useExpenseStats } from "@/hooks/useExpenses";
 
 const Expenses = () => {
@@ -103,6 +112,7 @@ const Expenses = () => {
         <Header />
 
         <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Charges & Dépenses</h1>
@@ -121,7 +131,7 @@ const Expenses = () => {
                   <DialogTitle>Ajouter une charge</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm text-muted-foreground">Date</Label>
                       <Input
@@ -166,7 +176,7 @@ const Expenses = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm text-muted-foreground">Mode de paiement</Label>
                       <Select
@@ -218,43 +228,30 @@ const Expenses = () => {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-card rounded-3xl p-6 shadow-card border border-border/30 flex items-center gap-5">
-              <div className="w-14 h-14 bg-destructive/10 rounded-2xl flex items-center justify-center">
-                <Receipt className="w-7 h-7 text-destructive" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-foreground tracking-tight">
-                  {formatCurrency(stats?.total || 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">{stats?.count || 0} charges</p>
-              </div>
-            </div>
-
-            {stats?.byCategory && Object.entries(stats.byCategory).slice(0, 2).map(([cat, amount]) => (
-              <div key={cat} className="bg-card rounded-3xl p-6 shadow-card border border-border/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Wallet className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{cat}</span>
-                </div>
-                <p className="text-2xl font-bold text-foreground tracking-tight">
-                  {formatCurrency(amount as number)}
-                </p>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <StatsCard
+              title="Total Charges"
+              value={formatCurrency(stats?.total || 0)}
+              subValue={`${stats?.count || 0} charges`}
+              icon={Receipt}
+              highlighted
+            />
+            {stats?.byCategory &&
+              Object.entries(stats.byCategory)
+                .sort(([, a], [, b]) => (b as number) - (a as number))
+                .slice(0, 3)
+                .map(([cat, amount]) => (
+                  <StatsCard key={cat} title={cat} value={formatCurrency(amount as number)} icon={Wallet} />
+                ))}
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher..."
-                className="pl-11 h-11 bg-secondary/30 border-border/50 rounded-xl"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-col sm:flex-row gap-4 mb-6 relative z-30">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              containerClassName="flex-1 max-w-sm"
+            />
 
             <div className="w-full sm:w-80">
               <MultiSelect
@@ -282,15 +279,22 @@ const Expenses = () => {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      Chargement...
-                    </TableCell>
-                  </TableRow>
+                  <TableLoading columns={6} rows={5} />
                 ) : filteredExpenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      Aucune charge trouvée
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        type="expenses"
+                        title="Aucune charge"
+                        description={searchQuery ? "Essayez une autre recherche" : "Ajoutez votre première charge"}
+                        action={searchQuery ? {
+                          label: "Effacer la recherche",
+                          onClick: () => setSearchQuery(""),
+                        } : {
+                          label: "Ajouter",
+                          onClick: () => setIsDialogOpen(true),
+                        }}
+                      />
                     </TableCell>
                   </TableRow>
                 ) : filteredExpenses.map((expense) => (
@@ -305,13 +309,13 @@ const Expenses = () => {
                     </TableCell>
                     <TableCell className="text-muted-foreground hidden md:table-cell">{expense.description || "-"}</TableCell>
                     <TableCell className="capitalize text-muted-foreground hidden sm:table-cell">{expense.payment_method}</TableCell>
-                    <TableCell className="text-right font-medium text-destructive">
+                    <TableCell className="text-right font-medium text-destructive tabular-nums">
                       -{formatCurrency(expense.amount)}
                     </TableCell>
                     <TableCell>
                       <button
                         onClick={() => deleteExpense.mutate(expense.id)}
-                        className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                        className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
                       >
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </button>
@@ -320,6 +324,7 @@ const Expenses = () => {
                 ))}
               </TableBody>
             </Table>
+          </div>
           </div>
         </main>
       </div>

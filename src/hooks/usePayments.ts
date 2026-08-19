@@ -22,10 +22,19 @@ export function useCreatePayment() {
       const validated = paymentSchema.parse(payment) as CreatePaymentData;
       return await db.payments.create(validated);
     },
-    onSuccess: () => {
+    onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "CREATE",
+        entity_type: "PAYMENT",
+        entity_id: payment?.id || null,
+        description: `Paiement de ${payment?.amount || ""} DA enregistré avec succès`,
+      });
+
       toast.success("Paiement enregistré avec succès");
     },
     onError: (error: any) => {
@@ -47,10 +56,19 @@ export function useUpdatePayment() {
       const validated = paymentSchema.parse(data) as CreatePaymentData;
       return await db.payments.update(id, validated);
     },
-    onSuccess: () => {
+    onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "PAYMENT",
+        entity_id: payment?.id || null,
+        description: `Paiement de ${payment?.amount || ""} DA mis à jour`,
+      });
+
       toast.success("Paiement mis à jour avec succès");
     },
     onError: (error: any) => {
@@ -71,10 +89,19 @@ export function useDeletePayment() {
     mutationFn: async (id: string) => {
       return await db.payments.delete(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "PAYMENT",
+        entity_id: id,
+        description: `Paiement supprimé`,
+      });
+
       toast.success("Paiement supprimé avec succès");
     },
     onError: (error: any) => {

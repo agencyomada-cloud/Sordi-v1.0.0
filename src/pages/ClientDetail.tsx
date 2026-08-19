@@ -1,7 +1,29 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, TrendingUp, TrendingDown, Clock, Package, X, Pencil, Download, User, Phone, Mail, MapPin, Building2, Landmark, BadgeCheck, CreditCard, CalendarDays, Scale, Hash, AlertCircle } from "lucide-react";
+import { 
+  RiArrowLeftLine as ArrowLeft, 
+  RiFileTextLine as FileText, 
+  RiArrowRightUpLine as TrendingUp, 
+  RiArrowRightDownLine as TrendingDown, 
+  RiTimeLine as Clock, 
+  RiBox3Line as Package, 
+  RiCloseLine as X, 
+  RiPencilLine as Pencil, 
+  RiDownloadLine as Download, 
+  RiUserLine as User, 
+  RiPhoneLine as Phone, 
+  RiMailLine as Mail, 
+  RiMapPinLine as MapPin, 
+  RiBuildingLine as Building2, 
+  RiBankLine as Landmark, 
+  RiCheckboxCircleLine as BadgeCheck, 
+  RiBankCardLine as CreditCard, 
+  RiCalendarLine as CalendarDays, 
+  RiScales3Line as Scale, 
+  RiHashtag as Hash, 
+  RiErrorWarningLine as AlertCircle 
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1461,7 +1483,7 @@ export default function ClientDetailPage() {
               {/* Basic Info */}
               <div className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Informations Générales</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <Label className="text-xs text-muted-foreground">Nom / Raison Sociale *</Label>
                     <Input
@@ -1493,7 +1515,7 @@ export default function ClientDetailPage() {
               {/* Contact Info */}
               <div className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Contact & Localisation</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs text-muted-foreground">Téléphone</Label>
                     <Input
@@ -1542,7 +1564,7 @@ export default function ClientDetailPage() {
               {/* Fiscal Info */}
               <div className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Informations Fiscales</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs text-muted-foreground">NIF</Label>
                     <Input
@@ -1655,7 +1677,7 @@ export default function ClientDetailPage() {
               {/* Financial Info */}
               <div className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Conditions Commerciales</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-xs text-muted-foreground">Limite de crédit</Label>
                     <Input
@@ -1716,7 +1738,7 @@ export default function ClientDetailPage() {
             <DialogTitle>Ajouter une avance</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddAdvanceSubmit} className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2 sm:col-span-1">
                 <Label className="text-xs text-muted-foreground">Date de paiement *</Label>
                 <Input

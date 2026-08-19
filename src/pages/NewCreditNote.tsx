@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -432,7 +432,7 @@ export default function NewCreditNotePage() {
             </div>
 
             {/* Full Width Preview */}
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '600px' }}>
+            <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '600px' }}>
               <div className="flex justify-center">
                 <div className="shadow-2xl transition-all duration-300 transform hover:scale-[1.01]">
                   <EditableInvoicePreview

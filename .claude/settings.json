@@ -5,7 +5,10 @@
       "Bash(git add *)",
       "Bash(npm install *)",
       "Bash(brew --version)",
-      "Bash(brew list *)"
+      "Bash(brew list *)",
+      "Bash(/opt/homebrew/bin/psql \"postgres://mobino:mobino_dev_password@localhost:5434/mobino\" -c \"\\\\dt\")",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:4000/health)"
     ]
   }
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { cn, compressImage } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +17,26 @@ import {
   RiSaveLine as Save, 
   RiLockLine as Lock, 
   RiShieldCheckLine as ShieldCheck, 
-  RiKeyLine as KeyRound 
+  RiKeyLine as KeyRound,
+  RiNotification3Line,
+  RiVolumeUpLine,
+  RiVolumeMuteLine,
+  RiCheckLine,
+  RiErrorWarningLine,
+  RiInformationLine,
+  RiAlertLine
 } from "@remixicon/react";
 import { invoke } from "@tauri-apps/api/core";
+import { notificationAudio } from "@/lib/notificationSound";
+import { db } from "@/lib/database";
+import { useQueryClient } from "@tanstack/react-query";
+import { INVOICE_PDF_THEMES } from "@/components/pdf/invoicePdfShared";
 
 export default function SettingsPage() {
     const { data: settings, isLoading } = useSettings();
     const updateSettings = useUpdateSettings();
+    const queryClient = useQueryClient();
+    const [soundEnabled, setSoundEnabled] = useState(() => notificationAudio.isEnabled());
 
     const [formData, setFormData] = useState({
         company_name: "",
@@ -51,6 +65,7 @@ export default function SettingsPage() {
         footer_logo_data: "",
         body_pattern_data: "",
         qr_code_data: "",
+        invoice_pdf_theme: "structure",
     });
 
     const [extraInfoList, setExtraInfoList] = useState<string[]>([]);
@@ -206,6 +221,7 @@ export default function SettingsPage() {
                             <TabsTrigger value="company">Informations Entreprise</TabsTrigger>
                             <TabsTrigger value="appearance">Apparence & Logo</TabsTrigger>
                             <TabsTrigger value="security">Sécurité</TabsTrigger>
+                            <TabsTrigger value="notifications">Notifications & Sons</TabsTrigger>
                         </TabsList>
 
                         <form onSubmit={handleSubmit}>
@@ -370,6 +386,43 @@ export default function SettingsPage() {
 
                             <TabsContent value="appearance">
                                 <div className="grid gap-6">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Thème de la facture PDF</CardTitle>
+                                            <CardDescription>Choisissez la mise en page utilisée pour générer vos factures, bons de livraison et commandes.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                {INVOICE_PDF_THEMES.map((theme) => {
+                                                    const isSelected = (formData.invoice_pdf_theme || "structure") === theme.value;
+                                                    return (
+                                                        <button
+                                                            key={theme.value}
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, invoice_pdf_theme: theme.value }))}
+                                                            className={cn(
+                                                                "text-left rounded-[6px] border p-4 transition-all",
+                                                                isSelected
+                                                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                                                    : "border-border hover:border-primary/40 hover:bg-muted/30"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-sm font-semibold text-foreground">{theme.label}</span>
+                                                                {isSelected && (
+                                                                    <span className="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0">
+                                                                        <RiCheckLine className="w-3 h-3 text-primary-foreground" />
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground leading-relaxed">{theme.description}</p>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
                                     <Card>
                                         <CardHeader>
                                             <CardTitle>Personnalisation des documents</CardTitle>
@@ -851,6 +904,100 @@ export default function SettingsPage() {
                                                 </Button>
                                             </div>
                                         </form>
+                                    </CardContent>
+                                </Card>
+                            </TabsContent>
+
+                            <TabsContent value="notifications">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <RiNotification3Line className="w-5 h-5 text-primary" />
+                                            Paramètres des Notifications & Sons
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Gérez les retours sonores et testez le bon fonctionnement du système de notifications en temps réel.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="flex items-center justify-between p-4 rounded-[6px] border border-border/50 bg-secondary/20">
+                                            <div className="space-y-0.5">
+                                                <Label className="text-sm font-semibold flex items-center gap-2">
+                                                    {soundEnabled ? <RiVolumeUpLine className="w-4 h-4 text-primary" /> : <RiVolumeMuteLine className="w-4 h-4 text-muted-foreground" />}
+                                                    Effets sonores des notifications
+                                                </Label>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Jouer un carillon audio harmonieux lors des actions réussies, alertes et erreurs.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={soundEnabled}
+                                                onCheckedChange={(checked) => {
+                                                    setSoundEnabled(checked);
+                                                    notificationAudio.setEnabled(checked);
+                                                    if (checked) {
+                                                        notificationAudio.play("success");
+                                                        toast.success("Effets sonores activés");
+                                                    } else {
+                                                        toast.info("Effets sonores désactivés");
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <Label className="text-sm font-semibold">Aperçu des tonalités sonores</Label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        notificationAudio.play("success");
+                                                        toast.success("Tonalité de succès");
+                                                    }}
+                                                    className="border-emerald-500/30 hover:bg-emerald-50 text-emerald-700 dark:hover:bg-emerald-950/40 gap-2 h-11 active:scale-[0.98]"
+                                                >
+                                                    <RiCheckLine className="w-4 h-4 text-emerald-600" />
+                                                    Son Succès
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        notificationAudio.play("error");
+                                                        toast.error("Tonalité d'erreur");
+                                                    }}
+                                                    className="border-rose-500/30 hover:bg-rose-50 text-rose-700 dark:hover:bg-rose-950/40 gap-2 h-11 active:scale-[0.98]"
+                                                >
+                                                    <RiErrorWarningLine className="w-4 h-4 text-rose-600" />
+                                                    Son Erreur
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        notificationAudio.play("warning");
+                                                        toast.warning("Tonalité d'alerte");
+                                                    }}
+                                                    className="border-amber-500/30 hover:bg-amber-50 text-amber-700 dark:hover:bg-amber-950/40 gap-2 h-11 active:scale-[0.98]"
+                                                >
+                                                    <RiAlertLine className="w-4 h-4 text-amber-600" />
+                                                    Son Alerte
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        notificationAudio.play("info");
+                                                        toast.info("Tonalité d'information");
+                                                    }}
+                                                    className="border-primary/30 hover:bg-primary/5 text-primary gap-2 h-11 active:scale-[0.98]"
+                                                >
+                                                    <RiInformationLine className="w-4 h-4 text-primary" />
+                                                    Son Information
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             </TabsContent>

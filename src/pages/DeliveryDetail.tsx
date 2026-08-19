@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Printer, Truck, Edit, Loader2 } from "lucide-react";
+import { 
+  RiArrowLeftLine as ArrowLeft, 
+  RiDownloadLine as Download, 
+  RiPrinterLine as Printer, 
+  RiTruckLine as Truck, 
+  RiEditLine as Edit, 
+  RiLoader4Line as Loader2 
+} from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -170,7 +177,7 @@ export default function DeliveryDetailPage() {
 
           {/* Delivery Preview Section */}
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden p-8">
-            <div className="flex justify-center bg-gray-100 dark:bg-gray-800 rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+            <div className="flex justify-center bg-muted rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
               <div className="shadow-xl">
                 <DeliveryEditablePreview
                   deliveryNote={{

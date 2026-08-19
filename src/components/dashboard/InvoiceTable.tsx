@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Search, SlidersHorizontal, MoreHorizontal, Download, Plus } from "lucide-react";
+import { 
+  RiSearchLine as Search, 
+  RiEqualizerLine as SlidersHorizontal, 
+  RiMoreFill as MoreHorizontal, 
+  RiDownloadLine as Download, 
+  RiAddLine as Plus 
+} from "@remixicon/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useClients } from "@/hooks/useClients";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -165,13 +165,13 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar />
 
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <Header />
 
-        <div className="flex-1 overflow-auto bg-gray-100 p-8 flex flex-col items-center">
+        <div className="flex-1 overflow-auto bg-muted/40 p-8 flex flex-col items-center">
           <div className="w-full max-w-[210mm] flex items-center justify-between mb-6">
             <Button variant="ghost" onClick={() => navigate("/orders")} className="gap-2">
               <ArrowLeft className="w-4 h-4" />

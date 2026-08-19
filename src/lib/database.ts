@@ -4,6 +4,23 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { mockStore } from "./mockStore";
+
+const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+
+async function safeInvoke<T>(cmd: string, args?: Record<string, any>, fallbackFn?: () => T | Promise<T>): Promise<T> {
+  if (!isTauri) {
+    if (fallbackFn) return fallbackFn();
+    throw new Error(`Command ${cmd} not available in web mode`);
+  }
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (err) {
+    console.warn(`Tauri invoke "${cmd}" failed, using fallback:`, err);
+    if (fallbackFn) return fallbackFn();
+    throw err;
+  }
+}
 
 
 // ============= STATS =============
@@ -199,7 +216,7 @@ export interface CreateInvoiceData {
   month_period?: string;
   notes?: string;
   header_note?: string;
-  invoice_type?: string;
+  invoice_type?: "invoice" | "credit_note" | "proforma";
   original_invoice_id?: string;
   discount?: number;
   discount_type?: "percent" | "amount";
@@ -534,148 +551,155 @@ export const db = {
   // History
   history: {
     getLogs: (limit?: number, entity_type?: string, action?: string, start_date?: string, end_date?: string) =>
-      invoke<ActivityLog[]>("get_activity_logs", { limit, entityType: entity_type, action, startDate: start_date, endDate: end_date }),
+      safeInvoke<ActivityLog[]>("get_activity_logs", { limit, entityType: entity_type, action, startDate: start_date, endDate: end_date }, () => mockStore.getActivityLogs(limit, entity_type, action, start_date, end_date)),
+    log: (data: { action: string; entity_type: string; entity_id?: string | null; description: string }): Promise<void> =>
+      safeInvoke("log_activity", { data }, () => mockStore.logActivity(data)),
   },
   // Clients
   clients: {
-    getAll: (): Promise<Client[]> => invoke("get_clients"),
-    getById: (id: string): Promise<Client | null> => invoke("get_client", { id }),
-    create: (data: CreateClientData): Promise<Client> => invoke("create_client", { data }),
-    update: (id: string, data: CreateClientData): Promise<Client> => invoke("update_client", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_client", { id }),
+    getAll: (): Promise<Client[]> => safeInvoke("get_clients", undefined, () => mockStore.getClients()),
+    getById: (id: string): Promise<Client | null> => safeInvoke("get_client", { id }, () => mockStore.getClient(id)),
+    create: (data: CreateClientData): Promise<Client> => safeInvoke("create_client", { data }, () => mockStore.createClient(data)),
+    update: (id: string, data: CreateClientData): Promise<Client> => safeInvoke("update_client", { id, data }, () => mockStore.updateClient(id, data)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_client", { id }, () => mockStore.deleteClient(id)),
     getProducts: (client_id: string, productId?: string, month?: string, year?: number): Promise<any[]> =>
-      invoke("get_client_products", { clientId: client_id, productId, month, year }),
+      safeInvoke("get_client_products", { clientId: client_id, productId, month, year }, () => mockStore.getClientProductCumulatives(year, month ? [month] : undefined)),
   },
 
   // Client Draft Products
   clientDrafts: {
     getAll: (client_id: string): Promise<ClientDraftProduct[]> =>
-      invoke("get_client_draft_products", { clientId: client_id }),
+      safeInvoke("get_client_draft_products", { clientId: client_id }, () => []),
     create: (data: CreateClientDraftProductData): Promise<ClientDraftProduct> =>
-      invoke("add_client_draft_product", { data }),
+      safeInvoke("add_client_draft_product", { data }, () => ({ id: "draft-" + Date.now(), client_id: data.client_id, product_id: data.product_id, quantity: data.quantity, unit_price: data.unit_price, amount: data.quantity * data.unit_price, created_at: new Date().toISOString() })),
     updateQuantity: (id: string, quantity: number): Promise<ClientDraftProduct> =>
-      invoke("update_client_draft_product_quantity", { data: { id, quantity } }),
+      safeInvoke("update_client_draft_product_quantity", { data: { id, quantity } }, () => ({} as any)),
     delete: (id: string): Promise<void> =>
-      invoke("delete_client_draft_product", { id }),
+      safeInvoke("delete_client_draft_product", { id }, () => {}),
     clear: (client_id: string): Promise<void> =>
-      invoke("clear_client_draft_products", { clientId: client_id }),
+      safeInvoke("clear_client_draft_products", { clientId: client_id }, () => {}),
   },
 
   // Client Advances
   clientAdvances: {
     getAll: (client_id: string): Promise<ClientAdvance[]> =>
-      invoke("get_client_advances", { clientId: client_id }),
+      safeInvoke("get_client_advances", { clientId: client_id }, () => mockStore.getClientAdvances(client_id)),
     create: (data: CreateClientAdvanceData): Promise<ClientAdvance> =>
-      invoke("add_client_advance", { data }),
+      safeInvoke("add_client_advance", { data }, () => mockStore.createClientAdvance(data)),
     update: (data: UpdateClientAdvanceData): Promise<ClientAdvance> =>
-      invoke("update_client_advance", { data }),
+      safeInvoke("update_client_advance", { data }, () => mockStore.updateClientAdvance(data)),
     delete: (id: string): Promise<void> =>
-      invoke("delete_client_advance", { id }),
+      safeInvoke("delete_client_advance", { id }, () => mockStore.deleteClientAdvance(id)),
   },
 
   // Products
   products: {
-    getAll: (): Promise<Product[]> => invoke("get_products"),
-    create: (data: CreateProductData): Promise<Product> => invoke("create_product", { data }),
-    updatePrice: (id: string, unit_price: number): Promise<Product> => invoke("update_product_price", { id, unit_price }),
-    update: (id: string, data: CreateProductData): Promise<Product> => invoke("update_product", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_product", { id }),
-    getSalesStats: (year?: number, months?: string[]): Promise<any[]> => invoke("get_product_sales_stats", { year, months }),
+    getAll: (): Promise<Product[]> => safeInvoke("get_products", undefined, () => mockStore.getProducts()),
+    create: (data: CreateProductData): Promise<Product> => safeInvoke("create_product", { data }, () => mockStore.createProduct(data)),
+    updatePrice: (id: string, unit_price: number): Promise<Product> => safeInvoke("update_product_price", { id, unit_price }, () => mockStore.updateProduct(id, { code: "", name: "", unit_price })),
+    update: (id: string, data: CreateProductData): Promise<Product> => safeInvoke("update_product", { id, data }, () => mockStore.updateProduct(id, data)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_product", { id }, () => mockStore.deleteProduct(id)),
+    getSalesStats: (year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_product_sales_stats", { year, months }, () => mockStore.getDashboardStats(year, months).product_stats),
   },
 
   // Invoices
   invoices: {
     getAll: async (status?: string, invoiceType?: string) => {
-      console.log("Fetching invoices with status:", status);
-      return invoke<Invoice[]>("get_invoices", { status, invoiceType });
+      return safeInvoke<Invoice[]>("get_invoices", { status, invoiceType }, () => mockStore.getInvoices(status, invoiceType));
     },
     getAllWithClients: async (status?: string, invoiceType?: string) => {
-      console.log("Fetching invoices with clients (optimized)");
-      return invoke<InvoiceWithClient[]>("get_invoices_with_clients", { status, invoiceType });
+      return safeInvoke<InvoiceWithClient[]>("get_invoices_with_clients", { status, invoiceType }, () => mockStore.getInvoicesWithClients(status, invoiceType));
     },
-    getById: async (id: string) => invoke<Invoice | null>("get_invoice", { id }),
-    getItems: (invoice_id: string): Promise<any[]> => invoke("get_invoice_items", { invoiceId: invoice_id }),
-    getNextNumber: (): Promise<string> => invoke("get_next_invoice_number"),
-    create: (data: CreateInvoiceData): Promise<Invoice> => invoke("create_invoice", { data }),
-    update: (id: string, data: CreateInvoiceData): Promise<Invoice> => invoke("update_invoice", { id, data }),
-    updateStatus: (id: string, status: string) => invoke("update_invoice_status", { id, status }),
+    getById: async (id: string) => safeInvoke<Invoice | null>("get_invoice", { id }, () => mockStore.getInvoice(id)),
+    getItems: (invoice_id: string): Promise<any[]> => safeInvoke("get_invoice_items", { invoiceId: invoice_id }, () => mockStore.getInvoiceItems(invoice_id)),
+    getNextNumber: (): Promise<string> => safeInvoke("get_next_invoice_number", undefined, () => mockStore.getNextInvoiceNumber()),
+    create: (data: CreateInvoiceData): Promise<Invoice> => safeInvoke("create_invoice", { data }, () => mockStore.createInvoice(data)),
+    update: (id: string, data: CreateInvoiceData): Promise<Invoice> => safeInvoke("update_invoice", { id, data }, () => mockStore.updateInvoice(id, data)),
+    updateStatus: (id: string, status: string) => safeInvoke("update_invoice_status", { id, status }, () => mockStore.updateInvoiceStatus(id, status)),
     updateHeader: (id: string, invoiceNumber: string, customTitle: string | null) =>
-      invoke("update_invoice_header", { id, invoiceNumber, customTitle }),
-    delete: (id: string) => invoke("delete_invoice", { id }),
-    convertProforma: (id: string): Promise<Invoice> => invoke("convert_to_real_invoice", { id }),
+      safeInvoke("update_invoice_header", { id, invoiceNumber, customTitle }, () => {}),
+    delete: (id: string) => safeInvoke("delete_invoice", { id }, () => mockStore.deleteInvoice(id)),
+    convertProforma: (id: string): Promise<Invoice> => safeInvoke("convert_to_real_invoice", { id }, () => mockStore.getInvoice(id)!),
   },
 
   // Payments
   payments: {
-    getAll: (invoice_id?: string): Promise<Payment[]> => invoke("get_payments", { invoice_id }),
-    create: (data: CreatePaymentData): Promise<Payment> => invoke("create_payment", { data }),
-    update: (id: string, data: CreatePaymentData): Promise<Payment> => invoke("update_payment", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_payment", { id }),
+    getAll: (invoice_id?: string): Promise<Payment[]> => safeInvoke("get_payments", { invoice_id }, () => mockStore.getPayments(invoice_id)),
+    create: (data: CreatePaymentData): Promise<Payment> => safeInvoke("create_payment", { data }, () => mockStore.createPayment(data)),
+    update: (id: string, data: CreatePaymentData): Promise<Payment> => safeInvoke("update_payment", { id, data }, () => mockStore.createPayment(data)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_payment", { id }, () => {}),
   },
 
   // Orders
   orders: {
-    getAll: (): Promise<Order[]> => invoke("get_orders"),
-    getById: (id: string): Promise<Order | null> => invoke("get_order", { id }),
-    getItems: (order_id: string): Promise<any[]> => invoke("get_order_items", { orderId: order_id }),
-    create: (data: CreateOrderData): Promise<Order> => invoke("create_order", { data }),
-    update: (id: string, data: CreateOrderData): Promise<Order> => invoke("update_order", { id, data }),
-    updateStatus: (id: string, status: string): Promise<Order> => invoke("update_order_status", { id, status }),
-    delete: (id: string): Promise<void> => invoke("delete_order", { id }),
+    getAll: (): Promise<Order[]> => safeInvoke("get_orders", undefined, () => mockStore.getOrders()),
+    getById: (id: string): Promise<Order | null> => safeInvoke("get_order", { id }, () => mockStore.getOrder(id)),
+    getItems: (order_id: string): Promise<any[]> => safeInvoke("get_order_items", { orderId: order_id }, () => []),
+    create: (data: CreateOrderData): Promise<Order> => safeInvoke("create_order", { data }, () => mockStore.createOrder(data)),
+    update: (id: string, data: CreateOrderData): Promise<Order> => safeInvoke("update_order", { id, data }, () => mockStore.updateOrder(id, data)),
+    updateStatus: (id: string, status: string): Promise<Order> => safeInvoke("update_order_status", { id, status }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_order", { id }, () => {}),
   },
 
   // Delivery Notes
   deliveryNotes: {
-    getAll: (client_id?: string, is_invoiced?: boolean): Promise<DeliveryNote[]> => invoke("get_delivery_notes", { client_id, is_invoiced }),
-    getById: (id: string): Promise<DeliveryNote | null> => invoke("get_delivery_note", { id }),
-    getItems: (deliveryNoteId: string): Promise<any[]> => invoke("get_delivery_note_items", { deliveryNoteId }),
-    create: (data: CreateDeliveryNoteData): Promise<DeliveryNote> => invoke("create_delivery_note", { data }),
-    update: (id: string, data: CreateDeliveryNoteData): Promise<DeliveryNote> => invoke("update_delivery_note", { id, data }),
+    getAll: (client_id?: string, is_invoiced?: boolean): Promise<DeliveryNote[]> => safeInvoke("get_delivery_notes", { client_id, is_invoiced }, () => mockStore.getDeliveryNotes(client_id)),
+    getById: (id: string): Promise<DeliveryNote | null> => safeInvoke("get_delivery_note", { id }, () => mockStore.getDeliveryNote(id)),
+    getItems: (deliveryNoteId: string): Promise<any[]> => safeInvoke("get_delivery_note_items", { deliveryNoteId }, () => []),
+    create: (data: CreateDeliveryNoteData): Promise<DeliveryNote> => safeInvoke("create_delivery_note", { data }, () => mockStore.createDeliveryNote(data)),
+    update: (id: string, data: CreateDeliveryNoteData): Promise<DeliveryNote> => safeInvoke("update_delivery_note", { id, data }, () => mockStore.updateDeliveryNote(id, data)),
   },
 
   // Expenses
   expenses: {
-    getAll: (month_period?: string): Promise<Expense[]> => invoke("get_expenses", { month_period }),
-    create: (data: CreateExpenseData): Promise<Expense> => invoke("create_expense", { data }),
-    delete: (id: string): Promise<void> => invoke("delete_expense", { id }),
+    getAll: (month_period?: string): Promise<Expense[]> => safeInvoke("get_expenses", { month_period }, () => mockStore.getExpenses(month_period)),
+    create: (data: CreateExpenseData): Promise<Expense> => safeInvoke("create_expense", { data }, () => mockStore.createExpense(data)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_expense", { id }, () => mockStore.deleteExpense(id)),
   },
 
   // Dashboard
   dashboard: {
-    getStats: (year?: number, months?: string[]): Promise<DashboardStats> => invoke("get_dashboard_stats", { year, months }),
-    getClientProductCumulatives: (year?: number, months?: string[]): Promise<any[]> => invoke("get_client_product_cumulatives", { year, months }),
-    getClientCumulatives: (year?: number, months?: string[]): Promise<ClientCumulativeRecord[]> => invoke("get_client_cumulatives", { year, months }),
+    getStats: (year?: number, months?: string[]): Promise<DashboardStats> => safeInvoke("get_dashboard_stats", { year, months }, () => mockStore.getDashboardStats(year, months)),
+    getClientProductCumulatives: (year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_client_product_cumulatives", { year, months }, () => mockStore.getClientProductCumulatives(year, months)),
+    getClientCumulatives: (year?: number, months?: string[]): Promise<ClientCumulativeRecord[]> => safeInvoke("get_client_cumulatives", { year, months }, () => mockStore.getClientCumulatives(year, months)),
   },
 
   // Production Logs
   production: {
-    getAll: (month?: number, year?: number): Promise<ProductionLog[]> => invoke("get_production_logs", { month, year }),
-    create: (data: CreateProductionLogData): Promise<ProductionLog> => invoke("create_production_log", { data }),
-    update: (id: string, data: CreateProductionLogData): Promise<ProductionLog> => invoke("update_production_log", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_production_log", { id }),
+    getAll: (month?: number, year?: number): Promise<ProductionLog[]> => safeInvoke("get_production_logs", { month, year }, () => []),
+    create: (data: CreateProductionLogData): Promise<ProductionLog> => safeInvoke("create_production_log", { data }, () => ({} as any)),
+    update: (id: string, data: CreateProductionLogData): Promise<ProductionLog> => safeInvoke("update_production_log", { id, data }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_production_log", { id }, () => {}),
   },
 
   // Employees
   employees: {
-    getAll: (): Promise<Employee[]> => invoke("get_employees"),
-    create: (data: CreateEmployeeData): Promise<Employee> => invoke("create_employee", { data }),
-    update: (id: string, data: CreateEmployeeData): Promise<Employee> => invoke("update_employee", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_employee", { id }),
+    getAll: (): Promise<Employee[]> => safeInvoke("get_employees", undefined, () => mockStore.getEmployees()),
+    create: (data: CreateEmployeeData): Promise<Employee> => safeInvoke("create_employee", { data }, () => mockStore.createEmployee(data)),
+    update: (id: string, data: CreateEmployeeData): Promise<Employee> => safeInvoke("update_employee", { id, data }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_employee", { id }, () => {}),
   },
 
   // Projects
   projects: {
-    getAll: (): Promise<Project[]> => invoke("get_projects"),
-    create: (data: CreateProjectData): Promise<Project> => invoke("create_project", { data }),
-    update: (id: string, data: CreateProjectData): Promise<Project> => invoke("update_project", { id, data }),
-    delete: (id: string): Promise<void> => invoke("delete_project", { id }),
+    getAll: (): Promise<Project[]> => safeInvoke("get_projects", undefined, () => []),
+    create: (data: CreateProjectData): Promise<Project> => safeInvoke("create_project", { data }, () => ({} as any)),
+    update: (id: string, data: CreateProjectData): Promise<Project> => safeInvoke("update_project", { id, data }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_project", { id }, () => {}),
   },
 
   // Scores
   scores: {
-    getByPeriod: (month: string, year: string): Promise<EmployeeScore[]> => invoke("get_employee_scores", { month, year }),
-    upsert: (data: CreateScoreData): Promise<EmployeeScore> => invoke("upsert_employee_score", { data }),
-    delete: (id: string): Promise<void> => invoke("delete_employee_score", { id }),
+    getByPeriod: (month: string, year: string): Promise<EmployeeScore[]> => safeInvoke("get_employee_scores", { month, year }, () => []),
+    upsert: (data: CreateScoreData): Promise<EmployeeScore> => safeInvoke("upsert_employee_score", { data }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_employee_score", { id }, () => {}),
+  },
+
+  // Settings
+  settings: {
+    get: (): Promise<Record<string, string>> => safeInvoke("get_settings", undefined, () => mockStore.getSettings()),
+    update: (key: string, value: string): Promise<void> => safeInvoke("update_setting", { key, value }, () => mockStore.updateSetting(key, value)),
+    updateAll: (settings: Record<string, string>): Promise<void> => safeInvoke("update_settings", { settings }, () => mockStore.updateSettings(settings)),
   },
 };
 

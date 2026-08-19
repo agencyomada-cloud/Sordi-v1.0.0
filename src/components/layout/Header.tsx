@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { Bell, User, Calendar } from "lucide-react";
+import { RiUserLine, RiCalendarLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
@@ -31,27 +32,24 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
         className="h-16 bg-transparent flex items-center justify-between px-8 pl-20 lg:pl-8"
       >
         {/* Date pill */}
-        <div className="hidden sm:flex items-center gap-2 bg-card rounded-full px-4 py-2 shadow-card">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
+        <div className="hidden sm:flex items-center gap-2 bg-card rounded-[6px] px-4 py-2 shadow-card border border-border/30 hover:border-border/60 transition-all duration-200 group cursor-default">
+          <RiCalendarLine className="w-4 h-4 text-muted-foreground transition-transform duration-200 group-hover:scale-110 group-hover:text-primary" />
           <span className="text-sm font-medium">
             {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Notification button */}
-          <button className="w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all">
-            <Bell className="w-4 h-4 text-muted-foreground" />
-          </button>
-          
+          <NotificationBell />
+
           {/* User dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-10 h-10 rounded-full bg-foreground flex items-center justify-center shadow-card hover:opacity-90 transition-all">
-                <User className="w-4 h-4 text-background" />
+              <button className="w-10 h-10 rounded-[6px] bg-primary flex items-center justify-center shadow-card hover:opacity-95 hover:shadow-elevated transition-all duration-200 active:scale-[0.96] group">
+                <RiUserLine className="w-4 h-4 text-primary-foreground transition-transform duration-200 group-hover:scale-110" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2">
+            <DropdownMenuContent align="end" className="w-56 rounded-[6px] p-2 animate-in fade-in-0 zoom-in-95 duration-200 shadow-elevated">
               {user && (
                 <>
                   <div className="px-3 py-2">
@@ -62,7 +60,7 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
               )}
               <DropdownMenuItem 
                 onClick={handleLogout} 
-                className="text-destructive rounded-xl cursor-pointer"
+                className="text-destructive rounded-[6px] cursor-pointer"
               >
                 Déconnexion
               </DropdownMenuItem>
