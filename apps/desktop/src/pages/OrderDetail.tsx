@@ -15,6 +15,7 @@ import { generateOrderPDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { OrderEditablePreview } from "@/components/order/OrderEditablePreview";
 
 const statusStyles: Record<string, string> = {
@@ -37,6 +38,7 @@ export default function OrderDetailPage() {
   const { data: order, isLoading, error } = useOrder(id);
   const { data: orderItems } = useOrderItems(id);
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleDownloadPDF = async () => {
@@ -50,7 +52,7 @@ export default function OrderDetailPage() {
         order_items: orderItems || [],
       };
 
-      await generateOrderPDF(orderData, settings);
+      await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
       toast.success("PDF téléchargé");
     } catch (error) {
@@ -65,7 +67,7 @@ export default function OrderDetailPage() {
     if (!orderData) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateOrderPDF(orderData, settings, false);
+      const pdfBase64 = await generateOrderPDF(orderData, settings, false, undefined, licenseStatus?.state === "active");
       const { invoke } = await import("@tauri-apps/api/core");
       const fileName = `Impression-${ orderData.order_number || "bon_commande" }.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });

@@ -15,6 +15,7 @@ import { useDeliveryNotes } from "@/hooks/useDeliveryNotes";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
 
 export default function DeliveriesPage() {
@@ -29,6 +30,7 @@ export default function DeliveriesPage() {
     undefined
   );
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
 
@@ -71,7 +73,7 @@ export default function DeliveriesPage() {
 
     try {
       setDownloadingId(id);
-      await generateDeliveryNotePDF(note as any, settings);
+      await generateDeliveryNotePDF(note as any, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
     } catch (error) {
       console.error("Error generating PDF:", error);

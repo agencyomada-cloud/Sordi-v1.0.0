@@ -1,4 +1,4 @@
-# Mobino Accounting
+# Sordi
 
 Système de gestion financière et commerciale pour **Omada Invoicing**.
 
@@ -19,4 +19,4 @@ Système de gestion financière et commerciale pour **Omada Invoicing**.
 - Shadcn UI
 - Tauri (Desktop App)
 # OmadaInvoicing
-# mobinov3
+# sordi

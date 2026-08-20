@@ -1,6 +1,9 @@
 mod database;
 mod commands;
+mod license;
 mod pdf_service;
+#[cfg(test)]
+mod seed_test_data;
 
 use database::init_database;
 use std::sync::Mutex;
@@ -23,9 +26,10 @@ pub fn run() {
       std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
       let db_path = app_dir.join("database.db");
       let db = init_database(db_path.to_str().unwrap()).expect("failed to initialize database");
-      
+
       app.manage(Mutex::new(db));
-      
+      license::init(&app_dir);
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -44,6 +48,7 @@ pub fn run() {
       commands::get_product_sales_stats,
       commands::get_client_product_cumulatives,
       commands::get_client_cumulatives,
+      commands::get_client_overview_stats,
       commands::get_dashboard_stats,
       // Invoices
       commands::get_invoices,
@@ -106,6 +111,7 @@ pub fn run() {
       commands::delete_production_log,
       // History
       commands::get_activity_logs,
+      commands::clear_activity_logs,
       // Employees
       commands::get_employees,
       commands::create_employee,
@@ -128,6 +134,12 @@ pub fn run() {
       commands::has_password_set,
       commands::check_password,
       commands::set_password,
+      // Licensing
+      commands::get_license_status,
+      commands::activate_license,
+      commands::verify_license_background,
+      // Global search
+      commands::search_global,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

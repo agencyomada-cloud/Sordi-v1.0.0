@@ -106,6 +106,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     footerItemStrong: { fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#374151' },
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
+    sordiWatermark: { position: 'absolute', left: 40, right: 40, bottom: 6, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
     qrImage: { width: 34, height: 34, marginTop: 4, borderRadius: 4 },
   });
 
@@ -275,6 +276,9 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             </View>
           </View>
         </View>
+        {settings?.license_active === false && (
+          <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.0 — www.sordi.app</Text>
+        )}
 
       </Page>
     </Document>

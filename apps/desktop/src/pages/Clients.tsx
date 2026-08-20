@@ -13,8 +13,10 @@ import {
 import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { useClients, useCreateClient, useDeleteClient, type CreateClientData } from "@/hooks/useClients";
+import { useClients, useCreateClient, useDeleteClient, useClientOverviewStatsMap, type CreateClientData } from "@/hooks/useClients";
 import { exportToCSV, parseCSV, validateClientImport } from "@/lib/csvUtils";
+import { computeClientStatus } from "@/lib/clientOverview";
+import { ClientStatusBadge } from "@/components/ClientStatusBadge";
 import { toast } from "sonner";
 
 export default function ClientsPage() {
@@ -26,6 +28,7 @@ export default function ClientsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clients, isLoading, refetch } = useClients();
+  const { data: overviewStatsByClientId } = useClientOverviewStatsMap();
   const createClient = useCreateClient();
   const deleteClient = useDeleteClient();
 
@@ -274,15 +277,16 @@ export default function ClientsPage() {
                   <TableHead>Nom</TableHead>
                   <TableHead className="hidden md:table-cell">Téléphone</TableHead>
                   <TableHead className="hidden lg:table-cell">Wilaya</TableHead>
+                  <TableHead>Statut</TableHead>
                   <TableHead className="w-14"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableLoading columns={5} rows={5} />
+                  <TableLoading columns={6} rows={5} />
                 ) : filteredClients?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5}>
+                    <TableCell colSpan={6}>
                       <EmptyState
                         type="clients"
                         title="Aucun client"
@@ -308,6 +312,12 @@ export default function ClientsPage() {
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell className="text-muted-foreground hidden md:table-cell">{client.phone || "-"}</TableCell>
                       <TableCell className="text-muted-foreground hidden lg:table-cell">{client.wilaya || "-"}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const stats = overviewStatsByClientId.get(client.id);
+                          return stats ? <ClientStatusBadge status={computeClientStatus(stats)} /> : null;
+                        })()}
+                      </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

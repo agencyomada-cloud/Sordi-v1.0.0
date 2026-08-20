@@ -1,7 +1,8 @@
-import { Toaster, SonnerToaster as Sonner, TooltipProvider } from "@sordi/ui";
+import { Toaster, TooltipProvider } from "@sordi/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { LicenseBanner } from "@/components/LicenseBanner";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Clients from "./pages/Clients";
@@ -29,6 +30,7 @@ import EditOrder from "./pages/EditOrder";
 import OrderDetail from "./pages/OrderDetail";
 import VerificationTest from "./pages/VerificationTest";
 import SettingsPage from "./pages/Settings";
+import UpgradePage from "./pages/Upgrade";
 import Management from "./pages/Management";
 import NotFound from "./pages/NotFound";
 
@@ -38,7 +40,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      <LicenseBanner />
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<Auth />} />
@@ -70,6 +72,7 @@ const App = () => (
 
           <Route path="/test-verification" element={<ProtectedRoute><VerificationTest /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
           <Route path="/management" element={<ProtectedRoute><Management /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

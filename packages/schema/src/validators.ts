@@ -79,3 +79,25 @@ export const productInputSchema = z.object({
   timbreExempt: z.boolean().nullable().optional(),
   displayOrder: z.number().int().optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Licensing (apps/api/src/routes/licenses.ts)
+// ---------------------------------------------------------------------------
+
+export const licenseActivateSchema = z.object({
+  licenseKey: z.string().min(1),
+  deviceFingerprint: z.string().min(1),
+});
+
+export const licenseVerifySchema = z.object({
+  signedToken: z.string().min(1),
+});
+
+// Internal admin-only endpoint — you call this by hand per sale, so it's
+// deliberately not exposed to any UI. expiresAt is a plain ISO date string
+// on the wire; maxDevices defaults to 2 to match the schema default.
+export const licenseCreateSchema = z.object({
+  organizationName: z.string().min(1),
+  expiresAt: z.string().datetime(),
+  maxDevices: z.number().int().positive().optional(),
+});

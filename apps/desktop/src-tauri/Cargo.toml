@@ -1,6 +1,6 @@
 [package]
 name = "sordi"
-version = "4.0.0"
+version = "1.0.0"
 description = "Sordi"
 authors = ["you"]
 license = ""
@@ -28,6 +28,15 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 headless_chrome = { version = "1.0", features = ["fetch"] }
 base64 = "0.21"
+# License token verification (Ed25519/EdDSA) — a different, unrelated crate
+# from the Node "jsonwebtoken" npm package that signs these on the server
+# side, but both produce/consume the same standard JWT format.
+jsonwebtoken = "9"
+sha2 = "0.10"
+# Only used for the two license HTTP calls (activate/verify) — rustls-tls
+# avoids an OpenSSL system dependency for a desktop app that gets built on
+# multiple platforms.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 # "test" feature gates the tauri::test module (mock_builder, MockRuntime,

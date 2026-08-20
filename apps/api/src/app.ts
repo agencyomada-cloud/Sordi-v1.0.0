@@ -5,6 +5,7 @@ import { env } from "./env.js";
 import { authRouter } from "./routes/auth.js";
 import { clientsRouter } from "./routes/clients.js";
 import { productsRouter } from "./routes/products.js";
+import { licensesRouter } from "./routes/licenses.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 export function createApp() {
@@ -24,6 +25,7 @@ export function createApp() {
   app.use("/auth", authRouter);
   app.use("/clients", clientsRouter);
   app.use("/products", productsRouter);
+  app.use("/licenses", licensesRouter);
 
   app.use(errorHandler);
 

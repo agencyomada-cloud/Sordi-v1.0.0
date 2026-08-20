@@ -9,7 +9,8 @@ import {
     RiRefreshLine as RefreshCw,
     RiFilter3Line as Filter,
     RiCloseLine as X,
-    RiDownloadLine as Download
+    RiDownloadLine as Download,
+    RiDeleteBinLine as Trash2,
 } from "@remixicon/react";
 import { getActionColor, getActionLabel, getEntityConfig } from "@/lib/activityLog";
 import { toast } from "sonner";
@@ -29,6 +30,14 @@ import {
     TableHead,
     TableHeader,
     TableRow,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "@sordi/ui";
 
 import { Sidebar } from "../components/layout/Sidebar";
@@ -38,6 +47,8 @@ export default function History() {
     const [limit, setLimit] = useState(500); // Increased limit as we do client-side filtering
     const [entityType, setEntityType] = useState<string>("all");
     const [action, setAction] = useState<string>("all");
+    const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
 
     // Date Filters matching Dashboard
     const currentYear = new Date().getFullYear();
@@ -117,6 +128,24 @@ export default function History() {
         toast.success("Historique exporté avec succès");
     };
 
+    const handleClearHistory = async () => {
+        setIsClearing(true);
+        try {
+            await db.history.clear();
+            toast.success("Historique effacé avec succès");
+            setIsClearDialogOpen(false);
+            refetch();
+        } catch (error: unknown) {
+            // Tauri rejects a Result::Err(String) command with the raw
+            // string (e.g. the read-only-license message), not an Error
+            // instance — surface it as-is rather than a generic fallback.
+            const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+            toast.error(message || "Échec de l'effacement de l'historique");
+        } finally {
+            setIsClearing(false);
+        }
+    };
+
     return (
         <div className="flex min-h-screen bg-background font-outfit">
             <Sidebar />
@@ -133,6 +162,16 @@ export default function History() {
                             <Button variant="outline" size="sm" onClick={handleExport} className="h-9 gap-2">
                                 <Download className="w-4 h-4" />
                                 Exporter
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsClearDialogOpen(true)}
+                                disabled={!logs || logs.length === 0}
+                                className="h-9 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Effacer l'historique
                             </Button>
                             <Button size="sm" onClick={() => { refetch(); toast.success("Historique actualisé"); }} className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm border-0 font-medium">
                                 <RefreshCw className="w-4 h-4" />
@@ -283,6 +322,31 @@ export default function History() {
                     </div>
                 </main>
             </div>
+
+            <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Effacer tout l'historique ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Cette action supprimera définitivement les {logs?.length ?? 0} entrée{(logs?.length ?? 0) > 1 ? "s" : ""} d'historique enregistrée{(logs?.length ?? 0) > 1 ? "s" : ""}.
+                            Cette action est irréversible et n'affecte pas vos clients, factures ou autres données — uniquement le journal d'activité.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isClearing}>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleClearHistory();
+                            }}
+                            disabled={isClearing}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isClearing ? "Effacement…" : "Effacer définitivement"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

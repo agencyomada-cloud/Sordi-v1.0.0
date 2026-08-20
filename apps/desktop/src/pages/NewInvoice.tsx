@@ -17,6 +17,7 @@ import { generateInvoicePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { useParams } from "react-router-dom";
 import { useClearClientDraftProducts } from "@/hooks/useClientDraftProducts";
 import { useAddClientAdvance } from "@/hooks/useClientAdvances";
@@ -39,6 +40,7 @@ export default function NewInvoicePage() {
   const { data: clients } = useClients();
   const { data: products } = useProducts();
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
   const clearDrafts = useClearClientDraftProducts();
@@ -546,7 +548,7 @@ export default function NewInvoicePage() {
                   }
                   try {
                     setIsDownloading(true);
-                    await generateInvoicePDF(draftInvoice, settings);
+                    await generateInvoicePDF(draftInvoice, settings, true, undefined, licenseStatus?.state === "active");
                     toast.success("PDF téléchargé avec succès");
                   } catch (error) {
                     toast.error("Erreur lors de la génération du PDF");

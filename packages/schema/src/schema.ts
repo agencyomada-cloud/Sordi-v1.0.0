@@ -400,3 +400,43 @@ export const activityLogs = pgTable("activity_logs", {
 }, (t) => ({
   orgIdx: index("activity_logs_org_idx").on(t.orgId),
 }));
+
+// ---------------------------------------------------------------------------
+// Desktop app licensing — deliberately NOT orgId-scoped like the tables
+// above. `organizations`/`users`/`memberships` are the web SaaS login
+// concept; a license customer buys the desktop app and may never have a
+// SaaS account at all. `organizationName` is a plain display string, same
+// spirit as this app's `client.code` field, not a foreign key.
+// ---------------------------------------------------------------------------
+
+export const licenseStatusEnum = pgEnum("license_status", ["active", "expired", "revoked"]);
+
+export const licenses = pgTable("licenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Human-readable, shown to the customer — e.g. "SORDI-A1B2C3".
+  clientReferenceId: text("client_reference_id").notNull(),
+  // The secret the customer types into the activation screen.
+  licenseKey: text("license_key").notNull(),
+  organizationName: text("organization_name").notNull(),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  maxDevices: integer("max_devices").notNull().default(2),
+  status: licenseStatusEnum("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  clientReferenceIdUnique: uniqueIndex("licenses_client_reference_id_idx").on(t.clientReferenceId),
+  licenseKeyUnique: uniqueIndex("licenses_license_key_idx").on(t.licenseKey),
+}));
+
+export const licenseActivations = pgTable("license_activations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  licenseId: uuid("license_id").notNull().references(() => licenses.id, { onDelete: "cascade" }),
+  // SHA-256 of a stable OS-level hardware identifier — never the raw ID.
+  // See apps/desktop's license.rs for exactly what's hashed per platform.
+  deviceFingerprint: text("device_fingerprint").notNull(),
+  activatedAt: timestamp("activated_at", { withTimezone: true }).notNull().defaultNow(),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  licenseDeviceUnique: uniqueIndex("license_activations_license_device_idx").on(t.licenseId, t.deviceFingerprint),
+  licenseIdx: index("license_activations_license_idx").on(t.licenseId),
+}));

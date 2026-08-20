@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { clientSchema } from "@/lib/validations";
 import { logError } from "@/lib/errorLogger";
-import { db, type Client, type CreateClientData } from "@/lib/database";
+import { db, type Client, type CreateClientData, type ClientOverviewStats } from "@/lib/database";
 export type { CreateClientData };
 
 export function useClients() {
@@ -23,6 +23,24 @@ export function useClient(id: string | undefined) {
     },
     enabled: !!id,
   });
+}
+
+// id omitted -> stats for every client in one call (clients list status badge).
+// id set -> just that client's stats (client detail "Aperçu" section).
+export function useClientOverviewStats(id?: string) {
+  return useQuery({
+    queryKey: ["clients", "overview-stats", id ?? "all"],
+    queryFn: async () => {
+      return await db.clients.getOverviewStats(id);
+    },
+  });
+}
+
+export function useClientOverviewStatsMap() {
+  const { data, ...rest } = useClientOverviewStats();
+  const byClientId = new Map<string, ClientOverviewStats>();
+  data?.forEach((stat) => byClientId.set(stat.client_id, stat));
+  return { data: byClientId, ...rest };
 }
 
 export function useCreateClient() {

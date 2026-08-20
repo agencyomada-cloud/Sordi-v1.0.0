@@ -50,20 +50,22 @@ class NotificationAudio {
 
       const now = ctx.currentTime;
 
+      // Single soft tone per type, well under 300ms and quiet by default —
+      // a 2-tone rising chime (the old success sound) reads as more
+      // "alert" than a gentle pop, even at low volume. Gain roughly halved
+      // from the previous version across the board.
       if (type === "success") {
-        // Modern 2-tone bright rising chime (E5 -> A5)
-        this.playTone(ctx, 659.25, now, 0.08, 0.15, "sine");
-        this.playTone(ctx, 880.00, now + 0.07, 0.18, 0.20, "sine");
+        // Soft pop (A5)
+        this.playTone(ctx, 880.0, now, 0.09, 0.08, "sine");
       } else if (type === "error") {
-        // Soft double low tone (D4 -> Bb3)
-        this.playTone(ctx, 293.66, now, 0.09, 0.18, "triangle");
-        this.playTone(ctx, 233.08, now + 0.08, 0.16, 0.22, "triangle");
+        // Low, brief — distinguishable without being sharp (D4)
+        this.playTone(ctx, 293.66, now, 0.11, 0.09, "triangle");
       } else if (type === "warning") {
-        // Gentle single amber tone (F#5)
-        this.playTone(ctx, 739.99, now, 0.14, 0.18, "sine");
+        // Gentle mid tone (F#5)
+        this.playTone(ctx, 739.99, now, 0.09, 0.07, "sine");
       } else {
-        // Crisp subtle pop chime (G5)
-        this.playTone(ctx, 783.99, now, 0.12, 0.16, "sine");
+        // Barely-there default pop (G5)
+        this.playTone(ctx, 783.99, now, 0.07, 0.06, "sine");
       }
     } catch {
       // Audio playback fails silently if browser blocks autoplay before user gesture

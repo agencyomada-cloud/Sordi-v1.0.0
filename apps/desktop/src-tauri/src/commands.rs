@@ -26,6 +26,99 @@ pub fn set_password(db: State<'_, Mutex<Connection>>, new_password: String) -> R
     crate::database::set_password(&conn, &new_password).map_err(|e| e.to_string())
 }
 
+// ============= LICENSING =============
+// See license.rs for the full design. These three commands never call
+// require_active_license() themselves — that would make it impossible to
+// ever activate or check status again once read-only.
+
+#[tauri::command]
+pub fn get_license_status() -> crate::license::LicenseStatus {
+    crate::license::current_status()
+}
+
+#[tauri::command]
+pub async fn activate_license(license_key: String) -> Result<crate::license::LicenseStatus, String> {
+    crate::license::activate(license_key).await
+}
+
+#[tauri::command]
+pub async fn verify_license_background() -> crate::license::LicenseStatus {
+    crate::license::verify_background().await
+}
+
+// ============= GLOBAL SEARCH =============
+// Phase 1: clients + invoices only (live, bounded queries) — Produits/
+// Commandes deferred to a later phase. Read-only, never license-gated.
+// One command, one IPC round trip, per the reviewed plan: LIKE '%query%'
+// against a local SQLite connection already open in-process is ~1-3ms even
+// at 5,000-20,000 rows (measured against a synthetic dataset at that scale
+// before implementing), so this needs no caching/indexing to feel instant —
+// LIMIT 5 per entity keeps results short enough for a command palette.
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClientSearchHit {
+    pub id: String,
+    pub name: String,
+    pub code: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct InvoiceSearchHit {
+    pub id: String,
+    pub invoice_number: String,
+    pub client_name: Option<String>,
+    pub total_ttc: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GlobalSearchResults {
+    pub clients: Vec<ClientSearchHit>,
+    pub invoices: Vec<InvoiceSearchHit>,
+}
+
+#[tauri::command]
+pub fn search_global(db: State<'_, Mutex<Connection>>, query: String) -> Result<GlobalSearchResults, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(GlobalSearchResults { clients: Vec::new(), invoices: Vec::new() });
+    }
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let pattern = format!("%{}%", trimmed);
+
+    let mut client_stmt = conn
+        .prepare("SELECT id, name, code FROM clients WHERE name LIKE ?1 OR code LIKE ?1 ORDER BY name LIMIT 5")
+        .map_err(|e| e.to_string())?;
+    let clients = client_stmt
+        .query_map(params![pattern], |row| {
+            Ok(ClientSearchHit { id: row.get(0)?, name: row.get(1)?, code: row.get(2)? })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut invoice_stmt = conn
+        .prepare(
+            "SELECT i.id, i.invoice_number, c.name, i.total_ttc \
+             FROM invoices i LEFT JOIN clients c ON c.id = i.client_id \
+             WHERE i.invoice_number LIKE ?1 ORDER BY i.invoice_date DESC LIMIT 5",
+        )
+        .map_err(|e| e.to_string())?;
+    let invoices = invoice_stmt
+        .query_map(params![pattern], |row| {
+            Ok(InvoiceSearchHit {
+                id: row.get(0)?,
+                invoice_number: row.get(1)?,
+                client_name: row.get(2)?,
+                total_ttc: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(GlobalSearchResults { clients, invoices })
+}
+
 // ============= HISTORY / LOGS =============
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -116,6 +209,14 @@ pub fn get_activity_logs(
         result.push(log.map_err(|e| e.to_string())?);
     }
     Ok(result)
+}
+
+#[tauri::command]
+pub fn clear_activity_logs(db: State<'_, Mutex<Connection>>) -> Result<(), String> {
+    crate::license::require_active_license()?;
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM activity_logs", []).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ============= CLIENTS =============
@@ -258,6 +359,8 @@ pub fn get_client(db: State<'_, Mutex<Connection>>, id: String) -> Result<Option
 
 #[tauri::command]
 pub fn create_client(db: State<'_, Mutex<Connection>>, data: CreateClientData) -> Result<Client, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -301,6 +404,8 @@ pub fn create_client(db: State<'_, Mutex<Connection>>, data: CreateClientData) -
 
 #[tauri::command]
 pub fn update_client(db: State<'_, Mutex<Connection>>, id: String, data: CreateClientData) -> Result<Client, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -340,6 +445,8 @@ pub fn update_client(db: State<'_, Mutex<Connection>>, id: String, data: CreateC
 
 #[tauri::command]
 pub fn delete_client(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM clients WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "CLIENT", Some(&id), "Client supprimé");
@@ -406,6 +513,8 @@ pub struct CreateProductData {
 
 #[tauri::command]
 pub fn create_product(db: State<'_, Mutex<Connection>>, data: CreateProductData) -> Result<Product, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -452,6 +561,8 @@ pub fn create_product(db: State<'_, Mutex<Connection>>, data: CreateProductData)
 
 #[tauri::command]
 pub fn update_product_price(db: State<'_, Mutex<Connection>>, id: String, unit_price: f64) -> Result<Product, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -481,6 +592,8 @@ pub fn update_product_price(db: State<'_, Mutex<Connection>>, id: String, unit_p
 
 #[tauri::command]
 pub fn update_product(db: State<'_, Mutex<Connection>>, id: String, data: CreateProductData) -> Result<Product, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -523,6 +636,8 @@ pub fn update_product(db: State<'_, Mutex<Connection>>, id: String, data: Create
 
 #[tauri::command]
 pub fn delete_product(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     // Get product name for logging
@@ -912,6 +1027,8 @@ pub fn get_invoice_items(
 
 #[tauri::command]
 pub fn create_invoice(db: State<'_, Mutex<Connection>>, data: CreateInvoiceData) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let invoice_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -995,6 +1112,8 @@ pub fn create_invoice(db: State<'_, Mutex<Connection>>, data: CreateInvoiceData)
 
 #[tauri::command]
 pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: CreateInvoiceData) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -1074,6 +1193,8 @@ pub fn get_next_invoice_number(db: State<'_, Mutex<Connection>>) -> Result<Strin
 
 #[tauri::command]
 pub fn update_invoice_status(db: State<'_, Mutex<Connection>>, id: String, status: String) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     if status == "paid" {
@@ -1094,6 +1215,8 @@ pub fn update_invoice_status(db: State<'_, Mutex<Connection>>, id: String, statu
 
 #[tauri::command]
 pub fn delete_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM invoices WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "INVOICE", Some(&id), "Facture supprimée");
@@ -1102,6 +1225,8 @@ pub fn delete_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<()
 
 #[tauri::command]
 pub fn convert_to_real_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     // 1. Get next real invoice number
@@ -1194,6 +1319,8 @@ pub fn get_payments(db: State<'_, Mutex<Connection>>, invoice_id: Option<String>
 
 #[tauri::command]
 pub fn create_payment(db: State<'_, Mutex<Connection>>, data: CreatePaymentData) -> Result<Payment, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -1401,12 +1528,16 @@ pub fn get_order(db: State<'_, Mutex<Connection>>, id: String) -> Result<Option<
 
 #[tauri::command]
 pub fn get_next_order_number(db: State<'_, Mutex<Connection>>) -> Result<String, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     generate_order_number(&conn).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn create_order(db: State<'_, Mutex<Connection>>, data: CreateOrderData) -> Result<Order, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let order_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -1449,6 +1580,8 @@ pub fn create_order(db: State<'_, Mutex<Connection>>, data: CreateOrderData) -> 
 
 #[tauri::command]
 pub fn update_order(db: State<'_, Mutex<Connection>>, id: String, data: CreateOrderData) -> Result<Order, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -1493,6 +1626,8 @@ pub fn update_order(db: State<'_, Mutex<Connection>>, id: String, data: CreateOr
 
 #[tauri::command]
 pub fn update_order_status(db: State<'_, Mutex<Connection>>, id: String, status: String) -> Result<Order, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("UPDATE orders SET status = ?2 WHERE id = ?1", params![id, status]).map_err(|e| e.to_string())?;
     drop(conn);
@@ -1501,6 +1636,8 @@ pub fn update_order_status(db: State<'_, Mutex<Connection>>, id: String, status:
 
 #[tauri::command]
 pub fn delete_order(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM orders WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
@@ -1760,6 +1897,8 @@ pub fn update_invoice_header(
     invoice_number: String, 
     custom_title: Option<String>
 ) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     conn.execute(
@@ -1772,6 +1911,8 @@ pub fn update_invoice_header(
 
 #[tauri::command]
 pub fn create_delivery_note(db: State<'_, Mutex<Connection>>, data: CreateDeliveryNoteData) -> Result<DeliveryNote, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let note_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -1829,6 +1970,8 @@ pub fn create_delivery_note(db: State<'_, Mutex<Connection>>, data: CreateDelive
 
 #[tauri::command]
 pub fn update_delivery_note(db: State<'_, Mutex<Connection>>, id: String, data: CreateDeliveryNoteData) -> Result<DeliveryNote, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -2059,6 +2202,8 @@ pub fn get_expenses(db: State<'_, Mutex<Connection>>, month_period: Option<Strin
 
 #[tauri::command]
 pub fn create_expense(db: State<'_, Mutex<Connection>>, data: CreateExpenseData) -> Result<Expense, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -2086,6 +2231,8 @@ pub fn create_expense(db: State<'_, Mutex<Connection>>, data: CreateExpenseData)
 
 #[tauri::command]
 pub fn delete_expense(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM expenses WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "EXPENSE", Some(&id), "Dépense supprimée");
@@ -2351,6 +2498,8 @@ pub fn get_settings(db: State<'_, Mutex<Connection>>) -> Result<std::collections
 
 #[tauri::command]
 pub fn update_setting(db: State<'_, Mutex<Connection>>, key: String, value: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     conn.execute(
@@ -2364,6 +2513,8 @@ pub fn update_setting(db: State<'_, Mutex<Connection>>, key: String, value: Stri
 
 #[tauri::command]
 pub fn update_settings(db: State<'_, Mutex<Connection>>, settings: std::collections::HashMap<String, String>) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     
@@ -2629,9 +2780,238 @@ pub fn get_client_cumulatives(
     Ok(result)
 }
 
+// ============= CLIENT OVERVIEW (computed, read-only) =============
+//
+// Powers the "Aperçu" section on the client detail page and the status
+// badge on the clients list. Everything here is derived at query time from
+// invoices/payments/clients — nothing is stored. Grouping and the date math
+// (payment-closure delay, purchase-gap) run in Rust rather than a SQL CTE:
+// the crossover logic ("which payment first brought the running total to
+// total_ttc") is easy to get right and step through as a loop, much less so
+// as a window-function query with no way to test it against real data from
+// this environment. client_id: None serves the whole clients list in one
+// round trip (mirrors get_client_cumulatives above); Some(id) serves a
+// single client's detail page.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClientOverviewStats {
+    pub client_id: String,
+    pub total_revenue: f64,
+    pub client_since: String,
+    pub invoice_count: i64,
+    pub last_invoice_date: Option<String>,
+    /// Days between invoice_date and the date the closing payment crossed
+    /// total_ttc, for this client's most recent fully-paid (status='paid')
+    /// invoices, most-recent-first, capped at 10. The UI derives both the
+    /// "last 10" and "last 3" averages it needs from this one list, so both
+    /// stay anchored to the same recency ordering.
+    pub recent_payment_delays_days: Vec<f64>,
+    /// Gaps in days between consecutive invoice dates, most-recent-first,
+    /// derived from up to the last 7 invoice dates (so up to 6 gaps).
+    pub recent_purchase_gaps_days: Vec<f64>,
+    pub payment_terms_days: Option<i64>,
+    pub has_overdue_unpaid: bool,
+}
+
+fn parse_ymd(s: &str) -> Option<chrono::NaiveDate> {
+    let slice = if s.len() >= 10 { &s[0..10] } else { s };
+    chrono::NaiveDate::parse_from_str(slice, "%Y-%m-%d").ok()
+}
+
+#[tauri::command]
+pub fn get_client_overview_stats(
+    db: State<'_, Mutex<Connection>>,
+    client_id: Option<String>,
+) -> Result<Vec<ClientOverviewStats>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let today = chrono::Local::now().date_naive();
+
+    struct ClientRow {
+        id: String,
+        payment_terms_days: Option<i64>,
+        created_at: String,
+    }
+    let mut client_stmt = if client_id.is_some() {
+        conn.prepare("SELECT id, payment_terms_days, created_at FROM clients WHERE id = ?1")
+    } else {
+        conn.prepare("SELECT id, payment_terms_days, created_at FROM clients")
+    }.map_err(|e| e.to_string())?;
+    let map_client_row = |row: &rusqlite::Row| -> rusqlite::Result<ClientRow> {
+        Ok(ClientRow {
+            id: row.get(0)?,
+            payment_terms_days: row.get(1)?,
+            created_at: row.get(2)?,
+        })
+    };
+    let client_rows: Vec<ClientRow> = if let Some(ref id) = client_id {
+        client_stmt.query_map(params![id], map_client_row)
+    } else {
+        client_stmt.query_map([], map_client_row)
+    }.map_err(|e| e.to_string())?
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(|e| e.to_string())?;
+
+    if client_rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    struct InvoiceRow {
+        id: String,
+        client_id: String,
+        invoice_date: String,
+        total_ttc: f64,
+        status: String,
+    }
+    let invoice_sql = "SELECT id, client_id, invoice_date, total_ttc, status FROM invoices \
+        WHERE invoice_type != 'proforma' AND status != 'cancelled'{} \
+        ORDER BY invoice_date DESC, created_at DESC";
+    let mut invoice_stmt = if client_id.is_some() {
+        conn.prepare(&invoice_sql.replace("{}", " AND client_id = ?1"))
+    } else {
+        conn.prepare(&invoice_sql.replace("{}", ""))
+    }.map_err(|e| e.to_string())?;
+    let map_invoice_row = |row: &rusqlite::Row| -> rusqlite::Result<InvoiceRow> {
+        Ok(InvoiceRow {
+            id: row.get(0)?,
+            client_id: row.get(1)?,
+            invoice_date: row.get(2)?,
+            total_ttc: row.get(3)?,
+            status: row.get(4)?,
+        })
+    };
+    let invoice_rows: Vec<InvoiceRow> = if let Some(ref id) = client_id {
+        invoice_stmt.query_map(params![id], map_invoice_row)
+    } else {
+        invoice_stmt.query_map([], map_invoice_row)
+    }.map_err(|e| e.to_string())?
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(|e| e.to_string())?;
+
+    // Fetch all payments once and group in memory — same pattern get_payments(None)
+    // already uses elsewhere; cheap for a local SQLite file, avoids one query per invoice.
+    let mut payment_stmt = conn
+        .prepare("SELECT invoice_id, payment_date, amount FROM payments ORDER BY payment_date ASC, id ASC")
+        .map_err(|e| e.to_string())?;
+    let payment_rows: Vec<(String, String, f64)> = payment_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut payments_by_invoice: std::collections::HashMap<String, Vec<(String, f64)>> =
+        std::collections::HashMap::new();
+    for (inv_id, pay_date, amount) in payment_rows {
+        payments_by_invoice.entry(inv_id).or_default().push((pay_date, amount));
+    }
+
+    let mut invoices_by_client: std::collections::HashMap<String, Vec<&InvoiceRow>> =
+        std::collections::HashMap::new();
+    for inv in &invoice_rows {
+        invoices_by_client.entry(inv.client_id.clone()).or_default().push(inv);
+    }
+
+    let empty_invoices: Vec<&InvoiceRow> = Vec::new();
+    let mut result = Vec::with_capacity(client_rows.len());
+    for client in &client_rows {
+        // Already ordered most-recent-first via the SQL ORDER BY above.
+        let client_invoices = invoices_by_client.get(&client.id).unwrap_or(&empty_invoices);
+
+        let total_revenue: f64 = client_invoices.iter().map(|i| i.total_ttc).sum();
+        let invoice_count = client_invoices.len() as i64;
+        let last_invoice_date = client_invoices.first().map(|i| i.invoice_date.clone());
+
+        let first_invoice_date = client_invoices
+            .iter()
+            .filter_map(|i| parse_ymd(&i.invoice_date))
+            .min();
+        let client_created = parse_ymd(&client.created_at);
+        let client_since = match (first_invoice_date, client_created) {
+            (Some(f), Some(c)) => f.min(c),
+            (Some(f), None) => f,
+            (None, Some(c)) => c,
+            (None, None) => today,
+        }
+        .format("%Y-%m-%d")
+        .to_string();
+
+        // Payment-closure delay for the last 10 fully-paid invoices.
+        let mut recent_payment_delays_days: Vec<f64> = Vec::new();
+        for inv in client_invoices.iter() {
+            if recent_payment_delays_days.len() >= 10 {
+                break;
+            }
+            if inv.status != "paid" {
+                continue;
+            }
+            let Some(inv_date) = parse_ymd(&inv.invoice_date) else { continue };
+            let mut pays = payments_by_invoice.get(&inv.id).cloned().unwrap_or_default();
+            pays.sort_by(|a, b| a.0.cmp(&b.0));
+            let mut running = 0.0;
+            let mut closing_date: Option<chrono::NaiveDate> = None;
+            for (pay_date, amount) in &pays {
+                running += amount;
+                if running >= inv.total_ttc {
+                    closing_date = parse_ymd(pay_date);
+                    break;
+                }
+            }
+            // No payment rows reach total_ttc (e.g. status was force-set to
+            // "paid" without logging payments) — can't compute a real delay,
+            // so this invoice is left out of the average rather than faked.
+            if let Some(close) = closing_date {
+                recent_payment_delays_days.push((close - inv_date).num_days() as f64);
+            }
+        }
+
+        // Purchase-gap: up to the last 7 invoice dates -> up to 6 gaps.
+        let recent_dates: Vec<chrono::NaiveDate> = client_invoices
+            .iter()
+            .filter_map(|i| parse_ymd(&i.invoice_date))
+            .take(7)
+            .collect();
+        let mut recent_purchase_gaps_days: Vec<f64> = Vec::new();
+        for pair in recent_dates.windows(2) {
+            recent_purchase_gaps_days.push((pair[0] - pair[1]).num_days() as f64);
+        }
+
+        // "Overdue" is spec'd as invoice_date + payment_terms_days < today,
+        // not the (independently editable) stored due_date column, so a
+        // manual due_date edit can't silently change this computation.
+        let terms = client.payment_terms_days.unwrap_or(30);
+        // Anything not fully paid counts, not just literal "unpaid"/"partial":
+        // create_invoice defaults new invoices to status "issued" and never
+        // calls update_invoice_payment_status itself (only a payment event
+        // does), so a genuinely never-paid invoice sits at "issued" forever —
+        // the single most common "unpaid" case. "draft" is excluded on
+        // purpose: an unsent invoice was never actually billed to the client.
+        let has_overdue_unpaid = client_invoices.iter().any(|inv| {
+            if inv.status == "paid" || inv.status == "draft" {
+                return false;
+            }
+            match parse_ymd(&inv.invoice_date) {
+                Some(inv_date) => inv_date + chrono::Duration::days(terms) < today,
+                None => false,
+            }
+        });
+
+        result.push(ClientOverviewStats {
+            client_id: client.id.clone(),
+            total_revenue,
+            client_since,
+            invoice_count,
+            last_invoice_date,
+            recent_payment_delays_days,
+            recent_purchase_gaps_days,
+            payment_terms_days: client.payment_terms_days,
+            has_overdue_unpaid,
+        });
+    }
+
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn get_dashboard_stats(
-    db: State<'_, Mutex<Connection>>, 
+    db: State<'_, Mutex<Connection>>,
     year: Option<i64>, 
     months: Option<Vec<String>>
 ) -> Result<DashboardStats, String> {
@@ -3001,6 +3381,8 @@ pub fn get_production_logs(
 
 #[tauri::command]
 pub fn create_production_log(db: State<'_, Mutex<Connection>>, data: CreateProductionLogData) -> Result<ProductionLog, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -3033,6 +3415,8 @@ pub fn create_production_log(db: State<'_, Mutex<Connection>>, data: CreateProdu
 
 #[tauri::command]
 pub fn update_production_log(db: State<'_, Mutex<Connection>>, id: String, data: CreateProductionLogData) -> Result<ProductionLog, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -3063,6 +3447,8 @@ pub fn update_production_log(db: State<'_, Mutex<Connection>>, id: String, data:
 
 #[tauri::command]
 pub fn delete_production_log(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     println!("backend: deleting production log id: {:?}", id);
     let conn = db.lock().map_err(|e| e.to_string())?;
     // Trim ID to handle whitespace issues
@@ -3125,6 +3511,8 @@ pub fn get_employees(db: State<'_, Mutex<Connection>>) -> Result<Vec<Employee>, 
 
 #[tauri::command]
 pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeData) -> Result<Employee, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -3161,6 +3549,8 @@ pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeDat
 
 #[tauri::command]
 pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: CreateEmployeeData) -> Result<Employee, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -3198,6 +3588,8 @@ pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: Creat
 
 #[tauri::command]
 pub fn delete_employee(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM employees WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "EMPLOYEE", Some(&id), "Employé supprimé");
@@ -3256,6 +3648,8 @@ pub fn get_projects(db: State<'_, Mutex<Connection>>) -> Result<Vec<Project>, St
 
 #[tauri::command]
 pub fn create_project(db: State<'_, Mutex<Connection>>, data: CreateProjectData) -> Result<Project, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -3295,6 +3689,8 @@ pub fn create_project(db: State<'_, Mutex<Connection>>, data: CreateProjectData)
 
 #[tauri::command]
 pub fn update_project(db: State<'_, Mutex<Connection>>, id: String, data: CreateProjectData) -> Result<Project, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -3332,6 +3728,8 @@ pub fn update_project(db: State<'_, Mutex<Connection>>, id: String, data: Create
 
 #[tauri::command]
 pub fn delete_project(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM projects WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "PROJECT", Some(&id), "Projet supprimé");
@@ -3404,6 +3802,8 @@ pub fn upsert_employee_score(
     db: State<'_, Mutex<Connection>>,
     data: CreateScoreData,
 ) -> Result<EmployeeScore, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -3485,6 +3885,8 @@ pub fn upsert_employee_score(
 
 #[tauri::command]
 pub fn delete_employee_score(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM employee_scores WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -3583,6 +3985,8 @@ pub fn generate_invoice_from_delivery_notes(
     invoice_date: String,
     due_date: String,
 ) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     let invoice_id = uuid::Uuid::new_v4().to_string();
@@ -3737,6 +4141,8 @@ pub fn get_client_draft_products(db: State<'_, Mutex<Connection>>, client_id: St
 
 #[tauri::command]
 pub fn add_client_draft_product(db: State<'_, Mutex<Connection>>, data: CreateClientDraftProductData) -> Result<ClientDraftProduct, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -3810,6 +4216,8 @@ pub fn add_client_draft_product(db: State<'_, Mutex<Connection>>, data: CreateCl
 
 #[tauri::command]
 pub fn delete_client_draft_product(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM client_draft_products WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "CLIENT_DRAFT_PRODUCT", Some(&id), "Achat non facturé supprimé");
@@ -3824,6 +4232,8 @@ pub struct UpdateClientDraftProductQuantityData {
 
 #[tauri::command]
 pub fn update_client_draft_product_quantity(db: State<'_, Mutex<Connection>>, data: UpdateClientDraftProductQuantityData) -> Result<ClientDraftProduct, String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     
     // Get current unit price to recalculate amount
@@ -3873,6 +4283,8 @@ pub fn update_client_draft_product_quantity(db: State<'_, Mutex<Connection>>, da
 
 #[tauri::command]
 pub fn clear_client_draft_products(db: State<'_, Mutex<Connection>>, client_id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM client_draft_products WHERE client_id = ?1", params![client_id]).map_err(|e| e.to_string())?;
     let _ = log_activity(&conn, "DELETE", "CLIENT_DRAFT_PRODUCTS_CLEAR", Some(&client_id), "Achats non facturés convertis en facture");
@@ -3937,6 +4349,8 @@ pub fn get_client_advances(db: State<'_, Mutex<Connection>>, client_id: String) 
 
 #[tauri::command]
 pub fn add_client_advance(db: State<'_, Mutex<Connection>>, data: CreateClientAdvanceData) -> Result<ClientAdvance, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -3988,6 +4402,8 @@ pub struct UpdateClientAdvanceData {
 
 #[tauri::command]
 pub fn update_client_advance(db: State<'_, Mutex<Connection>>, data: UpdateClientAdvanceData) -> Result<ClientAdvance, String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -4036,6 +4452,8 @@ pub fn update_client_advance(db: State<'_, Mutex<Connection>>, data: UpdateClien
 
 #[tauri::command]
 pub fn delete_client_advance(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -4098,6 +4516,7 @@ mod ipc_arg_bridging_smoke_test {
                 crate::commands::create_product,
                 crate::commands::get_invoices,
                 crate::commands::create_invoice,
+                crate::commands::search_global,
             ])
             // NOT tauri::generate_context!() — that macro embeds macOS
             // bundle metadata (Info.plist) via a symbol meant to exist once
@@ -4242,5 +4661,67 @@ mod ipc_arg_bridging_smoke_test {
         // Confirms the earlier static-read finding: no `items` key on the
         // returned Invoice — it truly lives elsewhere (get_invoice_items).
         assert!(invoice.get("items").is_none(), "Invoice response unexpectedly includes an `items` field — contradicts the struct definition read earlier");
+    }
+
+    #[test]
+    fn search_global_finds_matching_clients_and_invoices_via_real_ipc() {
+        let app = build_test_app();
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let client = invoke_json(
+            &webview,
+            "create_client",
+            serde_json::json!({ "data": { "name": "Zeroual Matériaux SARL", "code": "ZRL-01" } }),
+        );
+        let client_id = client["id"].as_str().unwrap().to_string();
+
+        let product = invoke_json(
+            &webview,
+            "create_product",
+            serde_json::json!({ "data": { "code": "GRAV-001", "name": "Gravier", "unit_price": 1000.0 } }),
+        );
+        let product_id = product["id"].as_str().unwrap().to_string();
+
+        invoke_json(
+            &webview,
+            "create_invoice",
+            serde_json::json!({
+                "data": {
+                    "client_id": client_id,
+                    "invoice_date": "2026-08-19",
+                    "invoice_number": "ZR-9001",
+                    "items": [{ "product_id": product_id, "quantity": 1.0, "unit_price": 1000.0 }]
+                }
+            }),
+        );
+
+        // Matches the client by a code substring, and the invoice by a
+        // number substring, in one call — the actual IPC arg name is
+        // "query" (no camelCase/snake_case ambiguity to bridge, unlike
+        // status/invoiceType elsewhere), so this is mainly confirming the
+        // response shape (nested clients[]/invoices[] arrays) round-trips
+        // correctly through real (de)serialization.
+        let result = invoke_json(&webview, "search_global", serde_json::json!({ "query": "ZR" }));
+        println!("SMOKE_TEST search_global response:\n{}", serde_json::to_string_pretty(&result).unwrap());
+
+        let clients = result["clients"].as_array().expect("clients should be an array");
+        assert_eq!(clients.len(), 1, "expected exactly the one client whose code contains 'ZR'");
+        assert_eq!(clients[0]["code"].as_str(), Some("ZRL-01"));
+
+        let invoices = result["invoices"].as_array().expect("invoices should be an array");
+        assert_eq!(invoices.len(), 1, "expected exactly the one invoice whose number contains 'ZR'");
+        assert_eq!(invoices[0]["invoice_number"].as_str(), Some("ZR-9001"));
+        assert_eq!(
+            invoices[0]["client_name"].as_str(),
+            Some("Zeroual Matériaux SARL"),
+            "invoice hit should carry the joined client name for display"
+        );
+
+        // A term matching nothing must return empty arrays, not an error.
+        let empty_result = invoke_json(&webview, "search_global", serde_json::json!({ "query": "nonexistent-xyz" }));
+        assert_eq!(empty_result["clients"].as_array().unwrap().len(), 0);
+        assert_eq!(empty_result["invoices"].as_array().unwrap().len(), 0);
     }
 }

@@ -16,6 +16,7 @@ import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePrev
 import { generateInvoicePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 
 interface InvoiceItem {
     product_id: string;
@@ -34,6 +35,7 @@ export default function NewProformaPage() {
     const { data: clients } = useClients();
     const { data: products } = useProducts();
     const { data: settings } = useSettings();
+    const { data: licenseStatus } = useLicenseStatus();
     const createInvoice = useCreateInvoice();
 
     const [clientId, setClientId] = useState("");
@@ -392,7 +394,7 @@ export default function NewProformaPage() {
                                     }
                                     try {
                                         setIsDownloading(true);
-                                        await generateInvoicePDF(draftInvoice, settings);
+                                        await generateInvoicePDF(draftInvoice, settings, true, undefined, licenseStatus?.state === "active");
                                         toast.success("PDF téléchargé avec succès");
                                     } catch (error) {
                                         toast.error("Erreur lors de la génération du PDF");

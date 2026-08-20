@@ -3,7 +3,7 @@
 ## ✅ Résumé de Conformité
 
 **Date de vérification:** 2025  
-**Application:** Mobino Accounting  
+**Application:** Sordi  
 **Statut:** ✅ **CONFORME** avec les exigences de facturation algérienne
 
 ---
@@ -184,7 +184,7 @@
 
 ## 9. Conclusion
 
-✅ **L'application Mobino Accounting est CONFORME avec les exigences de facturation algérienne en 2025.**
+✅ **L'application Sordi est CONFORME avec les exigences de facturation algérienne en 2025.**
 
 Toutes les mentions obligatoires sont présentes, les calculs fiscaux (TVA et droit de timbre) sont conformes à la réglementation, et le système garantit l'unicité et la traçabilité des factures.
 

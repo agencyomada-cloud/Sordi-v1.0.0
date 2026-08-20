@@ -10,11 +10,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
-      position="top-right"
-      richColors
+      position="bottom-right"
+      offset="20px"
+      // richColors intentionally off — it drives each type's background/
+      // icon color automatically (that's where the off-brand green success
+      // came from). Colors are set explicitly per type below instead.
       closeButton
-      expand={false}
+      expand
       duration={3500}
+      style={{ "--width": "360px" } as React.CSSProperties}
       toastOptions={{
         classNames: {
           toast:
@@ -22,10 +26,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
           description: "group-[.toast]:text-muted-foreground text-xs",
           actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground font-medium rounded-[4px]",
           cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground rounded-[4px]",
-          success: "group-[.toaster]:border-emerald-500/30",
-          error: "group-[.toaster]:border-rose-500/30",
-          warning: "group-[.toaster]:border-amber-500/30",
-          info: "group-[.toaster]:border-primary/30",
+          // Success uses Sordi Blue instead of the generic green richColors
+          // would apply — icons render with fill="currentColor", so
+          // coloring the [data-icon] wrapper is enough to recolor the SVG.
+          success: "group-[.toaster]:border-primary/30 [&_[data-icon]]:text-primary",
+          // Error/warning keep conventional red/amber on purpose — safety
+          // and attention expectations there outweigh brand consistency.
+          error: "group-[.toaster]:border-rose-500/30 [&_[data-icon]]:text-rose-600",
+          warning: "group-[.toaster]:border-amber-500/30 [&_[data-icon]]:text-amber-600",
+          info: "group-[.toaster]:border-primary/30 [&_[data-icon]]:text-primary",
         },
       }}
       {...props}

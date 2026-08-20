@@ -16,6 +16,7 @@ import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { DeliveryEditablePreview } from "@/components/delivery/DeliveryEditablePreview";
 import { chunkItems } from "@/lib/paginationUtils";
 
@@ -24,6 +25,7 @@ export default function DeliveryDetailPage() {
   const navigate = useNavigate();
   const { data: deliveryNote, isLoading, error } = useDeliveryNote(id);
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleDownloadPDF = async () => {
@@ -39,7 +41,7 @@ export default function DeliveryDetailPage() {
         // We might need to ensure 'clients' object is passed correctly if generateDeliveryNotePDF uses it.
         clients: deliveryNote.clients
       };
-      await generateDeliveryNotePDF(noteForPDF as any, settings);
+      await generateDeliveryNotePDF(noteForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
       toast.success("PDF téléchargé");
     } catch (error) {
@@ -54,7 +56,7 @@ export default function DeliveryDetailPage() {
     if (!noteForPDF as any) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateDeliveryNotePDF(noteForPDF as any, settings, false);
+      const pdfBase64 = await generateDeliveryNotePDF(noteForPDF as any, settings, false, undefined, licenseStatus?.state === "active");
       const { invoke } = await import("@tauri-apps/api/core");
       const fileName = `Impression-${ noteForPDF as any.delivery_number || "bon_livraison" }.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });

@@ -21,6 +21,7 @@ import { generateInvoicePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 
 const tabs = [
@@ -67,6 +68,7 @@ export default function InvoicesPage() {
   const deleteInvoice = useDeleteInvoice();
   const convertProforma = useConvertProforma();
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const updateStatus = useUpdateInvoiceStatus();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -215,7 +217,7 @@ export default function InvoicesPage() {
         await new Promise(r => setTimeout(r, 500));
         try {
           // Pass download=true by default
-          const res = await generateInvoicePDF(invoiceForPDF, settings);
+          const res = await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
           resolve(res);
         } catch (e) {

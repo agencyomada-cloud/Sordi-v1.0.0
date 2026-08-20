@@ -27,8 +27,10 @@ import {
 import { Button, Badge, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsContent, TabsList, TabsTrigger } from "@sordi/ui";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { useClient, useUpdateClient, type CreateClientData } from "@/hooks/useClients";
+import { useClient, useUpdateClient, useClientOverviewStats, type CreateClientData } from "@/hooks/useClients";
 import { useInvoices, useUpdateInvoiceStatus, type InvoiceStatus } from "@/hooks/useInvoices";
+import { computeAveragePaymentDelay, computePurchaseFrequency, computeClientStatus } from "@/lib/clientOverview";
+import { ClientStatusBadge } from "@/components/ClientStatusBadge";
 import { useClientProducts } from "@/hooks/useClientProducts";
 import { useProducts } from "@/hooks/useProducts";
 import { useClientDraftProducts, useAddClientDraftProduct, useUpdateClientDraftProductQuantity, useDeleteClientDraftProduct, useClearClientDraftProducts } from "@/hooks/useClientDraftProducts";
@@ -111,6 +113,8 @@ export default function ClientDetailPage() {
   }, [selectedYear, selectedMonth]);
 
   const { data: client, isLoading: isLoadingClient } = useClient(id);
+  const { data: overviewStatsList } = useClientOverviewStats(id);
+  const overviewStats = overviewStatsList?.[0];
   const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
   const { data: products } = useProducts();
   const { data: clientProducts, isLoading: isLoadingProducts, error: productsError } = useClientProducts(
@@ -572,6 +576,62 @@ export default function ClientDetailPage() {
             </TabsList>
 
             <TabsContent value="overview" className="mt-0">
+              {/* Aperçu — computed entirely from invoices/payments at query time, never stored */}
+              {overviewStats && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Chiffre d'affaires total</CardTitle>
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xl font-bold">{formatCurrency(overviewStats.total_revenue)}</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Client depuis</CardTitle>
+                      <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xl font-bold">
+                        {format(new Date(overviewStats.client_since), "d MMM yyyy", { locale: fr })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Délai de paiement moyen</CardTitle>
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xl font-bold">{computeAveragePaymentDelay(overviewStats).display}</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Fréquence d'achat</CardTitle>
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-base font-bold leading-snug">{computePurchaseFrequency(overviewStats).display}</div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Statut</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ClientStatusBadge status={computeClientStatus(overviewStats)} />
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <Card>

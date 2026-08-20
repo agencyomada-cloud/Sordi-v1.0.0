@@ -7,6 +7,15 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16, "JWT_REFRESH_SECRET must be set to a real secret"),
   PORT: z.coerce.number().int().positive().default(4000),
   CORS_ORIGIN: z.string().min(1).default("http://localhost:5173"),
+  // Ed25519 private key (PKCS8 PEM), literal "\n" for line breaks — the
+  // desktop app only ever holds the matching PUBLIC key (compiled in), so
+  // this is the one place a license token can be forged. Never the same
+  // key as JWT_ACCESS_SECRET/JWT_REFRESH_SECRET's symmetric scheme.
+  LICENSE_PRIVATE_KEY_PEM: z.string().min(1, "LICENSE_PRIVATE_KEY_PEM is required"),
+  // Shared secret for the one manual admin endpoint (POST /licenses/create)
+  // — not a user login, just enough to keep it off the open internet until
+  // there's a real admin UI/account system.
+  LICENSE_ADMIN_SECRET: z.string().min(16, "LICENSE_ADMIN_SECRET must be set to a real secret"),
 });
 
 const parsed = envSchema.safeParse(process.env);

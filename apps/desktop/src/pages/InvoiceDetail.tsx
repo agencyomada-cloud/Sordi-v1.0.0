@@ -22,6 +22,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64 } from "@/lib/pdfGenerator";
 import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
@@ -101,6 +102,7 @@ export default function InvoiceDetailPage() {
   const navigate = useNavigate();
   const { data: invoice, isLoading, error, refetch } = useInvoice(id);
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const convertProforma = useConvertProforma();
   const [showPreview, setShowPreview] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -112,7 +114,7 @@ export default function InvoiceDetailPage() {
     if (!invoice) return;
     setIsGenerating(true);
     try {
-      const blob = await generateInvoicePDFBlob(invoice, settings);
+      const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
       const b64 = await blobToBase64(blob);
       setPdfBlob(blob);
@@ -136,7 +138,7 @@ export default function InvoiceDetailPage() {
 
     setIsGenerating(true);
     try {
-      await generateInvoicePDF(invoice, settings);
+      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
       toast.success("PDF téléchargé dans le dossier Téléchargements");
     } catch (error) {
@@ -152,7 +154,7 @@ export default function InvoiceDetailPage() {
     if (!invoice) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateInvoicePDF(invoice, settings, false);
+      const pdfBase64 = await generateInvoicePDF(invoice, settings, false, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
       const { invoke } = await import("@tauri-apps/api/core");
       const fileName = `Impression-${invoice.invoice_number || "facture"}.pdf`;

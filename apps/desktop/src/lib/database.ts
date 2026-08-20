@@ -83,6 +83,48 @@ export interface ClientCumulativeRecord {
   invoice_count: number;
 }
 
+// Raw ingredients for the client "Aperçu" section and the clients-list status
+// badge — computed at query time in Rust (get_client_overview_stats), never
+// stored. See src/lib/clientOverview.ts for how these become display labels.
+export interface ClientOverviewStats {
+  client_id: string;
+  total_revenue: number;
+  client_since: string;
+  invoice_count: number;
+  last_invoice_date: string | null;
+  recent_payment_delays_days: number[];
+  recent_purchase_gaps_days: number[];
+  payment_terms_days: number | null;
+  has_overdue_unpaid: boolean;
+}
+
+// "active" = full access. "read_only"/"not_activated" both mean
+// business-data writes are gated server (Rust) side — same UI treatment
+// for both, no need to distinguish "expired" from "never activated" here.
+export interface LicenseStatus {
+  state: "active" | "read_only" | "not_activated";
+  client_reference_id: string | null;
+  expires_at: string | null;
+}
+
+export interface ClientSearchHit {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
+export interface InvoiceSearchHit {
+  id: string;
+  invoice_number: string;
+  client_name: string | null;
+  total_ttc: number;
+}
+
+export interface GlobalSearchResults {
+  clients: ClientSearchHit[];
+  invoices: InvoiceSearchHit[];
+}
+
 // ============= CLIENTS =============
 
 export interface Client {
@@ -548,12 +590,34 @@ export interface ActivityLog {
 }
 
 export const db = {
+  // Licensing
+  license: {
+    getStatus: (): Promise<LicenseStatus> =>
+      safeInvoke("get_license_status", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
+    // No fallback on purpose: safeInvoke's catch block calls the fallback
+    // on ANY invoke failure in Tauri mode too, not just web-mode — for
+    // every other command here that's a harmless degrade, but activate
+    // MUST surface a real "invalid license key" rejection from Rust/the
+    // API as-is, not have it silently replaced by a fallback message.
+    activate: (license_key: string): Promise<LicenseStatus> => safeInvoke("activate_license", { licenseKey: license_key }),
+    verifyBackground: (): Promise<LicenseStatus> =>
+      safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
+  },
+  // Global search (Phase 1: clients + invoices — see search_global in commands.rs)
+  search: {
+    global: (query: string): Promise<GlobalSearchResults> =>
+      safeInvoke("search_global", { query }, () => ({ clients: [], invoices: [] })),
+  },
   // History
   history: {
     getLogs: (limit?: number, entity_type?: string, action?: string, start_date?: string, end_date?: string) =>
       safeInvoke<ActivityLog[]>("get_activity_logs", { limit, entityType: entity_type, action, startDate: start_date, endDate: end_date }, () => mockStore.getActivityLogs(limit, entity_type, action, start_date, end_date)),
     log: (data: { action: string; entity_type: string; entity_id?: string | null; description: string }): Promise<void> =>
       safeInvoke("log_activity", { data }, () => mockStore.logActivity(data)),
+    // No fallback on purpose, same reasoning as license.activate: this is
+    // destructive and license-gated — a real rejection (e.g. read-only
+    // mode) must reach the UI as-is, not be replaced by a silent no-op.
+    clear: (): Promise<void> => safeInvoke("clear_activity_logs"),
   },
   // Clients
   clients: {
@@ -564,6 +628,10 @@ export const db = {
     delete: (id: string): Promise<void> => safeInvoke("delete_client", { id }, () => mockStore.deleteClient(id)),
     getProducts: (client_id: string, productId?: string, month?: string, year?: number): Promise<any[]> =>
       safeInvoke("get_client_products", { clientId: client_id, productId, month, year }, () => mockStore.getClientProductCumulatives(year, month ? [month] : undefined)),
+    // client_id omitted -> stats for every client in one call (clients list badge).
+    // client_id set -> just that client (client detail "Aperçu" section).
+    getOverviewStats: (client_id?: string): Promise<ClientOverviewStats[]> =>
+      safeInvoke("get_client_overview_stats", { clientId: client_id }, () => []),
   },
 
   // Client Draft Products

@@ -309,6 +309,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     contactLeftBox: { width: 56.7, justifyContent: 'flex-end', height: '100%', position: 'relative' },
     footerLogoBox: { position: 'absolute', top: 0, left: 0, height: 22.7, width: 121.9, justifyContent: 'center' },
     footerLogoText: { fontSize: 9, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase' },
+    sordiWatermark: { position: 'absolute', bottom: 1, left: 0, right: 0, textAlign: 'center', fontSize: 5.5, color: '#9ca3af' },
     qrBox: { width: 51, height: 51, alignItems: 'center', justifyContent: 'center', marginTop: 13 },
     contactRightBox: { marginLeft: 7.1, flex: 1, justifyContent: 'flex-end', height: '100%' },
     contactEmailText: { fontSize: 7.1, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000', lineHeight: 1.65 },
@@ -548,6 +549,9 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               </View>
             </View>
           </View>
+          {settings?.license_active === false && (
+            <Text style={styles.sordiWatermark}>Created by Sordi v1.0.0 — www.sordi.app</Text>
+          )}
         </View>
 
       </Page>

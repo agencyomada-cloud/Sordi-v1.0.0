@@ -16,6 +16,7 @@ import { generateOrderPDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" }> = {
   draft: { label: "Brouillon", variant: "secondary" },
@@ -62,6 +63,7 @@ export default function OrdersPage() {
   };
 
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
 
   const handleDownloadPDF = async (orderId: string) => {
     try {
@@ -103,7 +105,7 @@ export default function OrdersPage() {
         } : undefined
       };
 
-      await generateOrderPDF(orderForPDF, settings);
+      await generateOrderPDF(orderForPDF, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
     } catch (error) {
       console.error("PDF generation error:", error);

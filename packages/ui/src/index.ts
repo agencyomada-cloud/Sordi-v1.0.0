@@ -44,20 +44,17 @@ export * from "./switch";
 export * from "./table";
 export * from "./tabs";
 export * from "./textarea";
-export * from "./toast";
 export * from "./toggle";
 export * from "./toggle-group";
 export * from "./tooltip";
 
-// toaster.tsx (shadcn's Toast-primitive-driven toaster) and sonner.tsx (the
-// sonner-library wrapper) both export a component named `Toaster`, and
-// sonner.tsx also re-exports `toast` from the "sonner" package, which
-// collides with the hook-based `toast` below. Both toasters are mounted
-// side by side in App.tsx, so disambiguate explicitly instead of `export *`.
-export { Toaster } from "./toaster";
-export { Toaster as SonnerToaster } from "./sonner";
+// The shadcn Toast primitive/Toaster/use-toast trio (toast.tsx, toaster.tsx,
+// hooks/use-toast.ts) was removed — confirmed dead, zero call sites ever
+// used it; every toast in the app goes through the "sonner" package
+// directly. Sonner's own wrapper below is the only toaster now, so it no
+// longer needs a collision-avoiding alias.
+export { Toaster } from "./sonner";
 
 export * from "./hooks/use-mobile";
-export * from "./hooks/use-toast";
 
 export { cn } from "./lib/utils";

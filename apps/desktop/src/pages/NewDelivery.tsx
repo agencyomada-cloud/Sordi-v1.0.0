@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DeliveryEditablePreview } from "@/components/delivery/DeliveryEditablePreview";
 import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 
 interface DeliveryItem {
   product_id: string;
@@ -33,6 +34,7 @@ export default function NewDeliveryPage() {
   const { data: orders } = useOrders();
   const createDelivery = useCreateDeliveryNote();
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
 
   const [draftDelivery, setDraftDelivery] = useState({
     client_id: invoiceData?.client_id || "",
@@ -112,7 +114,7 @@ export default function NewDeliveryPage() {
               quantity: item.quantity
             }))
           };
-          await generateDeliveryNotePDF(noteForPDF as any, settings);
+          await generateDeliveryNotePDF(noteForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
           toast.success("PDF téléchargé");
         } catch (error) {
           console.error("PDF generation error", error);

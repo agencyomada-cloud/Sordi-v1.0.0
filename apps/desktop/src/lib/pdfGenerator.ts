@@ -45,7 +45,8 @@ export const blobToBase64 = async (blob: Blob): Promise<string> => {
  */
 export const generateInvoicePDFBlob = async (
   doc: AnyDocument,
-  settings?: Settings
+  settings?: Settings,
+  licenseActive?: boolean
 ): Promise<Blob> => {
   try {
     const rawItems = Array.isArray(doc.invoice_items)
@@ -139,7 +140,8 @@ export const generateInvoicePDFBlob = async (
       body_pattern_data: settings.body_pattern_data,
       stamp_data: settings.stamp_data,
       primary_color: settings.primary_color,
-    } : {};
+      license_active: licenseActive,
+    } : { license_active: licenseActive };
 
     const theme = (settings?.invoice_pdf_theme as InvoicePdfTheme) || 'structure';
     const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
@@ -232,7 +234,8 @@ export const generateInvoicePDF = async (
   doc: AnyDocument,
   settings?: Settings,
   download = true,
-  _options?: PDFOptions
+  _options?: PDFOptions,
+  licenseActive?: boolean
 ): Promise<string> => {
   try {
     // Handle html2canvas fallback if elementId is provided
@@ -260,7 +263,7 @@ export const generateInvoicePDF = async (
       }
     }
 
-    const blob = await generateInvoicePDFBlob(doc, settings);
+    const blob = await generateInvoicePDFBlob(doc, settings, licenseActive);
     const pdfBase64 = await blobToBase64(blob);
 
     if (download) {

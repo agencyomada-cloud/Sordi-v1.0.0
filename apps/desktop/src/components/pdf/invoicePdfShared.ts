@@ -99,6 +99,8 @@ export interface PDFSettings {
   stamp_size?: number;
   primary_color?: string;
   body_pattern_data?: string;
+  /** Not a company setting — whether the generating device has an active Sordi license. Drives the "Created by Sordi" watermark. */
+  license_active?: boolean;
 }
 
 /** Every currency figure on an Algerian invoice is shown as "X XXX,XX DZD". */

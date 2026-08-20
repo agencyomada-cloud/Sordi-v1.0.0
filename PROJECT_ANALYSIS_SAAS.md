@@ -1,4 +1,4 @@
-# Deep SaaS Analysis & Technical Evaluation: Mobino Accounting (v4.0.0) / Omada Invoicing
+# Deep SaaS Analysis & Technical Evaluation: Sordi / Omada Invoicing
 *An Expert Audit of Technology Stack, Functional Modules, Regulatory Compliance & Growth Strategy*
 
 ---
@@ -13,9 +13,9 @@
 # 1. English Version
 
 ## Executive Summary & Product Vision
-**Mobino Accounting (v4.0.0)** (also branded as **Omada Invoicing**) is a high-performance, offline-first hybrid SaaS & Desktop ERP tailored specifically for commercial, industrial, and trading enterprises operating in North Africa (specifically Algeria).
+**Sordi** (also branded as **Omada Invoicing**) is a high-performance, offline-first hybrid SaaS & Desktop ERP tailored specifically for commercial, industrial, and trading enterprises operating in North Africa (specifically Algeria).
 
-Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mobino provides native out-of-the-box compliance with **2025 Algerian Commercial & Fiscal Laws**, integrating local tax calculations (*Droit de Timbre*, dynamic TVA rates, strict NIF/NIS/RC/AI legal mentions), multi-document commercial workflows, and specialized industrial production logs.
+Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Sordi provides native out-of-the-box compliance with **2025 Algerian Commercial & Fiscal Laws**, integrating local tax calculations (*Droit de Timbre*, dynamic TVA rates, strict NIF/NIS/RC/AI legal mentions), multi-document commercial workflows, and specialized industrial production logs.
 
 ---
 
@@ -38,7 +38,7 @@ Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mob
 
 ---
 
-## 💼 Core Functionalities: What Mobino Does
+## 💼 Core Functionalities: What Sordi Does
 
 ### 1. 2025 Algerian Legal & Tax Compliance Engine
 - **Legal Entity Metadata**: Mandatory storing & rendering of **NIF** (*Numéro d'Identification Fiscale*), **NIS** (*Numéro d'Identification Statistique*), **RC** (*Registre du Commerce*), and **AI** (*Article d'Imposition*).
@@ -74,7 +74,7 @@ Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mob
 ## 🚀 SaaS Expert Evaluation & Growth Strategy
 
 ### Strengths & Competitive Moat
-1. **Hyper-Localized Compliance**: Standard SaaS ERPs lack built-in Algerian *Droit de Timbre* and NIF/NIS workflows. Mobino captures this niche completely.
+1. **Hyper-Localized Compliance**: Standard SaaS ERPs lack built-in Algerian *Droit de Timbre* and NIF/NIS workflows. Sordi captures this niche completely.
 2. **Zero-Latency Offline-First**: Local Rust + SQLite execution ensures instant load times even in areas with spotty internet connectivity.
 3. **Low Infrastructure Cost**: Desktop client distribution shifts computing workload to the user's desktop, reducing cloud server operational expenses.
 
@@ -91,9 +91,9 @@ Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mob
 # 2. النسخة العربية (Arabic Version)
 
 ## 📋 الملخص التنفيذي ورؤية المنتج
-برنامج **Mobino Accounting (الاصدار 4.0.0)** (والمعروف أيضاً بـ **Omada Invoicing**) هو نظام إداري ومالي متكامل (ERP) مصمم ليعمل دون الحاجة للاتصال بالإنترنت (Offline-First) مع قدرات عالية على التزامن، والمخصص خصيصاً للمؤسسات التجارية والصناعية في منطقة شمال أفريقيا (وبالأخص الجزائر).
+برنامج **Sordi** (والمعروف أيضاً بـ **Omada Invoicing**) هو نظام إداري ومالي متكامل (ERP) مصمم ليعمل دون الحاجة للاتصال بالإنترنت (Offline-First) مع قدرات عالية على التزامن، والمخصص خصيصاً للمؤسسات التجارية والصناعية في منطقة شمال أفريقيا (وبالأخص الجزائر).
 
-على عكس البرامج العالمية العامة، يقدم Mobino مطابقة قانونية وضريبية كاملة ومباشرة مع **تشريعات الفوترة الجزائرية لسنة 2025**، بما في ذلك حساب **حقوق الطابع (Droit de Timbre)**، والنسب المتعددة للرقم الاستدلالي للضريبة على القيمة المضافة (TVA)، وإدارة البيانات القانونية (NIF, NIS, RC, AI)، إضافة إلى إدارة الدورة التجارية وشبكات الإنتاج.
+على عكس البرامج العالمية العامة، يقدم Sordi مطابقة قانونية وضريبية كاملة ومباشرة مع **تشريعات الفوترة الجزائرية لسنة 2025**، بما في ذلك حساب **حقوق الطابع (Droit de Timbre)**، والنسب المتعددة للرقم الاستدلالي للضريبة على القيمة المضافة (TVA)، وإدارة البيانات القانونية (NIF, NIS, RC, AI)، إضافة إلى إدارة الدورة التجارية وشبكات الإنتاج.
 
 ---
 
@@ -116,7 +116,7 @@ Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mob
 
 ---
 
-## 💼 الوظائف الأساسية: ماذا يقدم برنامج Mobino؟
+## 💼 الوظائف الأساسية: ماذا يقدم برنامج Sordi؟
 
 ### 1. محرك المطابقة القانونية والضريبية الجزائرية 2025
 - **البيانات القانونية للمؤسسة**: التخزين والطباعة الآلية للـ **NIF** (الرقم الجبائي)، **NIS** (الرقم الإحصائي)، **RC** (السجل التجاري)، و **AI** (رقم المادة).
@@ -169,9 +169,9 @@ Unlike generic global cloud accounting tools (e.g., QuickBooks, Xero, Odoo), Mob
 # 3. Version Française (French Version)
 
 ## 📋 Résumé Exécutif & Vision Produit
-**Mobino Accounting (v4.0.0)** (également nommé **Omada Invoicing**) est une solution ERP et de gestion commerciale Offline-First à haute performance, conçue spécifiquement pour les PME/TPE et entreprises industrielles opérant en Algérie et dans la région MENA.
+**Sordi** (également nommé **Omada Invoicing**) est une solution ERP et de gestion commerciale Offline-First à haute performance, conçue spécifiquement pour les PME/TPE et entreprises industrielles opérant en Algérie et dans la région MENA.
 
-Contrairement aux logiciels SaaS génériques internationaux (QuickBooks, Xero, Odoo), Mobino intègre de façon native et automatique la **Conformité Légale et Fiscale Algérienne 2025** (Droit de Timbre, taux de TVA dynamiques, mentions légales NIF/NIS/RC/AI), la gestion documentaire commerciale complète et le suivi de production industrielle.
+Contrairement aux logiciels SaaS génériques internationaux (QuickBooks, Xero, Odoo), Sordi intègre de façon native et automatique la **Conformité Légale et Fiscale Algérienne 2025** (Droit de Timbre, taux de TVA dynamiques, mentions légales NIF/NIS/RC/AI), la gestion documentaire commerciale complète et le suivi de production industrielle.
 
 ---
 
@@ -194,7 +194,7 @@ Contrairement aux logiciels SaaS génériques internationaux (QuickBooks, Xero, 
 
 ---
 
-## 💼 Fonctionnalités Clés : Ce Que Fait Mobino
+## 💼 Fonctionnalités Clés : Ce Que Fait Sordi
 
 ### 1. Moteur de Conformité Fiscale & Légale Algérie 2025
 - **Mentions Légales Entreprise**: Gestion et impression automatique du **NIF**, **NIS**, **RC** et **AI** (*Article d'Imposition*).
@@ -230,7 +230,7 @@ Contrairement aux logiciels SaaS génériques internationaux (QuickBooks, Xero, 
 ## 🚀 Évaluation SaaS & Stratégie de Croissance
 
 ### Forces & Avantages Concurrentiels
-1. **Hyper-Spécialisation Réglementaire** : Mobino résout la problématique de la conformité algérienne négligée par les ERP internationaux.
+1. **Hyper-Spécialisation Réglementaire** : Sordi résout la problématique de la conformité algérienne négligée par les ERP internationaux.
 2. **Exécution Ultra-Rapide Hors-Ligne** : L'architecture Tauri + SQLite garantit une réactivité instantanée et une continuité de travail sans connexion Internet.
 3. **Coût d'Infrastructure Réduit** : Le traitement local réduit considérablement les frais de serveurs cloud.
 

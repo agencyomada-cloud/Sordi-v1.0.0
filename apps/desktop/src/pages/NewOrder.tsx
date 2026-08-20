@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { OrderEditablePreview } from "@/components/order/OrderEditablePreview";
 import { generateOrderPDF } from "@/lib/pdfGenerator";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
 
 interface OrderLine {
   id: string;
@@ -29,6 +30,7 @@ export default function NewOrderPage() {
   const navigate = useNavigate();
   const createOrder = useCreateOrder();
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const { data: clients } = useClients();
   const { data: nextOrderNumber, isLoading: isLoadingNumber } = useNextOrderNumber();
 
@@ -151,7 +153,7 @@ export default function NewOrderPage() {
               ...createdOrder,
               custom_title: createdOrder.custom_title || draftOrder.custom_title,
             };
-            await generateOrderPDF(orderForPDF as any, settings);
+            await generateOrderPDF(orderForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
             toast.success("PDF téléchargé");
           } catch (error) {
             console.error("PDF generation error", error);
