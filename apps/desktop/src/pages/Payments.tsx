@@ -15,8 +15,6 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 import { Input, Button, Label, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { usePayments, useCreatePayment } from "@/hooks/usePayments";
 import { useInvoices, useUpdateInvoiceStatus } from "@/hooks/useInvoices";
@@ -209,12 +207,8 @@ export default function PaymentsPage() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Header />
-
-        <main className="flex-1 p-6 overflow-y-auto">
+    <>
+      <main className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -393,10 +387,10 @@ export default function PaymentsPage() {
             </TableBody>
           </Table>
           </div>
-        </main>
+      </main>
 
-        {/* Create Payment Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
+      {/* Create Payment Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
           <DialogContent className="sm:max-w-[500px] rounded-3xl">
             <DialogHeader>
               <DialogTitle>Enregistrer un paiement</DialogTitle>
@@ -508,8 +502,7 @@ export default function PaymentsPage() {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
-    </div>
+      </Dialog>
+    </>
   );
 }

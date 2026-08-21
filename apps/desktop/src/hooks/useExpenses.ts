@@ -35,7 +35,10 @@ export function useCreateExpense() {
   return useMutation({
     mutationFn: async (expense: CreateExpenseData) => {
       // Validate input
-      const validated = expenseSchema.parse(expense);
+      // zod 3.25's inferred output type widens every field to optional here despite
+      // the schema requiring category/amount/expense_date — a type-level quirk, not
+      // a runtime one: .parse() throws if they're actually missing.
+      const validated = expenseSchema.parse(expense) as CreateExpenseData;
       return await db.expenses.create(validated);
     },
     onSuccess: (expense) => {

@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { Button, Switch, Input, Label, Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger } from "@sordi/ui";
 import { cn, compressImage } from "@/lib/utils";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { toast } from "sonner";
 import { 
   RiAddLine as Plus, 
@@ -25,7 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { notificationAudio } from "@/lib/notificationSound";
 import { db } from "@/lib/database";
 import { useQueryClient } from "@tanstack/react-query";
-import { INVOICE_PDF_THEMES } from "@/components/pdf/invoicePdfShared";
+import { INVOICE_PDF_THEMES, INVOICE_PDF_FONTS } from "@/components/pdf/invoicePdfShared";
 
 export default function SettingsPage() {
     const { data: settings, isLoading } = useSettings();
@@ -61,6 +59,7 @@ export default function SettingsPage() {
         body_pattern_data: "",
         qr_code_data: "",
         invoice_pdf_theme: "structure",
+        invoice_pdf_font: "montserrat",
     });
 
     const [extraInfoList, setExtraInfoList] = useState<string[]>([]);
@@ -194,17 +193,13 @@ export default function SettingsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex min-h-screen bg-background items-center justify-center">
+            <div className="flex items-center justify-center min-h-[60vh]">
                 <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="flex min-h-screen bg-background">
-            <Sidebar />
-            <div className="flex-1 flex flex-col">
-                <Header />
                 <main className="flex-1 p-8 space-y-8">
                     <div>
                         <h1 className="text-2xl font-bold">Paramètres</h1>
@@ -411,6 +406,43 @@ export default function SettingsPage() {
                                                                 )}
                                                             </div>
                                                             <p className="text-xs text-muted-foreground leading-relaxed">{theme.description}</p>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Police</CardTitle>
+                                            <CardDescription>Choisissez la police de caractères utilisée dans vos factures, bons de livraison et commandes.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {INVOICE_PDF_FONTS.map((font) => {
+                                                    const isSelected = (formData.invoice_pdf_font || "montserrat") === font.value;
+                                                    return (
+                                                        <button
+                                                            key={font.value}
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, invoice_pdf_font: font.value }))}
+                                                            className={cn(
+                                                                "text-left rounded-[6px] border p-4 transition-all",
+                                                                isSelected
+                                                                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                                                                    : "border-border hover:border-primary/40 hover:bg-muted/30"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-base font-semibold text-foreground" style={{ fontFamily: font.label }}>{font.label}</span>
+                                                                {isSelected && (
+                                                                    <span className="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0">
+                                                                        <RiCheckLine className="w-3 h-3 text-primary-foreground" />
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground leading-relaxed">{font.description}</p>
                                                         </button>
                                                     );
                                                 })}
@@ -998,7 +1030,5 @@ export default function SettingsPage() {
                             </TabsContent>
                         </Tabs>
                 </main>
-            </div>
-        </div>
     );
 }

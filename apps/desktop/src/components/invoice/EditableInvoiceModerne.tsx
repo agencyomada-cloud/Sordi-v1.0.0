@@ -7,7 +7,7 @@ import {
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { numberToWords } from "@/lib/numberToWords";
-import { getCompanyPhones, formatPhone, resolveLegalFields } from "./invoiceHtmlShared";
+import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
 interface Props {
@@ -27,7 +27,8 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, formatCurrency,
+    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel,
+    formatCurrency,
     updateInvoiceField, updateClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleDeleteItem,
@@ -45,7 +46,7 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
             className="a4 relative bg-white text-[#111827] mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: "'Space Grotesk', sans-serif" }}
+            style={{ width: '210mm', height: '297mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
             <div className="flex flex-col h-full">
               <div className="flex justify-between items-center px-[14mm] py-[9mm]" style={{ backgroundColor: accent }}>
@@ -60,7 +61,7 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
                 </div>
                 <div className="text-right">
                   <div className="text-white text-[16pt] font-bold uppercase tracking-wide">
-                    {isCreditNote ? "FACTURE D'AVOIR" : (isProforma ? "FACTURE PROFORMA" : "FACTURE")}
+                    {docTitle}
                   </div>
                   <div className="text-white/85 text-[8.5pt] mt-1 flex items-center justify-end gap-1">
                     N°
@@ -112,7 +113,7 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
                     </div>
                     <div className="flex-1 bg-gray-50 rounded-[10px] p-3.5">
                       <div className="text-[7pt] uppercase tracking-wide font-bold mb-1.5" style={{ color: accent }}>Détails du document</div>
-                      {!isProforma && !isCreditNote && (
+                      {showPaymentMethod && !isProforma && !isCreditNote && (
                         <div className="flex justify-between items-center text-[8pt]">
                           <span className="text-gray-500">Paiement</span>
                           <Select value={paymentMode} onValueChange={handlePaymentModeChange}>
@@ -198,8 +199,10 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
                       <div className="flex justify-end mb-5">
                         <div className="w-[46%] bg-gray-50 rounded-[10px] p-3">
                           <div className="flex justify-between py-0.5 text-[8.5pt]"><span className="text-gray-500">Total HT</span><span>{formatCurrency(subtotal)}</span></div>
-                          <div className="flex justify-between py-0.5 text-[8.5pt]"><span className="text-gray-500">Total TVA</span><span>{formatCurrency(tvaAmount)}</span></div>
-                          {(timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
+                          {showTva && (
+                            <div className="flex justify-between py-0.5 text-[8.5pt]"><span className="text-gray-500">Total TVA</span><span>{formatCurrency(tvaAmount)}</span></div>
+                          )}
+                          {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
                             <div className="flex justify-between py-0.5 text-[8.5pt]"><span className="text-gray-500">Droit de Timbre</span><span>{formatCurrency(timbre)}</span></div>
                           )}
                           <div className="flex justify-between items-center py-0.5 text-[8.5pt]">
@@ -216,18 +219,20 @@ export function EditableInvoiceModerne({ invoice, onInvoiceChange, clients, prod
                             </div>
                           </div>
                           <div className="flex justify-between rounded-lg px-2.5 py-1.5 mt-1.5" style={{ backgroundColor: accent }}>
-                            <span className="text-[9.5pt] font-bold text-white">{isCreditNote ? "Net à déduire" : "Total TTC"}</span>
+                            <span className="text-[9.5pt] font-bold text-white">{grandTotalLabel}</span>
                             <span className="text-[11pt] font-bold text-white">{formatCurrency(netTotal)}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="mb-5">
-                        <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
-                          {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                      {showMontantEnLettres && (
+                        <div className="mb-5">
+                          <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
+                            {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                          </div>
+                          <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{numberToWords(netTotal)}</div>
                         </div>
-                        <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{numberToWords(netTotal)}</div>
-                      </div>
+                      )}
 
                       <div className="flex justify-end items-end">
                         <div className="w-[140px] flex flex-col items-center relative">

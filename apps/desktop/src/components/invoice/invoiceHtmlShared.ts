@@ -1,5 +1,6 @@
 import { numberToWords } from "@/lib/numberToWords";
 import { chunkItems } from "@/lib/paginationUtils";
+import { INVOICE_PDF_FONTS } from "@/components/pdf/invoicePdfShared";
 
 /**
  * Shared between the read-only preview, the print view, and the editable
@@ -100,4 +101,17 @@ export type InvoiceHtmlTheme = 'structure' | 'epure' | 'moderne';
 export function resolveInvoiceHtmlTheme(settings: any): InvoiceHtmlTheme {
   const theme = settings?.invoice_pdf_theme;
   return theme === 'epure' || theme === 'moderne' ? theme : 'structure';
+}
+
+/**
+ * CSS font-family value for the on-screen editable preview (invoice, order,
+ * delivery note alike) — same setting (Paramètres > Thème de la facture PDF
+ * > Police) and same option list as the exported PDF's
+ * resolveInvoicePdfFontFamily, so the live preview never shows a different
+ * face than what actually gets generated.
+ */
+export function resolveInvoiceHtmlFontFamily(settings: any): string {
+  const match = INVOICE_PDF_FONTS.find((f) => f.value === settings?.invoice_pdf_font);
+  const family = match ? match.label : 'Montserrat';
+  return `'${family}', sans-serif`;
 }

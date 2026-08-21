@@ -241,7 +241,7 @@ pub fn current_status() -> LicenseStatus {
 /// file read plus a signature check, cheap enough for occasional write
 /// operations, and avoids a separate cache-invalidation path to keep in
 /// sync with activate/verify.
-#[cfg_attr(test, allow(unreachable_code))]
+#[cfg_attr(any(test, feature = "omada_bypass"), allow(unreachable_code))]
 pub fn require_active_license() -> Result<(), String> {
     // cargo test's mock Tauri apps (ipc_arg_bridging_smoke_test,
     // seed_test_data) never call license::init() the way the real app's
@@ -250,6 +250,15 @@ pub fn require_active_license() -> Result<(), String> {
     // flag, so it cannot ship in the actual binary or be toggled by an env
     // var at runtime.
     #[cfg(test)]
+    {
+        return Ok(());
+    }
+    // omada-agency branch only. "omada_bypass" is a Cargo feature that is
+    // never on by default (see Cargo.toml's [features]) and this file is
+    // otherwise byte-for-byte what monorepo-restructure ships — a normal
+    // build (this feature not passed via --features) hits the real check
+    // below unchanged.
+    #[cfg(feature = "omada_bypass")]
     {
         return Ok(());
     }

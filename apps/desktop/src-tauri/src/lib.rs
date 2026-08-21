@@ -12,6 +12,8 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_opener::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -29,6 +31,7 @@ pub fn run() {
 
       app.manage(Mutex::new(db));
       license::init(&app_dir);
+      commands::init_app_data_dir(&app_dir);
 
       Ok(())
     })
@@ -117,15 +120,44 @@ pub fn run() {
       commands::create_employee,
       commands::update_employee,
       commands::delete_employee,
-      // Projects
+      commands::set_employee_photo,
+      commands::remove_employee_photo,
+      commands::add_employee_document,
+      commands::get_employee_documents,
+      commands::delete_employee_document,
+      commands::get_employee_task_workload,
+      // HR / Payroll (omada-agency branch only)
+      commands::get_employee_absence_stats,
+      commands::import_punch_records,
+      commands::get_unmapped_device_codes,
+      commands::create_employee_advance,
+      commands::get_employee_advances,
+      commands::get_employee_advance_totals,
+      commands::set_employee_advance_deducted,
+      commands::run_payroll,
+      commands::get_payroll_runs,
+      commands::update_payroll_paid,
+      commands::get_payroll_dashboard_stats,
+      // Projects (omada-agency branch only)
       commands::get_projects,
+      commands::get_project,
       commands::create_project,
       commands::update_project,
       commands::delete_project,
-      // Scores
-      commands::get_employee_scores,
-      commands::upsert_employee_score,
-      commands::delete_employee_score,
+      commands::update_freelancer_payment_status,
+      commands::assign_freelance_payment,
+      commands::get_freelance_payments,
+      commands::get_project_stats,
+      commands::assign_invoice_to_project,
+      commands::get_project_tasks,
+      commands::create_project_task,
+      commands::update_project_task,
+      commands::update_project_task_status,
+      commands::delete_project_task,
+      commands::get_project_deliverables,
+      commands::create_project_deliverable,
+      commands::update_project_deliverable,
+      commands::delete_project_deliverable,
       // PDF
       commands::generate_pdf,
       commands::open_pdf,

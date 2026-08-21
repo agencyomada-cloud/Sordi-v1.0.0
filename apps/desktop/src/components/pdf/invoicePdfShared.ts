@@ -101,6 +101,7 @@ export interface PDFSettings {
   body_pattern_data?: string;
   /** Not a company setting — whether the generating device has an active Sordi license. Drives the "Created by Sordi" watermark. */
   license_active?: boolean;
+  invoice_pdf_font?: string;
 }
 
 /** Every currency figure on an Algerian invoice is shown as "X XXX,XX DZD". */
@@ -198,6 +199,33 @@ export function resolveInvoiceData(invoice: PDFInvoice): ResolvedInvoiceData {
   };
 }
 
+export interface DocumentSectionFlags {
+  showTva: boolean;
+  showTimbre: boolean;
+  showMontantEnLettres: boolean;
+  showPaymentMethod: boolean;
+  /** "Total TTC"/"Net à déduire" implies tax is baked in — misleading once
+   *  the TVA line is hidden, so order/delivery get a plain "Total" label. */
+  grandTotalLabel: string;
+}
+
+/**
+ * Which invoice-specific legal/tax sections apply to this document type.
+ * Orders and delivery notes are internal operational documents, not tax
+ * instruments — TVA breakdown, droit de timbre, and "montant en lettres"
+ * are Algerian invoice-specific legal requirements that don't apply to them.
+ */
+export function getDocumentSectionFlags(data: Pick<ResolvedInvoiceData, 'isDelivery' | 'isOrder' | 'isCreditNote'>): DocumentSectionFlags {
+  const isOrderOrDelivery = data.isDelivery || data.isOrder;
+  return {
+    showTva: !isOrderOrDelivery,
+    showTimbre: !isOrderOrDelivery,
+    showMontantEnLettres: !isOrderOrDelivery,
+    showPaymentMethod: !isOrderOrDelivery,
+    grandTotalLabel: data.isCreditNote ? "Net à déduire" : isOrderOrDelivery ? "Total" : "Total TTC",
+  };
+}
+
 /**
  * Splits the settings' phone field(s) into a clean list. No fallback phone
  * numbers here — an unconfigured company simply shows none, rather than a
@@ -232,3 +260,24 @@ export const INVOICE_PDF_THEMES: { value: InvoicePdfTheme; label: string; descri
   { value: 'epure', label: 'Épuré', description: "Traits fins, aucune couleur de fond, hiérarchie typographique minimale." },
   { value: 'moderne', label: 'Moderne', description: "Bandeau et accents dans votre couleur de marque, tableau aéré." },
 ];
+
+/**
+ * The four selectable invoice PDF fonts, set in Settings. `label` doubles as
+ * the exact family name passed to react-pdf's Font.register in each theme
+ * file (InvoicePDFDocument/InvoiceTemplateEpure/InvoiceTemplateModerne) —
+ * keep it in sync with those registrations if this list changes.
+ */
+export type InvoicePdfFont = 'montserrat' | 'inter' | 'poppins' | 'roboto';
+
+export const INVOICE_PDF_FONTS: { value: InvoicePdfFont; label: string; description: string }[] = [
+  { value: 'montserrat', label: 'Montserrat', description: "La police de l'application Sordi — cohérence totale entre l'app et vos documents." },
+  { value: 'inter', label: 'Inter', description: "Conçue pour les écrans, très lisible en petite taille — look produit/SaaS." },
+  { value: 'poppins', label: 'Poppins', description: "Géométrique et chaleureuse, un rendu moderne et accueillant." },
+  { value: 'roboto', label: 'Roboto', description: "Neutre et professionnelle, l'un des choix les plus classiques pour les documents." },
+];
+
+/** Family name to hand to react-pdf's `fontFamily` style property — falls back to Montserrat (the app's own font) when unset or unrecognized. */
+export function resolveInvoicePdfFontFamily(settings?: PDFSettings): string {
+  const match = INVOICE_PDF_FONTS.find((f) => f.value === settings?.invoice_pdf_font);
+  return match ? match.label : 'Montserrat';
+}

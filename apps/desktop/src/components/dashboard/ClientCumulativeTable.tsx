@@ -103,7 +103,8 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
         setIsExportingPDF(true);
         try {
             const periodLabel = months.length > 0 ? `${months.join(", ")} ${year}` : `${year}`;
-            await generateCumulativesPDF(data, totals, periodLabel, settings);
+            const totalsForPDF = { total_ht: totals.ht, total_tva: totals.tva, total_timbre: totals.timbre, total_ttc: totals.ttc };
+            await generateCumulativesPDF(data, totalsForPDF, periodLabel, settings);
       toast.success("PDF généré et téléchargé avec succès");
         } catch (error) {
             console.error("Erreur PDF:", error);

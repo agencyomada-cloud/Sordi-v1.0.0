@@ -1,11 +1,19 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { db } from "@/lib/database";
+import { db, type LicenseStatus } from "@/lib/database";
+
+// omada-agency-branch-only: set via apps/desktop/.env.omada-agency
+// (VITE_LICENSE_BYPASS=true), never present in a real Sordi build. Keeps the
+// licensing code itself (license.rs, this file's real query path) completely
+// untouched — this is a single additive short-circuit, not a modification of
+// how licensing works.
+const LICENSE_BYPASS = import.meta.env.VITE_LICENSE_BYPASS === "true";
+const BYPASS_STATUS: LicenseStatus = { state: "active", client_reference_id: null, expires_at: null };
 
 export function useLicenseStatus() {
   return useQuery({
     queryKey: ["license", "status"],
-    queryFn: () => db.license.getStatus(),
+    queryFn: () => (LICENSE_BYPASS ? Promise.resolve(BYPASS_STATUS) : db.license.getStatus()),
     // Local-only check on the Rust side (a file read + signature verify) —
     // cheap enough to treat as fresh on every focus, not just app start.
     staleTime: 0,
@@ -30,6 +38,7 @@ export function useActivateLicense() {
 export function useLicenseBackgroundVerify() {
   const queryClient = useQueryClient();
   useEffect(() => {
+    if (LICENSE_BYPASS) return;
     let cancelled = false;
     db.license
       .verifyBackground()

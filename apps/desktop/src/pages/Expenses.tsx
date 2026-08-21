@@ -5,8 +5,6 @@ import {
   RiReceiptLine as Receipt,
   RiWallet3Line as Wallet
 } from "@remixicon/react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, Label, Input, Textarea } from "@sordi/ui";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { useExpenses, useCreateExpense, useDeleteExpense, useExpenseStats } from "@/hooks/useExpenses";
@@ -95,13 +93,8 @@ const Expenses = () => {
   ];
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
-        <main className="flex-1 p-8 pt-4">
+    <>
+      <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
@@ -316,9 +309,8 @@ const Expenses = () => {
             </Table>
           </div>
           </div>
-        </main>
-      </div>
-    </div>
+      </main>
+    </>
   );
 };
 

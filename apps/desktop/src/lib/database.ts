@@ -240,6 +240,8 @@ export interface Invoice {
   selected_secondary_address?: string;
   custom_title?: string | null;
   payment_method?: string | null;
+  /** omada-agency branch only — which project (if any) this invoice's revenue counts toward. */
+  project_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -496,6 +498,14 @@ export interface Employee {
   is_active: boolean | null;
   created_at: string;
   updated_at: string;
+  // omada-agency branch only — HR/payroll fields.
+  base_salary: number | null;
+  hire_date: string | null;
+  contract_type: string | null;
+  rib: string | null;
+  external_code: string | null;
+  /** Relative to app_data_dir, e.g. "employee_photos/<id>.jpg" — resolve with useAppDataDir + convertFileSrc. */
+  photo_path: string | null;
 }
 
 export interface CreateEmployeeData {
@@ -504,6 +514,102 @@ export interface CreateEmployeeData {
   email?: string;
   phone?: string;
   address?: string;
+  base_salary?: number | null;
+  hire_date?: string | null;
+  contract_type?: string | null;
+  rib?: string | null;
+  external_code?: string | null;
+}
+
+export interface EmployeeDocument {
+  id: string;
+  employee_id: string;
+  name: string;
+  doc_type: string | null;
+  /** Relative to app_data_dir — resolve with useAppDataDir + convertFileSrc/openPath. */
+  file_path: string;
+  created_at: string;
+}
+
+export interface EmployeeTaskWorkload {
+  employee_id: string;
+  employee_name: string;
+  task_count: number;
+}
+
+// ============= HR / PAYROLL (omada-agency branch only) =============
+// Not part of the core Sordi product. See PROJECT_STATE.md.
+
+export interface EmployeeAbsenceStats {
+  employee_id: string;
+  month: string;
+  working_days_in_month: number;
+  absence_days: number;
+  flagged: boolean;
+}
+
+export interface PunchImportRow {
+  external_code: string;
+  punch_time: string;
+}
+
+export interface PunchImportSummary {
+  imported: number;
+  skipped_duplicates: number;
+  unmatched_employee_codes: string[];
+}
+
+export interface UnmappedDeviceCode {
+  external_code: string;
+  punch_count: number;
+  last_punch_time: string;
+}
+
+export interface EmployeeAdvance {
+  id: string;
+  employee_id: string;
+  amount: number;
+  date_taken: string;
+  month_to_deduct: string;
+  deducted: boolean;
+  deducted_in_payroll_run_id: string | null;
+  created_at: string;
+}
+
+export interface CreateEmployeeAdvanceData {
+  employee_id: string;
+  amount: number;
+  date_taken: string;
+}
+
+export interface EmployeeAdvanceTotals {
+  total_taken: number;
+  total_pending: number;
+}
+
+export interface PayrollRun {
+  id: string;
+  employee_id: string;
+  month: string;
+  base_salary: number;
+  working_days_in_month: number;
+  absence_days: number;
+  daily_rate: number;
+  absence_deduction: number;
+  primes: number;
+  avance_deduction: number;
+  net_a_payer: number;
+  paid: boolean;
+  paid_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayrollDashboardStats {
+  month: string;
+  total_payroll_cost: number;
+  flagged_employee_count: number;
+  pending_payroll_count: number;
 }
 
 // ============= CLIENT DRAFT PRODUCTS =============
@@ -529,52 +635,116 @@ export interface CreateClientDraftProductData {
   unit_price: number;
 }
 
-// ============= PROJECTS =============
+// ============= PROJECTS (omada-agency branch only) =============
+// Agency project-management module — client-linked, invoice-derived budget.
+// Not part of the core Sordi product.
+
+export type FreelancePaymentStatus = "non_paye" | "paye";
 
 export interface Project {
   id: string;
+  client_id: string;
   name: string;
-  client_name: string | null;
-  team_members: string | null;
-  progress: number;
-  status: string | null;
-  color: string | null;
+  service_categories: string[];
+  responsible_person: string | null;
+  start_date: string | null;
+  deadline: string | null;
+  planned_budget: number;
   created_at: string;
   updated_at: string;
+  // omada-agency branch only — freelancer lump-sum payment tracking.
+  freelancer_id: string | null;
+  montant_convenu: number | null;
+  statut_paiement: FreelancePaymentStatus;
+  date_paiement: string | null;
 }
 
 export interface CreateProjectData {
+  client_id: string;
   name: string;
-  client_name?: string;
-  team_members?: string;
-  progress: number;
-  status?: string;
-  color?: string;
+  service_categories: string[];
+  responsible_person?: string | null;
+  start_date?: string | null;
+  deadline?: string | null;
+  planned_budget: number;
+  freelancer_id?: string | null;
+  montant_convenu?: number | null;
 }
 
-// ============= SCORES =============
+export interface FreelancePayment {
+  project_id: string;
+  project_name: string;
+  freelancer_id: string;
+  freelancer_name: string;
+  montant_convenu: number | null;
+  statut_paiement: FreelancePaymentStatus;
+  date_paiement: string | null;
+}
 
-export interface EmployeeScore {
+/** Raw aggregation only (mirrors ClientOverviewStats) — every status/
+ *  threshold rule lives in src/lib/projectOverview.ts, not here. */
+export interface ProjectStats {
+  project_id: string;
+  planned_budget: number;
+  budget_facture: number;
+  budget_paye: number;
+  task_count: number;
+  tasks_approved_count: number;
+  start_date: string | null;
+  deadline: string | null;
+}
+
+export type ProjectTaskStatus = "à_faire" | "en_cours" | "en_revision_interne" | "envoye_client" | "approuve";
+
+export interface ProjectTask {
   id: string;
-  employee_id: string;
-  project_id: string | null;
-  month: string;
-  year: string;
-  feature: string;
-  score: number;
-  notes: string | null;
+  project_id: string;
+  title: string;
+  assigned_resource_id: string | null;
+  status: ProjectTaskStatus;
+  revision_count: number;
+  due_date: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface CreateScoreData {
-  employee_id: string;
-  project_id?: string | null;
-  month: string;
-  year: string;
-  feature: string;
-  score: number;
-  notes?: string;
+export interface CreateProjectTaskData {
+  project_id: string;
+  title: string;
+  assigned_resource_id?: string | null;
+  due_date?: string | null;
+}
+
+export interface UpdateProjectTaskData {
+  title: string;
+  assigned_resource_id?: string | null;
+  due_date?: string | null;
+}
+
+export interface ProjectDeliverable {
+  id: string;
+  project_id: string;
+  name: string;
+  type: string | null;
+  link_or_path: string | null;
+  delivered_to_client: boolean;
+  approved: boolean;
+  created_at: string;
+}
+
+export interface CreateProjectDeliverableData {
+  project_id: string;
+  name: string;
+  type?: string | null;
+  link_or_path?: string | null;
+}
+
+export interface UpdateProjectDeliverableData {
+  name: string;
+  type?: string | null;
+  link_or_path?: string | null;
+  delivered_to_client: boolean;
+  approved: boolean;
 }
 
 // ============= HISTORY =============
@@ -746,21 +916,93 @@ export const db = {
     create: (data: CreateEmployeeData): Promise<Employee> => safeInvoke("create_employee", { data }, () => mockStore.createEmployee(data)),
     update: (id: string, data: CreateEmployeeData): Promise<Employee> => safeInvoke("update_employee", { id, data }, () => ({} as any)),
     delete: (id: string): Promise<void> => safeInvoke("delete_employee", { id }, () => {}),
+    setPhoto: (employee_id: string, source_path: string): Promise<Employee> =>
+      safeInvoke("set_employee_photo", { employeeId: employee_id, sourcePath: source_path }),
+    removePhoto: (employee_id: string): Promise<Employee> => safeInvoke("remove_employee_photo", { employeeId: employee_id }),
   },
 
-  // Projects
+  // Employee documents (omada-agency branch only)
+  employeeDocuments: {
+    getAll: (employee_id: string): Promise<EmployeeDocument[]> => safeInvoke("get_employee_documents", { employeeId: employee_id }, () => []),
+    add: (employee_id: string, source_path: string, name: string, doc_type: string | null): Promise<EmployeeDocument> =>
+      safeInvoke("add_employee_document", { employeeId: employee_id, sourcePath: source_path, name, docType: doc_type }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_employee_document", { id }),
+  },
+  employeeTaskWorkload: {
+    getAll: (): Promise<EmployeeTaskWorkload[]> => safeInvoke("get_employee_task_workload", undefined, () => []),
+  },
+
+  // HR / Payroll (omada-agency branch only)
+  attendance: {
+    import: (rows: PunchImportRow[]): Promise<PunchImportSummary> => safeInvoke("import_punch_records", { rows }),
+    getUnmappedCodes: (): Promise<UnmappedDeviceCode[]> => safeInvoke("get_unmapped_device_codes", undefined, () => []),
+  },
+  employeeAdvances: {
+    getAll: (employee_id: string): Promise<EmployeeAdvance[]> => safeInvoke("get_employee_advances", { employeeId: employee_id }, () => []),
+    getTotals: (employee_id: string): Promise<EmployeeAdvanceTotals> =>
+      safeInvoke("get_employee_advance_totals", { employeeId: employee_id }, () => ({ total_taken: 0, total_pending: 0 })),
+    create: (data: CreateEmployeeAdvanceData): Promise<EmployeeAdvance> => safeInvoke("create_employee_advance", { data }),
+    setDeducted: (id: string, deducted: boolean): Promise<EmployeeAdvance> => safeInvoke("set_employee_advance_deducted", { id, deducted }),
+  },
+  payroll: {
+    getAbsenceStats: (employee_id: string, month: string): Promise<EmployeeAbsenceStats> =>
+      safeInvoke("get_employee_absence_stats", { employeeId: employee_id, month }),
+    run: (employee_id: string, month: string, primes?: number): Promise<PayrollRun> =>
+      safeInvoke("run_payroll", { employeeId: employee_id, month, primes }),
+    getRuns: (employee_id?: string, month?: string, paid?: boolean): Promise<PayrollRun[]> =>
+      safeInvoke("get_payroll_runs", { employeeId: employee_id, month, paid }, () => []),
+    setPaid: (id: string, paid: boolean, paid_date: string | null): Promise<PayrollRun> =>
+      safeInvoke("update_payroll_paid", { id, paid, paidDate: paid_date }),
+    getDashboardStats: (month: string): Promise<PayrollDashboardStats> =>
+      safeInvoke("get_payroll_dashboard_stats", { month }, () => ({ month, total_payroll_cost: 0, flagged_employee_count: 0, pending_payroll_count: 0 })),
+  },
+
+  // Projects (omada-agency branch only)
   projects: {
     getAll: (): Promise<Project[]> => safeInvoke("get_projects", undefined, () => []),
-    create: (data: CreateProjectData): Promise<Project> => safeInvoke("create_project", { data }, () => ({} as any)),
-    update: (id: string, data: CreateProjectData): Promise<Project> => safeInvoke("update_project", { id, data }, () => ({} as any)),
-    delete: (id: string): Promise<void> => safeInvoke("delete_project", { id }, () => {}),
+    getById: (id: string): Promise<Project | null> => safeInvoke("get_project", { id }, () => null),
+    create: (data: CreateProjectData): Promise<Project> => safeInvoke("create_project", { data }),
+    update: (id: string, data: CreateProjectData): Promise<Project> => safeInvoke("update_project", { id, data }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_project", { id }),
+    setFreelancerPaymentStatus: (project_id: string, statut_paiement: FreelancePaymentStatus, date_paiement: string | null): Promise<Project> =>
+      safeInvoke("update_freelancer_payment_status", { projectId: project_id, statutPaiement: statut_paiement, datePaiement: date_paiement }),
+    getFreelancePayments: (): Promise<FreelancePayment[]> => safeInvoke("get_freelance_payments", undefined, () => []),
+    assignFreelancePayment: (
+      project_id: string,
+      freelancer_id: string,
+      montant_convenu: number,
+      statut_paiement: FreelancePaymentStatus,
+      date_paiement: string | null
+    ): Promise<Project> =>
+      safeInvoke("assign_freelance_payment", {
+        projectId: project_id,
+        freelancerId: freelancer_id,
+        montantConvenu: montant_convenu,
+        statutPaiement: statut_paiement,
+        datePaiement: date_paiement,
+      }),
+    // project_id omitted -> stats for every project (list page). Set -> just
+    // that project (detail page overview), same split as clients' overview stats.
+    getStats: (project_id?: string): Promise<ProjectStats[]> => safeInvoke("get_project_stats", { projectId: project_id }, () => []),
+    assignInvoice: (invoice_id: string, project_id: string | null): Promise<void> =>
+      safeInvoke("assign_invoice_to_project", { invoiceId: invoice_id, projectId: project_id }),
   },
 
-  // Scores
-  scores: {
-    getByPeriod: (month: string, year: string): Promise<EmployeeScore[]> => safeInvoke("get_employee_scores", { month, year }, () => []),
-    upsert: (data: CreateScoreData): Promise<EmployeeScore> => safeInvoke("upsert_employee_score", { data }, () => ({} as any)),
-    delete: (id: string): Promise<void> => safeInvoke("delete_employee_score", { id }, () => {}),
+  // Project tasks
+  projectTasks: {
+    getAll: (project_id: string): Promise<ProjectTask[]> => safeInvoke("get_project_tasks", { projectId: project_id }, () => []),
+    create: (data: CreateProjectTaskData): Promise<ProjectTask> => safeInvoke("create_project_task", { data }),
+    update: (id: string, data: UpdateProjectTaskData): Promise<ProjectTask> => safeInvoke("update_project_task", { id, data }),
+    updateStatus: (id: string, status: ProjectTaskStatus): Promise<ProjectTask> => safeInvoke("update_project_task_status", { id, status }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_project_task", { id }),
+  },
+
+  // Project deliverables
+  projectDeliverables: {
+    getAll: (project_id: string): Promise<ProjectDeliverable[]> => safeInvoke("get_project_deliverables", { projectId: project_id }, () => []),
+    create: (data: CreateProjectDeliverableData): Promise<ProjectDeliverable> => safeInvoke("create_project_deliverable", { data }),
+    update: (id: string, data: UpdateProjectDeliverableData): Promise<ProjectDeliverable> => safeInvoke("update_project_deliverable", { id, data }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_project_deliverable", { id }),
   },
 
   // Settings

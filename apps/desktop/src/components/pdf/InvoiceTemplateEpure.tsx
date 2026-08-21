@@ -6,13 +6,40 @@ import {
   resolveInvoiceData,
   resolveCompanyPhones,
   formatPhone,
+  getDocumentSectionFlags,
+  resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
 
+// The four selectable document fonts (Paramètres > Thème de la facture PDF >
+// Police) — all registered up front; react-pdf only actually fetches the
+// family a given Text style references, so registering all four here costs
+// nothing beyond bookkeeping. Keep in sync with INVOICE_PDF_FONTS.
 Font.register({
-  family: 'Space Grotesk',
+  family: 'Montserrat',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj7oUXskPMVBSSJLq2I.ttf' },
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj4PVnskPMVBSSJLq2I.ttf', fontWeight: 'bold' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Inter',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf' },
+    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Poppins',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf' },
+    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Roboto',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf' },
+    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
   ]
 });
 
@@ -28,7 +55,9 @@ interface InvoiceTemplateEpureProps {
  */
 export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpureProps) {
   const accent = settings?.primary_color || "#476CFF";
+  const fontFamily = resolveInvoicePdfFontFamily(settings);
   const data = resolveInvoiceData(invoice);
+  const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
 
   const styles = StyleSheet.create({
@@ -36,7 +65,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
       width: 595.28,
       height: 841.89,
       padding: 42,
-      fontFamily: 'Space Grotesk',
+      fontFamily,
       fontSize: 9,
       color: '#1a1a1a',
       backgroundColor: '#ffffff',
@@ -44,9 +73,9 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
 
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
     logoImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
-    companyName: { fontSize: 12, fontFamily: 'Space Grotesk', fontWeight: 'bold', letterSpacing: 0.5, color: '#111111' },
+    companyName: { fontSize: 12, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#111111' },
     headerRight: { alignItems: 'flex-end' },
-    docTitle: { fontSize: 18, fontFamily: 'Space Grotesk', fontWeight: 'bold', letterSpacing: 2, color: '#111111', textTransform: 'uppercase' },
+    docTitle: { fontSize: 18, fontFamily, fontWeight: 'bold', letterSpacing: 2, color: '#111111', textTransform: 'uppercase' },
     docNumber: { fontSize: 9, color: '#6b7280', marginTop: 3 },
 
     accentRule: { height: 1.5, backgroundColor: accent, marginBottom: 24 },
@@ -54,11 +83,11 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 },
     metaBlock: { width: '46%' },
     metaLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
-    clientName: { fontSize: 11, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#111111', textTransform: 'uppercase', marginBottom: 2 },
+    clientName: { fontSize: 11, fontFamily, fontWeight: 'bold', color: '#111111', textTransform: 'uppercase', marginBottom: 2 },
     plainLine: { fontSize: 8.5, color: '#374151', marginBottom: 1.5, lineHeight: 1.3 },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
     metaRowLabel: { fontSize: 8.5, color: '#6b7280' },
-    metaRowValue: { fontSize: 8.5, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#111111' },
+    metaRowValue: { fontSize: 8.5, fontFamily, fontWeight: 'bold', color: '#111111' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 4, textAlign: 'right' },
 
     table: { marginBottom: 22 },
@@ -85,8 +114,8 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     totalsLabel: { fontSize: 8.5, color: '#6b7280' },
     totalsValue: { fontSize: 8.5, color: '#111111' },
     ttcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderColor: '#111111' },
-    ttcLabel: { fontSize: 10, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#111111' },
-    ttcValue: { fontSize: 12, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: accent },
+    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#111111' },
+    ttcValue: { fontSize: 12, fontFamily, fontWeight: 'bold', color: accent },
 
     wordsBlock: { marginBottom: 26 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 },
@@ -103,7 +132,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
     footerCol: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     footerItem: { fontSize: 6.8, color: '#6b7280' },
-    footerItemStrong: { fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#374151' },
+    footerItemStrong: { fontFamily, fontWeight: 'bold', color: '#374151' },
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
     sordiWatermark: { position: 'absolute', left: 42, right: 42, bottom: 8, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
@@ -160,7 +189,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               <Text style={styles.metaRowLabel}>Numéro</Text>
               <Text style={styles.metaRowValue}>{data.docNumber || "-"}</Text>
             </View>
-            {!data.isProforma && !data.isCreditNote && (
+            {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
               <View style={styles.metaRow}>
                 <Text style={styles.metaRowLabel}>Paiement</Text>
                 <Text style={styles.metaRowValue}>{invoice.payment_method || "Chèque"}</Text>
@@ -208,11 +237,13 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               <Text style={styles.totalsLabel}>Total HT</Text>
               <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
             </View>
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Total TVA</Text>
-              <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
-            </View>
-            {(invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
+            {flags.showTva && (
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Total TVA</Text>
+                <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+              </View>
+            )}
+            {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
               <View style={styles.totalsRow}>
                 <Text style={styles.totalsLabel}>Droit de Timbre</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
@@ -225,16 +256,18 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               </View>
             )}
             <View style={styles.ttcRow}>
-              <Text style={styles.ttcLabel}>{data.isCreditNote ? "Net à déduire" : "Total TTC"}</Text>
+              <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
               <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.wordsBlock}>
-          <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
-          <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
-        </View>
+        {flags.showMontantEnLettres && (
+          <View style={styles.wordsBlock}>
+            <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
+            <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+          </View>
+        )}
 
         <View style={styles.signRow}>
           <Text style={styles.paymentText} />
@@ -270,7 +303,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
           </View>
         </View>
         {settings?.license_active === false && (
-          <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.0 — www.sordi.app</Text>
+          <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.1 — www.sordi.app</Text>
         )}
 
       </Page>

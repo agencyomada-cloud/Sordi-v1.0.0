@@ -9,6 +9,9 @@ import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useExpenses } from "@/hooks/useExpenses";
 import { useClients } from "@/hooks/useClients";
+import { useProjectStatsMap } from "@/hooks/useProjects";
+import { useEmployeeTaskWorkload } from "@/hooks/useEmployees";
+import { computeProjectStatus, type ProjectStatusKey } from "@/lib/projectOverview";
 import {
   RiArrowRightUpLine as TrendingUp,
   RiArrowRightDownLine as TrendingDown,
@@ -19,6 +22,8 @@ import {
   RiTableLine as TableIcon,
   RiArrowRightSLine,
   RiPercentLine,
+  RiFolderChartLine,
+  RiTeamLine,
 } from "@remixicon/react";
 import {
   AreaChart,
@@ -72,6 +77,35 @@ const recoveryChartConfig = {
   rate: { label: "Recouvré", color: CHART_BLUE },
 } satisfies ChartConfig;
 
+// Matches ProjectStatusBadge's established Tailwind colors (the "700" shade
+// of each badge's family), so this chart and the badges elsewhere in the
+// app never disagree about what a status looks like. "en_retard" and
+// "depassement_budgetaire" share one color as badges (both red-700, fine
+// with a text label next to them) — indistinguishable as two pie slices
+// though, so depassement_budgetaire gets an adjacent rose tone here instead
+// of literally inventing an unrelated color.
+const PROJECT_STATUS_COLORS: Record<ProjectStatusKey, string> = {
+  termine: "#15803d", // green-700
+  nouveau: "#1d4ed8", // blue-700
+  en_retard: "#b91c1c", // red-700 — exact badge match
+  depassement_budgetaire: "#e11d48", // rose-600 — same danger family, distinguishable from en_retard
+  a_risque: "#c2410c", // orange-700
+  en_cours: "#0369a1", // sky-700
+};
+
+const projectStatusChartConfig = {
+  termine: { label: "Terminé", color: PROJECT_STATUS_COLORS.termine },
+  nouveau: { label: "Nouveau", color: PROJECT_STATUS_COLORS.nouveau },
+  en_retard: { label: "En retard", color: PROJECT_STATUS_COLORS.en_retard },
+  depassement_budgetaire: { label: "Dépassement budgétaire", color: PROJECT_STATUS_COLORS.depassement_budgetaire },
+  a_risque: { label: "À risque", color: PROJECT_STATUS_COLORS.a_risque },
+  en_cours: { label: "En cours", color: PROJECT_STATUS_COLORS.en_cours },
+} satisfies ChartConfig;
+
+const workloadChartConfig = {
+  task_count: { label: "Tâches en cours", color: CHART_BLUE },
+} satisfies ChartConfig;
+
 const Index = () => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
@@ -85,6 +119,8 @@ const Index = () => {
   const { data: allInvoices } = useInvoices();
   const { data: allExpenses } = useExpenses();
   const { data: clients } = useClients();
+  const { data: projectStatsById } = useProjectStatsMap();
+  const { data: workload } = useEmployeeTaskWorkload();
   const navigate = useNavigate();
 
   // Filter local data
@@ -182,6 +218,21 @@ const Index = () => {
     { key: "pending", name: "En attente", value: (invoiceStatusData["issued"] || 0) + (invoiceStatusData["draft"] || 0) },
     { key: "overdue", name: "En retard", value: invoiceStatusData["overdue"] || 0 },
   ].filter(s => s.value > 0);
+
+  // Project status breakdown — same computeProjectStatus() the projects
+  // list/detail pages use for their badges, so this can't drift from them.
+  const projectStatusCounts: Record<ProjectStatusKey, number> = {
+    termine: 0, nouveau: 0, en_retard: 0, depassement_budgetaire: 0, a_risque: 0, en_cours: 0,
+  };
+  for (const stats of projectStatsById?.values() ?? []) {
+    projectStatusCounts[computeProjectStatus(stats).key]++;
+  }
+  const totalProjectsCount = Object.values(projectStatusCounts).reduce((a, b) => a + b, 0);
+  const projectStatusChartData = (Object.keys(projectStatusCounts) as ProjectStatusKey[])
+    .map((key) => ({ key, name: projectStatusChartConfig[key].label, value: projectStatusCounts[key] }))
+    .filter((s) => s.value > 0);
+
+  const workloadChartData = (workload ?? []).map((w) => ({ name: w.employee_name, task_count: w.task_count }));
 
   // Year options
   const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
@@ -347,6 +398,85 @@ const Index = () => {
                 </ChartContainer>
               </CardContent>
             </Card>
+
+            {/* Projects & workload */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch animate-fade-in-up animation-delay-200">
+              <Card className="flex flex-col card-hover">
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <RiFolderChartLine className="w-4 h-4 text-muted-foreground" />
+                    Répartition des Projets par Statut
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col sm:flex-row items-center gap-8">
+                  {projectStatusChartData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8 w-full">Aucun projet pour le moment</p>
+                  ) : (
+                    <>
+                      <div className="relative shrink-0 w-64 h-64 mx-auto sm:mx-0">
+                        <ChartContainer config={projectStatusChartConfig} className="w-full h-full">
+                          <PieChart>
+                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                            <Pie data={projectStatusChartData} cx="50%" cy="50%" innerRadius={64} outerRadius={100} paddingAngle={2} dataKey="value" nameKey="key">
+                              {projectStatusChartData.map((entry) => (
+                                <Cell key={entry.key} fill={`var(--color-${entry.key})`} strokeWidth={0} />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ChartContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-3xl font-bold text-foreground tabular-nums">{totalProjectsCount}</span>
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide">Projets</span>
+                        </div>
+                      </div>
+                      <div className="w-full sm:flex-1 space-y-1">
+                        {projectStatusChartData.map((s) => (
+                          <div key={s.key} className="flex items-center justify-between py-1.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: `var(--color-${s.key})` }} />
+                              <span className="text-sm text-muted-foreground">{s.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-sm font-semibold text-foreground tabular-nums">{s.value}</span>
+                              <span className="text-xs text-muted-foreground tabular-nums w-9 text-right">
+                                {totalProjectsCount > 0 ? Math.round((s.value / totalProjectsCount) * 100) : 0}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="flex flex-col card-hover">
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <RiTeamLine className="w-4 h-4 text-muted-foreground" />
+                    Charge de Travail par Employé
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Tâches actuellement assignées, hors tâches approuvées
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 flex items-center">
+                  {workloadChartData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8 w-full">Aucun employé actif</p>
+                  ) : (
+                    <ChartContainer config={workloadChartConfig} className="aspect-auto h-80 w-full">
+                      <BarChart layout="vertical" data={workloadChartData} margin={{ left: 0, right: 16 }}>
+                        <CartesianGrid horizontal={false} strokeDasharray="3 3" className="stroke-border/50" />
+                        <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
+                        <YAxis dataKey="name" type="category" width={110} tickLine={false} axisLine={false} fontSize={12} />
+                        <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                        <Bar dataKey="task_count" fill="var(--color-task_count)" radius={4} maxBarSize={24} />
+                      </BarChart>
+                    </ChartContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Secondary charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch animate-fade-in-up animation-delay-300">

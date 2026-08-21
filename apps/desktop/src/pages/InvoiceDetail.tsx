@@ -15,14 +15,14 @@ import {
   RiMore2Fill as MoreVertical
 } from "@remixicon/react";
 import { toast } from "sonner";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@sordi/ui";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import { RiFolderChartLine as FolderIcon } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/database";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
+import { useProjects, useAssignInvoiceToProject } from "@/hooks/useProjects";
 import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64 } from "@/lib/pdfGenerator";
 import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
@@ -103,6 +103,8 @@ export default function InvoiceDetailPage() {
   const { data: invoice, isLoading, error, refetch } = useInvoice(id);
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
+  const { data: projects } = useProjects();
+  const assignInvoiceToProject = useAssignInvoiceToProject();
   const convertProforma = useConvertProforma();
   const [showPreview, setShowPreview] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -187,56 +189,38 @@ export default function InvoiceDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Chargement...</div>
-          </main>
-        </div>
-      </div>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      </main>
     );
   }
 
   if (!invoice && !isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-muted-foreground mb-4">Facture non trouvée</div>
-              {id && (
-                <div className="text-sm text-muted-foreground mb-4">
-                  ID: {id}
-                </div>
-              )}
-              {error && (
-                <div className="text-sm text-destructive mb-4">
-                  Erreur: {error instanceof Error ? error.message : String(error)}
-                </div>
-              )}
-              <Button onClick={() => navigate("/invoices")}>
-                Retour aux factures
-              </Button>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-muted-foreground mb-4">Facture non trouvée</div>
+          {id && (
+            <div className="text-sm text-muted-foreground mb-4">
+              ID: {id}
             </div>
-          </main>
+          )}
+          {error && (
+            <div className="text-sm text-destructive mb-4">
+              Erreur: {error instanceof Error ? error.message : String(error)}
+            </div>
+          )}
+          <Button onClick={() => navigate("/invoices")}>
+            Retour aux factures
+          </Button>
         </div>
-      </div>
+      </main>
     );
   }
 
   const isCreditNote = invoice.invoice_type === "credit_note";
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
         <main className="flex-1 p-8 pt-4">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -276,6 +260,27 @@ export default function InvoiceDetailPage() {
                 <p className="text-muted-foreground mt-1">
                   {invoice.clients?.name} • {formatDate(invoice.invoice_date)}
                 </p>
+                {/* omada-agency branch only — links this invoice to a project so its
+                    total_ttc/amount_paid count toward that project's derived budget */}
+                <div className="flex items-center gap-2 mt-2">
+                  <FolderIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <Select
+                    value={invoice.project_id ?? "none"}
+                    onValueChange={(v) => assignInvoiceToProject.mutate({ invoiceId: invoice.id, projectId: v === "none" ? null : v })}
+                  >
+                    <SelectTrigger className="h-7 w-[220px] text-xs border-none bg-transparent px-2 shadow-none hover:bg-secondary/50">
+                      <SelectValue placeholder="Aucun projet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucun projet</SelectItem>
+                      {projects?.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -522,7 +527,5 @@ export default function InvoiceDetailPage() {
             title={`Aperçu PDF Vectoriel - N° ${invoice.invoice_number || ""}`}
           />
         </main>
-      </div >
-    </div >
   );
 }

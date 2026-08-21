@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useCreateClient, useDeleteClient } from "@/hooks/useClients";
 import { useCreateProduct } from "@/hooks/useProducts";
 import { useCreateInvoice, useDeleteInvoice } from "@/hooks/useInvoices";
@@ -156,11 +154,7 @@ export default function VerificationTest() {
     };
 
     return (
-        <div className="flex min-h-screen bg-background">
-            <Sidebar />
-            <div className="flex-1 flex flex-col">
-                <Header />
-                <main className="flex-1 p-8">
+        <main className="flex-1 p-8">
                     <div className="mb-6">
                         <h1 className="text-2xl font-bold mb-2">Test de Vérification Système</h1>
                         <p className="text-muted-foreground">
@@ -211,8 +205,6 @@ export default function VerificationTest() {
                             </div>
                         </CardContent>
                     </Card>
-                </main>
-            </div>
-        </div>
+        </main>
     );
 }

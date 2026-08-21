@@ -366,41 +366,123 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
         [],
     )?;
 
-    // Create projects table
+    // omada-agency branch only: HR/payroll module (punch import, monthly
+    // payroll calculation, salary advances). Not part of the core Sordi
+    // product. See PROJECT_STATE.md.
+    migrate_punch_records_schema_if_needed(&conn)?;
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS projects (
+        "CREATE TABLE IF NOT EXISTS punch_records (
             id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            client_name TEXT,
-            team_members TEXT,
-            progress INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'En cours',
-            color TEXT,
+            external_code TEXT NOT NULL,
+            employee_id TEXT,
+            punch_time TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL,
+            UNIQUE (external_code, punch_time)
         )",
         [],
     )?;
 
-    // Create employee_scores table
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS employee_scores (
+        "CREATE TABLE IF NOT EXISTS payroll_runs (
             id TEXT PRIMARY KEY,
             employee_id TEXT NOT NULL,
-            project_id TEXT,
             month TEXT NOT NULL,
-            year TEXT NOT NULL,
-            feature TEXT NOT NULL,
-            score REAL DEFAULT 0,
-            notes TEXT,
+            base_salary REAL NOT NULL,
+            working_days_in_month REAL NOT NULL,
+            absence_days REAL NOT NULL,
+            daily_rate REAL NOT NULL,
+            absence_deduction REAL NOT NULL,
+            primes REAL DEFAULT 0,
+            avance_deduction REAL DEFAULT 0,
+            net_a_payer REAL NOT NULL,
+            paid INTEGER DEFAULT 0,
+            paid_date TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+            UNIQUE (employee_id, month)
         )",
         [],
     )?;
-    
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS employee_advances (
+            id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL,
+            amount REAL NOT NULL,
+            date_taken TEXT NOT NULL,
+            month_to_deduct TEXT NOT NULL,
+            deducted INTEGER DEFAULT 0,
+            deducted_in_payroll_run_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            FOREIGN KEY (deducted_in_payroll_run_id) REFERENCES payroll_runs(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    // omada-agency branch only: retires the old loosely-typed projects/
+    // employee_scores tables (confirmed empty in every database this app has
+    // ever created) before creating the new client-linked, invoice-derived
+    // project-management schema below. See PROJECT_STATE.md / this branch's
+    // own history for why — not part of the core Sordi product.
+    migrate_legacy_projects_module(&conn)?;
+
+    // Create projects table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            service_categories TEXT NOT NULL,
+            responsible_person TEXT,
+            start_date TEXT,
+            deadline TEXT,
+            planned_budget REAL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (client_id) REFERENCES clients(id)
+        )",
+        [],
+    )?;
+
+    // Create project_tasks table. status is one of: à_faire, en_cours,
+    // en_revision_interne, envoye_client, approuve — validated in Rust/TS,
+    // not a DB CHECK constraint (matches invoices.status/orders.status).
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS project_tasks (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            assigned_resource_id TEXT,
+            status TEXT NOT NULL DEFAULT 'à_faire',
+            revision_count INTEGER NOT NULL DEFAULT 0,
+            due_date TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_resource_id) REFERENCES employees(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    // Create project_deliverables table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS project_deliverables (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT,
+            link_or_path TEXT,
+            delivered_to_client INTEGER DEFAULT 0,
+            approved INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Create settings table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS settings (
@@ -487,6 +569,16 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // Migration: Add bank/reference to client_advances
     migrate_client_advances_if_needed(&conn)?;
 
+    // Migration: Add project_id to invoices (omada-agency branch only)
+    migrate_invoices_project_id_if_needed(&conn)?;
+
+    // Migration: Add payroll fields to employees (omada-agency branch only)
+    migrate_employees_payroll_fields_if_needed(&conn)?;
+    migrate_employee_photos_and_documents_if_needed(&conn)?;
+
+    // Migration: Add freelancer payment fields to projects (omada-agency branch only)
+    migrate_projects_freelance_fields_if_needed(&conn)?;
+
     // Migration: Add product_description to all items tables
     migrate_items_description_if_needed(&conn)?;
 
@@ -515,6 +607,200 @@ fn migrate_items_description_if_needed(conn: &Connection) -> Result<(), rusqlite
         }
     }
     
+    Ok(())
+}
+
+// omada-agency branch only. Old projects/employee_scores were confirmed
+// empty in every database this app has ever created (dev machine's current
+// + both pre-rename app-identity databases) before being retired in favor of
+// the client-linked/invoice-derived project module — see init_database's
+// call site. employee_scores depended entirely on the old projects table's
+// semantics (team-scoring against a loosely-typed tracker), so both go
+// together; only drops the old `projects` shape if it's still empty, so a
+// hypothetical install with real legacy rows is left alone rather than
+// silently destroyed.
+fn migrate_legacy_projects_module(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute("DROP TABLE IF EXISTS employee_scores", [])?;
+
+    let projects_table_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'projects'",
+        [],
+        |row| row.get(0),
+    )?;
+    if projects_table_exists == 0 {
+        return Ok(());
+    }
+
+    let table_info: Result<Vec<String>, _> = conn
+        .prepare("PRAGMA table_info(projects)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+    if let Ok(columns) = table_info {
+        let is_old_schema = !columns.contains(&"client_id".to_string());
+        if is_old_schema {
+            let row_count: i64 = conn.query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))?;
+            if row_count == 0 {
+                conn.execute("DROP TABLE projects", [])?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// omada-agency branch only. Adds payroll fields to the existing employees
+// table, matching the same PRAGMA table_info idiom as every other ALTER
+// migration in this file.
+// omada-agency branch only. The first cut of punch_records required
+// employee_id NOT NULL, which meant an import of unmapped device codes
+// silently discarded every row instead of keeping them for later mapping.
+// Fixed shape: external_code (the raw device number) is always stored and
+// is the real dedup key (UNIQUE with punch_time); employee_id is nullable,
+// resolved via employees.external_code and backfillable later. Only drops
+// the old shape if it's empty — this table has no real data yet (the bug
+// meant no row ever actually persisted for an unmapped code), so this is
+// safe, but still guarded rather than assumed.
+// omada-agency branch only. Freelancer project payments — a separate
+// nullable freelancer_id (not responsible_person, which is deliberately
+// plain free text) plus the agreed lump-sum amount and its paid status.
+// ALTER-only (never drops projects): unlike punch_records, real project
+// rows exist by the time this was added.
+fn migrate_projects_freelance_fields_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(projects)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+
+        if !column_names.contains(&"freelancer_id".to_string()) {
+            conn.execute("ALTER TABLE projects ADD COLUMN freelancer_id TEXT REFERENCES employees(id) ON DELETE SET NULL", [])?;
+        }
+        if !column_names.contains(&"montant_convenu".to_string()) {
+            conn.execute("ALTER TABLE projects ADD COLUMN montant_convenu REAL", [])?;
+        }
+        if !column_names.contains(&"statut_paiement".to_string()) {
+            conn.execute("ALTER TABLE projects ADD COLUMN statut_paiement TEXT DEFAULT 'non_paye'", [])?;
+        }
+        if !column_names.contains(&"date_paiement".to_string()) {
+            conn.execute("ALTER TABLE projects ADD COLUMN date_paiement TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+fn migrate_punch_records_schema_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'punch_records'",
+        [],
+        |row| row.get(0),
+    )?;
+    if table_exists == 0 {
+        return Ok(());
+    }
+
+    let table_info: Result<Vec<String>, _> = conn
+        .prepare("PRAGMA table_info(punch_records)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+    if let Ok(columns) = table_info {
+        let is_old_shape = !columns.contains(&"external_code".to_string());
+        if is_old_shape {
+            let row_count: i64 = conn.query_row("SELECT COUNT(*) FROM punch_records", [], |row| row.get(0))?;
+            if row_count == 0 {
+                conn.execute("DROP TABLE punch_records", [])?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn migrate_employees_payroll_fields_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(employees)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+
+        if !column_names.contains(&"base_salary".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN base_salary REAL", [])?;
+        }
+        if !column_names.contains(&"hire_date".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN hire_date TEXT", [])?;
+        }
+        if !column_names.contains(&"contract_type".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN contract_type TEXT", [])?;
+        }
+        if !column_names.contains(&"rib".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN rib TEXT", [])?;
+        }
+        // Maps a device's own numeric employee ID (from the attendance/punch
+        // export, e.g. ZKTeco's PIN field) onto our internal employees.id —
+        // the export never carries our UUID or a name, only this number.
+        if !column_names.contains(&"external_code".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN external_code TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+/// photo_path/employee_documents.file_path store paths relative to
+/// app_data_dir (e.g. "employee_photos/<id>.jpg"), never absolute — resolved
+/// fresh against app_data_dir at read time, same convention as
+/// database.db/license.token. See commands.rs's employee photo/document
+/// commands for where these get written.
+fn migrate_employee_photos_and_documents_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(employees)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+        if !column_names.contains(&"photo_path".to_string()) {
+            conn.execute("ALTER TABLE employees ADD COLUMN photo_path TEXT", [])?;
+        }
+    }
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS employee_documents (
+            id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            doc_type TEXT,
+            file_path TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    Ok(())
+}
+
+fn migrate_invoices_project_id_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoices)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+
+        if !column_names.contains(&"project_id".to_string()) {
+            conn.execute("ALTER TABLE invoices ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL", [])?;
+        }
+    }
+
     Ok(())
 }
 
@@ -1500,3 +1786,7 @@ fn migrate_invoices_payment_method_if_needed(conn: &Connection) -> Result<(), ru
     
     Ok(())
 }
+
+
+
+

@@ -63,19 +63,19 @@ const Auth = () => {
             <img
               src="/brand/logo-horizontal.svg"
               alt="Sordi"
-              className="h-12 w-auto mb-6"
+              className="h-12 w-auto mb-6 opacity-0 animate-scale-in"
             />
-            <h1 className="text-2xl font-bold text-foreground tracking-tight mb-2">
+            <h1 className="text-2xl font-bold text-foreground tracking-tight mb-2 opacity-0 animate-fade-in-up animation-delay-150">
               {needsSetup ? "Configuration initiale" : "Bienvenue sur Sordi"}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground opacity-0 animate-fade-in-up animation-delay-200">
               {needsSetup
                 ? "Définissez un mot de passe pour sécuriser vos données"
                 : "Connectez-vous pour accéder à votre espace"}
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 opacity-0 animate-fade-in-up animation-delay-300">
             {!isTauri && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground ml-1">
@@ -146,7 +146,7 @@ const Auth = () => {
           </form>
         </div>
         <p className="text-center mt-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Sordi V1.0.0{isTauri ? " • Données stockées localement" : ""}
+          © {new Date().getFullYear()} Sordi V1.0.1{isTauri ? " • Données stockées localement" : ""}
         </p>
       </div>
     </div>

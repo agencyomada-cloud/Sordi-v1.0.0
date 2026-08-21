@@ -33,6 +33,7 @@ export interface Settings {
     body_pattern_data?: string;
     qr_code_data?: string;
     invoice_pdf_theme?: string; // 'structure' | 'epure' | 'moderne'
+    invoice_pdf_font?: string; // 'montserrat' | 'inter' | 'poppins' | 'roboto'
     [key: string]: string | string[] | undefined;
 }
 

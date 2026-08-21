@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LicenseBanner } from "@/components/LicenseBanner";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Clients from "./pages/Clients";
@@ -32,6 +33,11 @@ import VerificationTest from "./pages/VerificationTest";
 import SettingsPage from "./pages/Settings";
 import UpgradePage from "./pages/Upgrade";
 import Management from "./pages/Management";
+import Projects from "./pages/Projects";
+import NewProject from "./pages/NewProject";
+import ProjectDetail from "./pages/ProjectDetail";
+import Payroll from "./pages/Payroll";
+import EmployeeDetail from "./pages/EmployeeDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,36 +50,44 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-          <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-          <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-          <Route path="/clients/new" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
-          <Route path="/clients/:id/edit" element={<ProtectedRoute><NewClient /></ProtectedRoute>} />
-          <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
-          <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
-          <Route path="/invoices/new" element={<ProtectedRoute><NewInvoice /></ProtectedRoute>} />
-          <Route path="/invoices/:id/edit" element={<ProtectedRoute><NewInvoice /></ProtectedRoute>} />
-          <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceDetail /></ProtectedRoute>} />
-          <Route path="/proformas/new" element={<ProtectedRoute><NewProforma /></ProtectedRoute>} />
-          <Route path="/invoices/credit-note/new" element={<ProtectedRoute><NewCreditNote /></ProtectedRoute>} />
-          <Route path="/deliveries" element={<ProtectedRoute><Deliveries /></ProtectedRoute>} />
-          <Route path="/deliveries/:id" element={<ProtectedRoute><DeliveryDetail /></ProtectedRoute>} />
-          <Route path="/deliveries/:id/edit" element={<ProtectedRoute><EditDelivery /></ProtectedRoute>} />
-          <Route path="/deliveries/new" element={<ProtectedRoute><NewDelivery /></ProtectedRoute>} />
-          <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
-          <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-          <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-          <Route path="/analyses" element={<ProtectedRoute><SalesAnalysis /></ProtectedRoute>} />
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route path="/" element={<Index />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/clients" element={<Clients />} />
+            <Route path="/clients/new" element={<NewClient />} />
+            <Route path="/clients/:id/edit" element={<NewClient />} />
+            <Route path="/clients/:id" element={<ClientDetail />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/invoices/new" element={<NewInvoice />} />
+            <Route path="/invoices/:id/edit" element={<NewInvoice />} />
+            <Route path="/invoices/:id" element={<InvoiceDetail />} />
+            <Route path="/proformas/new" element={<NewProforma />} />
+            <Route path="/invoices/credit-note/new" element={<NewCreditNote />} />
+            <Route path="/deliveries" element={<Deliveries />} />
+            <Route path="/deliveries/:id" element={<DeliveryDetail />} />
+            <Route path="/deliveries/:id/edit" element={<EditDelivery />} />
+            <Route path="/deliveries/new" element={<NewDelivery />} />
+            <Route path="/payments" element={<Payments />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/expenses" element={<Expenses />} />
+            <Route path="/analyses" element={<SalesAnalysis />} />
 
-          <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-          <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
-          <Route path="/orders/:id/edit" element={<ProtectedRoute><EditOrder /></ProtectedRoute>} />
-          <Route path="/orders/new" element={<ProtectedRoute><NewOrder /></ProtectedRoute>} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/orders/:id/edit" element={<EditOrder />} />
+            <Route path="/orders/new" element={<NewOrder />} />
 
-          <Route path="/test-verification" element={<ProtectedRoute><VerificationTest /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-          <Route path="/upgrade" element={<ProtectedRoute><UpgradePage /></ProtectedRoute>} />
-          <Route path="/management" element={<ProtectedRoute><Management /></ProtectedRoute>} />
+            <Route path="/test-verification" element={<VerificationTest />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/upgrade" element={<UpgradePage />} />
+            <Route path="/management" element={<Management />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/new" element={<NewProject />} />
+            <Route path="/projects/:id/edit" element={<NewProject />} />
+            <Route path="/projects/:id" element={<ProjectDetail />} />
+            <Route path="/payroll" element={<Payroll />} />
+            <Route path="/employees/:id" element={<EmployeeDetail />} />
+          </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

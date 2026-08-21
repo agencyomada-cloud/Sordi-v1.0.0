@@ -22,36 +22,36 @@ export function StatsCard({ title, value, icon: Icon, highlighted, subValue, tre
   return (
     <div
       className={cn(
-        "p-6 rounded-[6px] border flex items-center gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-soft cursor-default group",
+        "p-4 rounded-[6px] border flex items-center gap-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-soft cursor-default group min-w-0",
         highlighted ? "bg-primary border-primary text-primary-foreground" : "bg-card border-border hover:border-primary/30"
       )}
     >
       <div
         className={cn(
-          "w-12 h-12 rounded-[6px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110",
+          "w-10 h-10 rounded-[6px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110",
           highlighted ? "bg-primary-foreground/15" : "bg-primary/10"
         )}
       >
-        <Icon className={cn("w-5 h-5", highlighted ? "text-primary-foreground" : "text-primary")} />
+        <Icon className={cn("w-4 h-4", highlighted ? "text-primary-foreground" : "text-primary")} />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className={cn(
-          "text-xs font-medium uppercase tracking-wide",
+          "text-xs font-medium uppercase tracking-wide truncate",
           highlighted ? "text-primary-foreground/70" : "text-muted-foreground"
         )}>
           {title}
         </p>
-        <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">{value}</p>
+        <p className="text-xl font-bold tracking-tight tabular-nums mt-0.5 truncate">{value}</p>
         {trend && (
           <p className={cn(
-            "text-xs mt-0.5 tabular-nums font-medium",
+            "text-xs mt-0.5 tabular-nums font-medium truncate",
             highlighted ? "text-primary-foreground/90" : trend.positive ? "text-stat-positive" : "text-stat-negative"
           )}>
             {trend.value}
           </p>
         )}
         {!trend && subValue && (
-          <p className={cn("text-xs mt-0.5 tabular-nums", highlighted ? "text-primary-foreground/70" : "text-muted-foreground")}>
+          <p className={cn("text-xs mt-0.5 tabular-nums truncate", highlighted ? "text-primary-foreground/70" : "text-muted-foreground")}>
             {subValue}
           </p>
         )}

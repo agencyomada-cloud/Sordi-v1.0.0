@@ -19,8 +19,6 @@ import {
   RiKeyLine,
   RiCheckboxCircleFill,
 } from "@remixicon/react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useLicenseStatus, useActivateLicense } from "@/hooks/useLicense";
 
 // TODO: replace with Sordi's real payment-collection details once available.
@@ -56,11 +54,7 @@ export default function UpgradePage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8 space-y-8 max-w-2xl">
+    <main className="flex-1 p-8 space-y-8 max-w-2xl">
           <div>
             <button
               onClick={() => navigate(-1)}
@@ -173,8 +167,6 @@ export default function UpgradePage() {
               </Card>
             </>
           )}
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }

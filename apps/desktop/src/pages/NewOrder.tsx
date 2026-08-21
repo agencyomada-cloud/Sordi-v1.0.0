@@ -4,8 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { format } from "date-fns";
 import { Button } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useCreateOrder, useNextOrderNumber } from "@/hooks/useOrders";
 import { toast } from "sonner";
 import { OrderEditablePreview } from "@/components/order/OrderEditablePreview";
@@ -167,13 +165,7 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Header />
-
-        <div className="flex-1 overflow-auto bg-muted/40 p-8 flex flex-col items-center">
+    <main className="flex-1 overflow-auto bg-muted/40 p-8 flex flex-col items-center">
           <div className="w-full max-w-[210mm] flex items-center justify-between mb-6">
             <Button variant="ghost" onClick={() => navigate("/orders")} className="gap-2">
               <ArrowLeft className="w-4 h-4" />
@@ -186,7 +178,7 @@ export default function NewOrderPage() {
                 disabled={createOrder.isPending}
                 className="shadow-lg"
               >
-                {createOrder.isPending ? "Création..." : "VALIDER LA COMMANDE"}
+                {createOrder.isPending ? "Création..." : "VALIDER LE BON DE COMMANDE"}
               </Button>
             </div>
           </div>
@@ -200,8 +192,6 @@ export default function NewOrderPage() {
               />
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }

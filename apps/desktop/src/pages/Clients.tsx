@@ -11,8 +11,6 @@ import {
   RiGroupLine as Users,
 } from "@remixicon/react";
 import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useClients, useCreateClient, useDeleteClient, useClientOverviewStatsMap, type CreateClientData } from "@/hooks/useClients";
 import { exportToCSV, parseCSV, validateClientImport } from "@/lib/csvUtils";
 import { computeClientStatus } from "@/lib/clientOverview";
@@ -196,13 +194,8 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
-        <main className="flex-1 p-8 pt-4">
+    <>
+      <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
@@ -355,8 +348,7 @@ export default function ClientsPage() {
             </Table>
           </div>
           </div>
-        </main>
-      </div>
+      </main>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -374,6 +366,6 @@ export default function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

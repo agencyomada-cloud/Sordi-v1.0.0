@@ -51,3 +51,39 @@ export const useEmployees = () => {
         deleteEmployee: deleteMutation,
     };
 };
+
+export function useEmployeeTaskWorkload() {
+    return useQuery({
+        queryKey: ["employee-task-workload"],
+        queryFn: () => db.employeeTaskWorkload.getAll(),
+    });
+}
+
+export function useSetEmployeePhoto() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ employeeId, sourcePath }: { employeeId: string; sourcePath: string }) =>
+            db.employees.setPhoto(employeeId, sourcePath),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["employees"] });
+            toast.success("Photo mise à jour");
+        },
+        onError: (error: any) => {
+            toast.error(`Erreur lors de l'envoi de la photo: ${error.message || error}`);
+        },
+    });
+}
+
+export function useRemoveEmployeePhoto() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (employeeId: string) => db.employees.removePhoto(employeeId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["employees"] });
+            toast.success("Photo supprimée");
+        },
+        onError: (error: any) => {
+            toast.error(`Erreur lors de la suppression de la photo: ${error.message || error}`);
+        },
+    });
+}

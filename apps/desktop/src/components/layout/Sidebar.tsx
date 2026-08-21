@@ -17,15 +17,16 @@ import {
   RiSettings3Line,
   RiHistoryLine,
   RiBarChartBoxLine,
-  RiVipCrownLine,
   RiQuestionLine,
+  RiFolderChartLine,
+  RiWalletLine,
+  RiUserSettingsLine,
 } from "@remixicon/react";
-import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, Button } from "@sordi/ui";
+import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarCounts } from "@/hooks/useSidebarCounts";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
-import { useLicenseStatus } from "@/hooks/useLicense";
 
 const logoHorizontal = "/brand/logo-horizontal.svg";
 
@@ -59,8 +60,17 @@ const navGroups: NavGroup[] = [
     title: "Gestion",
     items: [
       { icon: RiGroupLine, label: "Clients", path: "/clients" },
+      { icon: RiFolderChartLine, label: "Projets", path: "/projects" },
       { icon: RiBox3Line, label: "Produits", path: "/products" },
       { icon: RiReceiptLine, label: "Charges", path: "/expenses" },
+    ],
+  },
+  {
+    id: "rh",
+    title: "RH",
+    items: [
+      { icon: RiUserSettingsLine, label: "Employés", path: "/management" },
+      { icon: RiWalletLine, label: "Paie", path: "/payroll" },
     ],
   },
   {
@@ -99,7 +109,6 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     const navigate = useNavigate();
     const location = useLocation();
     const { signOut, user } = useAuth();
-    const { data: licenseStatus } = useLicenseStatus();
     const counts = useSidebarCounts();
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(loadCollapsedGroups);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -162,12 +171,6 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
 
     const isActive = (path: string) => location.pathname === path;
 
-    const daysRemaining = (() => {
-      if (!licenseStatus?.expires_at) return null;
-      const diffMs = new Date(licenseStatus.expires_at).getTime() - Date.now();
-      return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-    })();
-
     const handleLogout = async () => {
       await signOut();
       navigate('/auth');
@@ -221,15 +224,21 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     const SidebarContent = () => (
       <>
         {/* Logo & Version */}
-        <div className="px-6 py-5 flex items-center gap-2.5">
-          <img
-            src={logoHorizontal}
-            alt="Sordi"
-            className="h-8 w-auto object-contain"
-          />
-          <span className="text-[11px] font-semibold text-muted-foreground/60 select-none tracking-tight">
-            v1.0.0
-          </span>
+        <div className="px-6 py-5">
+          <div className="flex items-center gap-2.5">
+            <img
+              src={logoHorizontal}
+              alt="Sordi"
+              className="h-8 w-auto object-contain"
+            />
+            <span className="text-[11px] font-semibold text-muted-foreground/60 select-none tracking-tight">
+              v1.0.1
+            </span>
+          </div>
+          {/* omada-agency branch only — subtle white-label marker, not a status card */}
+          <p className="text-[10px] text-muted-foreground/45 mt-1 select-none tracking-wide">
+            Édition Omada
+          </p>
         </div>
 
         {/* Search / command palette trigger */}
@@ -286,42 +295,6 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             </ul>
           </div>
         </nav>
-
-        {/* License status card — deliberately distinct from nav items (tinted card, not a list row) so it doesn't read as a navigation destination */}
-        {licenseStatus && (
-          <div className="px-3 pb-3">
-            {licenseStatus.state === "active" ? (
-              <div className="flex items-center gap-3 px-3.5 py-3 rounded-[10px] bg-primary/[0.07] border border-primary/15">
-                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                  <RiVipCrownLine className="w-4 h-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-sidebar-foreground truncate">Sordi Pro</p>
-                  <p className="text-[11px] text-sidebar-foreground/55 truncate">
-                    {daysRemaining !== null
-                      ? `Expire dans ${daysRemaining} jour${daysRemaining > 1 ? "s" : ""}`
-                      : "Licence active"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-[10px] bg-gradient-to-br from-primary/10 to-primary/[0.03] border border-primary/20 p-3.5 space-y-2.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                    <RiVipCrownLine className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-sidebar-foreground leading-tight">Passez à Sordi Pro</p>
-                    <p className="text-[11px] text-sidebar-foreground/55 leading-tight">Débloquez toutes les fonctionnalités</p>
-                  </div>
-                </div>
-                <Button size="sm" className="w-full shadow-sm" onClick={() => handleNavigate("/upgrade")}>
-                  Passer à Pro
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* User & Logout */}
         <div className="p-4 border-t border-sidebar-border/50">

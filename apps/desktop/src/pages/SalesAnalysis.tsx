@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { ClientProductPivotTable } from "@/components/dashboard/ClientProductPivotTable";
@@ -30,11 +28,7 @@ export default function SalesAnalysisPage() {
   const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        <main className="flex-1 min-w-0 p-4 md:p-8">
+    <main className="flex-1 min-w-0 p-4 md:p-8">
           <div className="max-w-[1600px] mx-auto space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-30">
               <div>
@@ -93,8 +87,6 @@ export default function SalesAnalysisPage() {
               <ClientCumulativeTable year={parseInt(selectedYear)} months={selectedMonths} />
             )}
           </div>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }

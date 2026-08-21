@@ -25,7 +25,7 @@ interface EditableInvoicePreviewProps {
  * editing/print/export accuracy is untouched, it's a zoom level, not a
  * layout change.
  */
-function ScaleToFit({ children }: { children: React.ReactNode }) {
+export function ScaleToFit({ children }: { children: React.ReactNode }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);

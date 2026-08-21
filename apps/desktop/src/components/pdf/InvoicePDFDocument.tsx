@@ -6,13 +6,40 @@ import {
   resolveInvoiceData,
   resolveCompanyPhones,
   formatPhone,
+  getDocumentSectionFlags,
+  resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
 
+// The four selectable document fonts (Paramètres > Thème de la facture PDF >
+// Police) — all registered up front; react-pdf only actually fetches the
+// family a given Text style references, so registering all four here costs
+// nothing beyond bookkeeping. Keep in sync with INVOICE_PDF_FONTS.
 Font.register({
-  family: 'Space Grotesk',
+  family: 'Montserrat',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj7oUXskPMVBSSJLq2I.ttf' },
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj4PVnskPMVBSSJLq2I.ttf', fontWeight: 'bold' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
+    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Inter',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf' },
+    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Poppins',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf' },
+    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf', fontWeight: 'bold' },
+  ]
+});
+Font.register({
+  family: 'Roboto',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf' },
+    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
   ]
 });
 
@@ -30,7 +57,9 @@ interface InvoicePDFDocumentProps {
  */
 export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProps) {
   const primaryColor = settings?.primary_color || "#476CFF";
+  const fontFamily = resolveInvoicePdfFontFamily(settings);
   const data = resolveInvoiceData(invoice);
+  const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
 
   const styles = StyleSheet.create({
@@ -38,7 +67,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       width: 595.28,
       height: 841.89,
       padding: 0,
-      fontFamily: 'Helvetica',
+      fontFamily,
       fontSize: 9,
       color: '#000000',
       backgroundColor: '#ffffff',
@@ -98,7 +127,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     companyNameText: {
       fontSize: 8.5,
-      fontFamily: 'Space Grotesk',
+      fontFamily,
       fontWeight: 'bold',
       color: '#ffffff',
       textTransform: 'uppercase',
@@ -138,7 +167,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     titleText: {
       fontSize: 15,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#1f2937',
       textTransform: 'uppercase',
       letterSpacing: 1.5,
@@ -153,21 +182,21 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     clientBox: { width: '55%' },
     clientHeaderLabel: {
       fontSize: 9,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#6b7280',
       textTransform: 'uppercase',
       marginBottom: 2,
     },
     clientName: {
       fontSize: 12,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#000000',
       textTransform: 'uppercase',
       marginBottom: 2,
     },
     clientAddress: {
       fontSize: 9,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#374151',
       textTransform: 'uppercase',
       marginBottom: 3,
@@ -178,15 +207,15 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       textTransform: 'uppercase',
       marginBottom: 1,
     },
-    clientDetailBold: { fontFamily: 'Helvetica-Bold' },
+    clientDetailBold: { fontFamily, fontWeight: 'bold' },
     metaBox: { width: '35%', paddingTop: 2 },
     metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    metaLabel: { fontFamily: 'Helvetica-Bold', fontSize: 9, color: '#000000', marginRight: 6 },
+    metaLabel: { fontFamily, fontWeight: 'bold', fontSize: 9, color: '#000000', marginRight: 6 },
     metaValue: { fontSize: 9, color: '#000000' },
     avoirNotice: {
       marginTop: 4,
       fontSize: 8,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#374151',
       textAlign: 'right',
     },
@@ -205,7 +234,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       alignItems: 'center',
     },
     tableHeaderCell: {
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       fontSize: 9.5,
       color: '#ffffff',
       textTransform: 'uppercase',
@@ -245,8 +274,8 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       borderBottomWidth: 1,
       borderBottomColor: '#000000',
     },
-    totalsLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#000000' },
-    totalsValueText: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#000000', textAlign: 'right' },
+    totalsLabel: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000' },
+    totalsValueText: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
     ttcRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -254,14 +283,14 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       paddingVertical: 4,
       paddingHorizontal: 6,
     },
-    ttcLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#000000' },
-    ttcValueText: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#000000', textAlign: 'right' },
+    ttcLabel: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000' },
+    ttcValueText: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
 
     bottomBlock: { marginBottom: 12 },
-    wordsTitle: { fontSize: 8, fontFamily: 'Helvetica', color: '#1f2937', textTransform: 'uppercase', marginBottom: 2 },
+    wordsTitle: { fontSize: 8, fontFamily, color: '#1f2937', textTransform: 'uppercase', marginBottom: 2 },
     wordsValue: {
       fontSize: 8.5,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily, fontWeight: 'bold',
       color: '#000000',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -269,9 +298,9 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       marginBottom: 10,
     },
     signatureRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    paymentMethodText: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#000000' },
+    paymentMethodText: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000' },
     signatureBox: { alignItems: 'center', marginRight: 20 },
-    signatureTitle: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
+    signatureTitle: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
     stampImage: { maxHeight: 65, maxWidth: 140, objectFit: 'contain', marginTop: 2 },
 
     footer: {
@@ -297,23 +326,23 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     legalColTextWrapper: { position: 'relative' },
     legalYellowBar: { position: 'absolute', left: -11.9, top: 1.5, bottom: 1.5, width: 2.13, backgroundColor: primaryColor },
     legalRow: { flexDirection: 'row', marginBottom: 2 },
-    legalLabel: { width: 80, fontSize: 7.1, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000' },
-    legalColon: { width: 8, fontSize: 7.1, fontFamily: 'Space Grotesk', fontWeight: 'bold', textAlign: 'center' },
-    legalValue: { fontSize: 7.1, fontFamily: 'Space Grotesk', color: '#000000' },
+    legalLabel: { width: 80, fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000' },
+    legalColon: { width: 8, fontSize: 7.1, fontFamily, fontWeight: 'bold', textAlign: 'center' },
+    legalValue: { fontSize: 7.1, fontFamily, color: '#000000' },
 
     companyInfoCol: { width: 195.59, paddingHorizontal: 4, justifyContent: 'flex-end', paddingBottom: 2.8, height: '100%' },
-    addressText: { fontSize: 7.1, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000', marginBottom: 4, lineHeight: 1.3 },
-    ribText: { fontSize: 7.1, fontFamily: 'Space Grotesk', color: '#000000', lineHeight: 1.3 },
+    addressText: { fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000', marginBottom: 4, lineHeight: 1.3 },
+    ribText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.3 },
 
     contactCol: { flex: 1, flexDirection: 'row', position: 'relative', height: '100%' },
     contactLeftBox: { width: 56.7, justifyContent: 'flex-end', height: '100%', position: 'relative' },
     footerLogoBox: { position: 'absolute', top: 0, left: 0, height: 22.7, width: 121.9, justifyContent: 'center' },
-    footerLogoText: { fontSize: 9, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase' },
+    footerLogoText: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000', textTransform: 'uppercase' },
     sordiWatermark: { position: 'absolute', bottom: 1, left: 0, right: 0, textAlign: 'center', fontSize: 5.5, color: '#9ca3af' },
     qrBox: { width: 51, height: 51, alignItems: 'center', justifyContent: 'center', marginTop: 13 },
     contactRightBox: { marginLeft: 7.1, flex: 1, justifyContent: 'flex-end', height: '100%' },
-    contactEmailText: { fontSize: 7.1, fontFamily: 'Space Grotesk', fontWeight: 'bold', color: '#000000', lineHeight: 1.65 },
-    contactDetailText: { fontSize: 7.1, fontFamily: 'Space Grotesk', color: '#000000', lineHeight: 1.65 },
+    contactEmailText: { fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000', lineHeight: 1.65 },
+    contactDetailText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.65 },
   });
 
   return (
@@ -378,7 +407,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 </View>
                 <View style={styles.metaRow}>
                   <Text style={styles.metaLabel}>Numéro:</Text>
-                  <Text style={[styles.metaValue, { fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }]}>
+                  <Text style={[styles.metaValue, { fontFamily, fontWeight: 'bold', textTransform: 'uppercase' }]}>
                     {data.docNumber || "-"}
                   </Text>
                 </View>
@@ -409,11 +438,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 return (
                   <View key={idx} style={styles.tableRow}>
                     <View style={[styles.tableCellText, styles.colDesignation]}>
-                      <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', color: '#000000' }}>{name}</Text>
+                      <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', textTransform: 'uppercase', color: '#000000' }}>{name}</Text>
                     </View>
                     <Text style={[styles.tableCellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>
                     <Text style={[styles.tableCellText, styles.colQty]}>{formattedQty}</Text>
-                    <Text style={[styles.tableCellText, styles.colUnit, { fontFamily: 'Helvetica-Bold', textTransform: 'uppercase' }]}>{unit}</Text>
+                    <Text style={[styles.tableCellText, styles.colUnit, { fontFamily, fontWeight: 'bold', textTransform: 'uppercase' }]}>{unit}</Text>
                     <Text style={[styles.tableCellText, styles.colAmount]}>{formatCurrency(itemAmount)}</Text>
                   </View>
                 );
@@ -426,11 +455,13 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                   <Text style={styles.totalsLabel}>Total HT</Text>
                   <Text style={styles.totalsValueText}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
                 </View>
-                <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>Total TVA</Text>
-                  <Text style={styles.totalsValueText}>{formatCurrency(invoice.tva_amount || 0)}</Text>
-                </View>
-                {(invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
+                {flags.showTva && (
+                  <View style={styles.totalsRow}>
+                    <Text style={styles.totalsLabel}>Total TVA</Text>
+                    <Text style={styles.totalsValueText}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+                  </View>
+                )}
+                {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
                   <View style={styles.totalsRow}>
                     <Text style={styles.totalsLabel}>Droit de Timbre</Text>
                     <Text style={styles.totalsValueText}>{formatCurrency(invoice.timbre || 0)}</Text>
@@ -443,22 +474,28 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                   </View>
                 )}
                 <View style={styles.ttcRow}>
-                  <Text style={styles.ttcLabel}>{data.isCreditNote ? "Net à déduire" : "Total TTC"}</Text>
+                  <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
                   <Text style={styles.ttcValueText}>{formatCurrency(invoice.total_ttc || 0)}</Text>
                 </View>
               </View>
             </View>
 
             <View style={styles.bottomBlock}>
-              <Text style={styles.wordsTitle}>ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :</Text>
-              <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+              {flags.showMontantEnLettres && (
+                <>
+                  <Text style={styles.wordsTitle}>ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :</Text>
+                  <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+                </>
+              )}
 
               <View style={styles.signatureRow}>
-                {!data.isProforma && !data.isCreditNote && (
+                {!flags.showPaymentMethod ? (
+                  <View />
+                ) : !data.isProforma && !data.isCreditNote ? (
                   <Text style={styles.paymentMethodText}>
-                    Mode de paiement: <Text style={{ fontFamily: 'Helvetica', textTransform: 'uppercase' }}>{invoice.payment_method || "Chèque"}</Text>
+                    Mode de paiement: <Text style={{ fontFamily, textTransform: 'uppercase' }}>{invoice.payment_method || "Chèque"}</Text>
                   </Text>
-                )}
+                ) : null}
                 <View style={styles.signatureBox}>
                   <Text style={styles.signatureTitle}>Cachet et Signature</Text>
                   {settings?.stamp_data && <Image src={settings.stamp_data} style={styles.stampImage} />}
@@ -515,7 +552,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               {settings?.company_address && <Text style={styles.addressText}>Adresse: {settings.company_address}</Text>}
               {settings?.company_rib && (
                 <Text style={styles.ribText}>
-                  <Text style={{ fontFamily: 'Space Grotesk', fontWeight: 'bold' }}>RIB:</Text>{" "}
+                  <Text style={{ fontFamily, fontWeight: 'bold' }}>RIB:</Text>{" "}
                   {settings.company_rib}
                   {settings?.company_bank_agency ? `\n${settings.company_bank_agency}` : ""}
                 </Text>
@@ -550,7 +587,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
             </View>
           </View>
           {settings?.license_active === false && (
-            <Text style={styles.sordiWatermark}>Created by Sordi v1.0.0 — www.sordi.app</Text>
+            <Text style={styles.sordiWatermark}>Created by Sordi v1.0.1 — www.sordi.app</Text>
           )}
         </View>
 

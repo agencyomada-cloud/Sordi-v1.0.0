@@ -6,8 +6,6 @@ import {
   RiDeleteBinLine as Trash2 
 } from "@remixicon/react";
 import { Input, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Popover, PopoverContent, PopoverTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Label, TableLoading, RadioGroup, RadioGroupItem, Checkbox, SearchInput } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from "@/hooks/useProducts";
 import type { CreateProductData, Product } from "@/lib/database";
 
@@ -150,13 +148,8 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
-        <main className="flex-1 p-8 pt-4">
+    <>
+      <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
@@ -459,13 +452,13 @@ export default function ProductsPage() {
 
           {/* Stats & Search */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div className="bg-card rounded-3xl p-6 shadow-card border border-border/30 flex items-center gap-5 w-fit">
-              <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
-                <Package className="w-7 h-7 text-primary-foreground" />
+            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 w-fit max-w-full">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
+                <Package className="w-5 h-5 text-primary-foreground" />
               </div>
-              <div>
-                <p className="text-3xl font-bold text-foreground tracking-tight">{products?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Produits actifs</p>
+              <div className="min-w-0">
+                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{products?.length || 0}</p>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">Produits actifs</p>
               </div>
             </div>
 
@@ -536,8 +529,7 @@ export default function ProductsPage() {
             </Table>
           </div>
           </div>
-        </main>
-      </div>
+      </main>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="rounded-3xl">
@@ -555,6 +547,6 @@ export default function ProductsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

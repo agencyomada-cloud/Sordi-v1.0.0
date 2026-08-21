@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { 
-    RiUserLine as User, 
-    RiPhoneLine as Phone, 
-    RiMailLine as Mail, 
-    RiMapPinLine as MapPin, 
-    RiAddLine as Plus, 
-    RiPencilLine as Pencil, 
-    RiDeleteBinLine as Trash2, 
-    RiMoreFill as MoreHorizontal 
+import { useNavigate } from "react-router-dom";
+import {
+    RiUserLine as User,
+    RiPhoneLine as Phone,
+    RiMailLine as Mail,
+    RiMapPinLine as MapPin,
+    RiAddLine as Plus,
+    RiPencilLine as Pencil,
+    RiDeleteBinLine as Trash2,
+    RiMoreFill as MoreHorizontal
 } from "@remixicon/react";
 import { Card, CardContent, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label, Input, TableLoading } from "@sordi/ui";
 import { useEmployees } from "@/hooks/useEmployees";
+import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 
 const EmployeesSection = () => {
+    const navigate = useNavigate();
     const { data: employees, isLoading, createEmployee, updateEmployee, deleteEmployee } = useEmployees();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -25,6 +28,11 @@ const EmployeesSection = () => {
         email: "",
         phone: "",
         address: "",
+        base_salary: "",
+        hire_date: "",
+        contract_type: "Temps plein",
+        rib: "",
+        external_code: "",
     });
 
     const resetForm = () => {
@@ -34,6 +42,11 @@ const EmployeesSection = () => {
             email: "",
             phone: "",
             address: "",
+            base_salary: "",
+            hire_date: "",
+            contract_type: "Temps plein",
+            rib: "",
+            external_code: "",
         });
         setEditingEmployee(null);
     };
@@ -46,21 +59,37 @@ const EmployeesSection = () => {
             email: emp.email || "",
             phone: emp.phone || "",
             address: emp.address || "",
+            base_salary: emp.base_salary != null ? String(emp.base_salary) : "",
+            hire_date: emp.hire_date || "",
+            contract_type: emp.contract_type === "Freelance" ? "Freelance" : "Temps plein",
+            rib: emp.rib || "",
+            external_code: emp.external_code || "",
         });
         setIsDialogOpen(true);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const isFreelance = formData.contract_type === "Freelance";
+        const payload = {
+            ...formData,
+            // Freelancers don't punch in/out or have a monthly salary — clear
+            // these rather than leave stale values hidden behind the toggle.
+            base_salary: isFreelance ? null : formData.base_salary ? Number(formData.base_salary) : null,
+            external_code: isFreelance ? null : formData.external_code || null,
+            hire_date: formData.hire_date || null,
+            contract_type: formData.contract_type || null,
+            rib: formData.rib || null,
+        };
         if (editingEmployee) {
-            updateEmployee.mutate({ id: editingEmployee.id, data: formData }, {
+            updateEmployee.mutate({ id: editingEmployee.id, data: payload }, {
                 onSuccess: () => {
                     setIsDialogOpen(false);
                     resetForm();
                 }
             });
         } else {
-            createEmployee.mutate(formData, {
+            createEmployee.mutate(payload, {
                 onSuccess: () => {
                     setIsDialogOpen(false);
                     resetForm();
@@ -158,6 +187,73 @@ const EmployeesSection = () => {
                                         className="mt-1.5 rounded-xl"
                                     />
                                 </div>
+                                <div className="border-t border-border/50 pt-4 space-y-4">
+                                    <div>
+                                        <Label>Type de contrat</Label>
+                                        <div className="flex items-center gap-1 p-1 mt-1.5 bg-secondary/30 w-fit rounded-xl border border-border/50">
+                                            {(["Temps plein", "Freelance"] as const).map((type) => (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, contract_type: type })}
+                                                    className={`px-4 py-2 text-sm font-medium transition-all rounded-lg ${
+                                                        formData.contract_type === type
+                                                            ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                                                            : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                                                    }`}
+                                                >
+                                                    {type}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label>Date d'embauche</Label>
+                                            <Input
+                                                type="date"
+                                                value={formData.hire_date}
+                                                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
+                                                className="mt-1.5 rounded-xl"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label>RIB</Label>
+                                            <Input
+                                                value={formData.rib}
+                                                onChange={(e) => setFormData({ ...formData, rib: e.target.value })}
+                                                className="mt-1.5 rounded-xl"
+                                            />
+                                        </div>
+
+                                        {/* Salaire/pointage only apply to salaried staff — freelancers are paid a lump sum per project instead (see the project's "Paiement freelance" block) */}
+                                        {formData.contract_type === "Temps plein" && (
+                                            <>
+                                                <div>
+                                                    <Label>Salaire de base</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={formData.base_salary}
+                                                        onChange={(e) => setFormData({ ...formData, base_salary: e.target.value })}
+                                                        placeholder="45000"
+                                                        className="mt-1.5 rounded-xl"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <Label>Code appareil</Label>
+                                                    <Input
+                                                        value={formData.external_code}
+                                                        onChange={(e) => setFormData({ ...formData, external_code: e.target.value })}
+                                                        placeholder="Numéro pointeuse"
+                                                        className="mt-1.5 rounded-xl"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-3 pt-4">
                                 <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl">
@@ -179,9 +275,13 @@ const EmployeesSection = () => {
                     </div>
                 ) : (
                     employees?.map((emp) => (
-                        <Card key={emp.id} className="overflow-hidden border-border/50 hover:shadow-lg transition-all duration-300 rounded-3xl group relative">
+                        <Card
+                            key={emp.id}
+                            onClick={() => navigate(`/employees/${emp.id}`)}
+                            className="overflow-hidden border-border/50 hover:shadow-lg transition-all duration-300 rounded-3xl group relative cursor-pointer"
+                        >
                             <CardContent className="p-6">
-                                <div className="absolute top-4 right-4">
+                                <div className="absolute top-4 right-4" onClick={(e) => e.stopPropagation()}>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
@@ -208,9 +308,7 @@ const EmployeesSection = () => {
                                 </div>
 
                                 <div className="flex items-start gap-4">
-                                    <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl font-bold group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 shrink-0">
-                                        {emp.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().substring(0, 2)}
-                                    </div>
+                                    <EmployeeAvatar photoPath={emp.photo_path} name={emp.name} className="h-16 w-16 text-xl" />
                                     <div className="flex-1 min-w-0 pr-6">
                                         <h3 className="font-bold text-lg text-foreground truncate">{emp.name}</h3>
                                         <p className="text-sm text-primary font-medium truncate">{emp.role || "Aucun rôle"}</p>

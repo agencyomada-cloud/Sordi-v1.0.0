@@ -7,7 +7,7 @@ import {
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { numberToWords } from "@/lib/numberToWords";
-import { getCompanyPhones, formatPhone, resolveLegalFields } from "./invoiceHtmlShared";
+import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
 interface Props {
@@ -27,7 +27,8 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, formatCurrency,
+    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel,
+    formatCurrency,
     updateInvoiceField, updateClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleDeleteItem,
@@ -45,7 +46,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
             className="a4 relative bg-white text-black font-sans mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff' }}
+            style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
               {settings?.logo_data && (
@@ -72,7 +73,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                 <div>
                   <div className="text-center mb-4">
                     <h1 className="text-xl font-extrabold uppercase text-gray-800 tracking-wider">
-                      {isCreditNote ? "FACTURE D'AVOIR" : (isProforma ? "FACTURE PROFORMA" : "FACTURE")}
+                      {docTitle}
                     </h1>
                   </div>
 
@@ -257,10 +258,12 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                           <div className="flex justify-between p-1.5 border-b border-black font-bold">
                             <span>Total HT</span><span className="font-mono">{formatCurrency(subtotal)}</span>
                           </div>
-                          <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                            <span>Total TVA</span><span className="font-mono">{formatCurrency(tvaAmount)}</span>
-                          </div>
-                          {(timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
+                          {showTva && (
+                            <div className="flex justify-between p-1.5 border-b border-black font-bold">
+                              <span>Total TVA</span><span className="font-mono">{formatCurrency(tvaAmount)}</span>
+                            </div>
+                          )}
+                          {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
                             <div className="flex justify-between p-1.5 border-b border-black font-bold">
                               <span>Droit de Timbre</span><span className="font-mono">{formatCurrency(timbre)}</span>
                             </div>
@@ -279,19 +282,21 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                             </div>
                           </div>
                           <div className="flex justify-between p-1.5 font-bold bg-gray-50">
-                            <span>{isCreditNote ? "Net à déduire" : "Total TTC"}</span><span className="font-mono">{formatCurrency(netTotal)}</span>
+                            <span>{grandTotalLabel}</span><span className="font-mono">{formatCurrency(netTotal)}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="mb-4">
-                        <div className="mb-3 text-[11px] text-gray-800">
-                          {isCreditNote ? "ARRÊTÉ LE PRÉSENT AVOIR À LA SOMME DE :" : "ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :"}
-                          <div className="mt-1 font-extrabold text-xs text-black uppercase tracking-wide">{numberToWords(netTotal)}</div>
-                        </div>
+                        {showMontantEnLettres && (
+                          <div className="mb-3 text-[11px] text-gray-800">
+                            {isCreditNote ? "ARRÊTÉ LE PRÉSENT AVOIR À LA SOMME DE :" : "ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :"}
+                            <div className="mt-1 font-extrabold text-xs text-black uppercase tracking-wide">{numberToWords(netTotal)}</div>
+                          </div>
+                        )}
 
                         <div className="flex justify-between items-start">
-                          {!isProforma && !isCreditNote && (
+                          {showPaymentMethod && !isProforma && !isCreditNote && (
                             <div className="text-xs text-black font-bold flex items-center gap-2">
                               Mode de paiement:
                               <Select value={paymentMode} onValueChange={handlePaymentModeChange}>

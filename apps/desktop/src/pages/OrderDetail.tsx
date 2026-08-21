@@ -8,15 +8,13 @@ import {
   RiLoader4Line as Loader2 
 } from "@remixicon/react";
 import { Button, Badge } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useOrder, useOrderItems } from "@/hooks/useOrders";
 import { generateOrderPDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
-import { OrderEditablePreview } from "@/components/order/OrderEditablePreview";
+import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
 
 const statusStyles: Record<string, string> = {
   draft: "bg-status-draft-bg text-status-draft",
@@ -41,20 +39,22 @@ export default function OrderDetailPage() {
   const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const buildOrderData = () => {
+    if (!order) return null;
+    return {
+      ...order,
+      order_items: orderItems || [],
+    };
+  };
+
   const handleDownloadPDF = async () => {
-    if (!order) return;
+    const orderData = buildOrderData();
+    if (!orderData) return;
 
     try {
       setIsGenerating(true);
-      // Prepare order data with items for PDF generation
-      const orderData = {
-        ...order,
-        order_items: orderItems || [],
-      };
-
       await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
-      toast.success("PDF téléchargé");
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -63,13 +63,14 @@ export default function OrderDetailPage() {
     }
   };
 
-    const handlePrint = async () => {
+  const handlePrint = async () => {
+    const orderData = buildOrderData();
     if (!orderData) return;
     setIsGenerating(true);
     try {
       const pdfBase64 = await generateOrderPDF(orderData, settings, false, undefined, licenseStatus?.state === "active");
       const { invoke } = await import("@tauri-apps/api/core");
-      const fileName = `Impression-${ orderData.order_number || "bon_commande" }.pdf`;
+      const fileName = `Impression-${orderData.order_number || "bon_commande"}.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });
       toast.success("PDF ouvert pour impression");
     } catch (error) {
@@ -98,56 +99,38 @@ export default function OrderDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Chargement...</div>
-          </main>
-        </div>
-      </div>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      </main>
     );
   }
 
   if (!order && !isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-muted-foreground mb-4">Bon de commande non trouvé</div>
-              {id && (
-                <div className="text-sm text-muted-foreground mb-4">
-                  ID: {id}
-                </div>
-              )}
-              {error && (
-                <div className="text-sm text-destructive mb-4">
-                  Erreur: {error instanceof Error ? error.message : String(error)}
-                </div>
-              )}
-              <Button onClick={() => navigate("/orders")}>
-                Retour aux commandes
-              </Button>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-muted-foreground mb-4">Bon de commande non trouvé</div>
+          {id && (
+            <div className="text-sm text-muted-foreground mb-4">
+              ID: {id}
             </div>
-          </main>
+          )}
+          {error && (
+            <div className="text-sm text-destructive mb-4">
+              Erreur: {error instanceof Error ? error.message : String(error)}
+            </div>
+          )}
+          <Button onClick={() => navigate("/orders")}>
+            Retour aux commandes
+          </Button>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!order) return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
         <main className="flex-1 p-8 pt-4">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -198,26 +181,17 @@ export default function OrderDetailPage() {
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden p-8">
             <div className="flex justify-center bg-muted rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
               <div className="shadow-xl">
-                <OrderEditablePreview
-                  order={{
+                <EditableInvoicePreview
+                  invoice={{
                     ...order,
-                    items: orderItems || [],
-                    // Pass additional fields if necessary
-                    order_date: order.order_date,
-                    delivery_date: order.delivery_date,
-                    custom_title: order.custom_title,
-                    notes: order.notes,
-                    supplier_name: order.supplier_name
+                    invoice_items: orderItems || [],
                   }}
-                  onOrderChange={() => { }}
-                  readOnly={true}
+                  onInvoiceChange={() => { }}
                 />
               </div>
             </div>
           </div>
         </main>
-      </div>
-    </div>
   );
 }
 

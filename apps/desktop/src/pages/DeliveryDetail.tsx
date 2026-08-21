@@ -9,16 +9,13 @@ import {
   RiLoader4Line as Loader2 
 } from "@remixicon/react";
 import { Button } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useDeliveryNote } from "@/hooks/useDeliveryNotes";
 import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
-import { DeliveryEditablePreview } from "@/components/delivery/DeliveryEditablePreview";
-import { chunkItems } from "@/lib/paginationUtils";
+import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
 
 export default function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,22 +25,23 @@ export default function DeliveryDetailPage() {
   const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const buildNoteForPDF = () => {
+    if (!deliveryNote) return null;
+    return {
+      ...deliveryNote,
+      items: deliveryNote.delivery_note_items || [],
+      clients: deliveryNote.clients,
+    };
+  };
+
   const handleDownloadPDF = async () => {
-    if (!deliveryNote) return;
+    const noteForPDF = buildNoteForPDF();
+    if (!noteForPDF) return;
 
     try {
       setIsGenerating(true);
-      const noteForPDF = {
-        ...deliveryNote,
-        items: deliveryNote.delivery_note_items || [],
-        // Ensure client details are populated for PDF if needed, 
-        // though generateDeliveryNotePDF usually expects a structure similar to what we have.
-        // We might need to ensure 'clients' object is passed correctly if generateDeliveryNotePDF uses it.
-        clients: deliveryNote.clients
-      };
       await generateDeliveryNotePDF(noteForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
       toast.success("PDF téléchargé avec succès");
-      toast.success("PDF téléchargé");
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -52,13 +50,14 @@ export default function DeliveryDetailPage() {
     }
   };
 
-    const handlePrint = async () => {
-    if (!noteForPDF as any) return;
+  const handlePrint = async () => {
+    const noteForPDF = buildNoteForPDF();
+    if (!noteForPDF) return;
     setIsGenerating(true);
     try {
       const pdfBase64 = await generateDeliveryNotePDF(noteForPDF as any, settings, false, undefined, licenseStatus?.state === "active");
       const { invoke } = await import("@tauri-apps/api/core");
-      const fileName = `Impression-${ noteForPDF as any.delivery_number || "bon_livraison" }.pdf`;
+      const fileName = `Impression-${noteForPDF.delivery_number || "bon_livraison"}.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });
       toast.success("PDF ouvert pour impression");
     } catch (error) {
@@ -87,56 +86,38 @@ export default function DeliveryDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="animate-pulse text-muted-foreground">Chargement...</div>
-          </main>
-        </div>
-      </div>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      </main>
     );
   }
 
   if (!deliveryNote && !isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-muted-foreground mb-4">Bon de livraison non trouvé</div>
-              {id && (
-                <div className="text-sm text-muted-foreground mb-4">
-                  ID: {id}
-                </div>
-              )}
-              {error && (
-                <div className="text-sm text-destructive mb-4">
-                  Erreur: {error instanceof Error ? error.message : String(error)}
-                </div>
-              )}
-              <Button onClick={() => navigate("/deliveries")}>
-                Retour aux livraisons
-              </Button>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-muted-foreground mb-4">Bon de livraison non trouvé</div>
+          {id && (
+            <div className="text-sm text-muted-foreground mb-4">
+              ID: {id}
             </div>
-          </main>
+          )}
+          {error && (
+            <div className="text-sm text-destructive mb-4">
+              Erreur: {error instanceof Error ? error.message : String(error)}
+            </div>
+          )}
+          <Button onClick={() => navigate("/deliveries")}>
+            Retour aux livraisons
+          </Button>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!deliveryNote) return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
         <main className="flex-1 p-8 pt-4">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -181,28 +162,17 @@ export default function DeliveryDetailPage() {
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden p-8">
             <div className="flex justify-center bg-muted rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
               <div className="shadow-xl">
-                <DeliveryEditablePreview
-                  deliveryNote={{
+                <EditableInvoicePreview
+                  invoice={{
                     ...deliveryNote,
-                    items: deliveryNote.delivery_note_items || [],
-                    // Ensure these fields from DB are passed if they exist in deliveryNote object
-                    driver_name: deliveryNote.driver_name,
-                    truck_plate: deliveryNote.truck_plate,
-                    delivery_location: deliveryNote.delivery_location,
-                    custom_title: deliveryNote.custom_title,
-                    notes: deliveryNote.notes,
-                    reserves: deliveryNote.reserves
+                    invoice_items: deliveryNote.delivery_note_items || [],
                   }}
-                  onDeliveryChange={() => { }}
-                  readOnly={true}
-                  clients={[deliveryNote.clients].filter(Boolean)}
+                  onInvoiceChange={() => { }}
                 />
               </div>
             </div>
           </div>
         </main>
-      </div>
-    </div>
   );
 }
 

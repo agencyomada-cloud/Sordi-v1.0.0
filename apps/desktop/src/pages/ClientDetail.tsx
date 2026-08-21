@@ -25,8 +25,6 @@ import {
   RiErrorWarningLine as AlertCircle 
 } from "@remixicon/react";
 import { Button, Badge, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsContent, TabsList, TabsTrigger } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useClient, useUpdateClient, useClientOverviewStats, type CreateClientData } from "@/hooks/useClients";
 import { useInvoices, useUpdateInvoiceStatus, type InvoiceStatus } from "@/hooks/useInvoices";
 import { computeAveragePaymentDelay, computePurchaseFrequency, computeClientStatus } from "@/lib/clientOverview";
@@ -512,42 +510,25 @@ export default function ClientDetailPage() {
 
   if (isLoadingClient || isLoadingInvoices || isLoadingProducts) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8">
-            <div className="text-center py-12 text-muted-foreground">Chargement...</div>
-          </main>
-        </div>
-      </div>
+      <main className="flex-1 p-8">
+        <div className="text-center py-12 text-muted-foreground">Chargement...</div>
+      </main>
     );
   }
 
   if (!client) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8">
-            <div className="text-center py-12">
-              <p className="text-muted-foreground mb-4">Client non trouvé</p>
-              <Button onClick={() => navigate("/clients")}>Retour aux clients</Button>
-            </div>
-          </main>
+      <main className="flex-1 p-8">
+        <div className="text-center py-12">
+          <p className="text-muted-foreground mb-4">Client non trouvé</p>
+          <Button onClick={() => navigate("/clients")}>Retour aux clients</Button>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
+    <>
         <main className="flex-1 p-8">
           {/* Header */}
           <div className="flex items-center gap-4 mb-6">
@@ -1497,7 +1478,6 @@ export default function ClientDetailPage() {
             </TabsContent>
           </Tabs>
         </main>
-      </div >
 
       {/* Edit Dialog */}
       < Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen} >
@@ -1873,6 +1853,6 @@ export default function ClientDetailPage() {
           </form>
         </DialogContent>
       </Dialog >
-    </div >
+    </>
   );
 }

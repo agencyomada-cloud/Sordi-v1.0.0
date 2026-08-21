@@ -1,6 +1,6 @@
 [package]
 name = "sordi"
-version = "1.0.0"
+version = "1.0.1"
 description = "Sordi"
 authors = ["you"]
 license = ""
@@ -21,8 +21,18 @@ tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.9.5", features = [] }
+tauri = { version = "2.9.5", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
+# Native "pick a file" dialog (employee photo/document upload) and "open with
+# OS default app" (the documents list's "Ouvrir" button) — neither existed
+# in this app before; the prior image-upload precedent (Settings logo/stamp)
+# was a plain <input type=file> + base64 data URI, which doesn't give an
+# absolute filesystem path or a way to launch the OS viewer.
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+# Employee photo resize/re-encode on upload (pure-Rust codecs, no system
+# image library dependency).
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 rusqlite = { version = "0.31", features = ["bundled", "chrono", "uuid"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -43,3 +53,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # get_ipc_response/assert_ipc_response) — dev-only, doesn't affect the real
 # app build since [dev-dependencies] only applies to `cargo test`.
 tauri = { version = "2.9.5", features = ["test"] }
+
+[features]
+# omada-agency branch only, never enabled by default — see license.rs's
+# require_active_license(). A real Sordi build (this feature absent or not
+# passed via --features) is completely unaffected; even an accidental merge
+# of this code elsewhere stays inert unless someone explicitly opts in.
+omada_bypass = []

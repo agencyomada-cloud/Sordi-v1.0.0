@@ -186,6 +186,26 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
 
   const isCreditNote = invoice.invoice_type === "credit_note";
   const isProforma = invoice.invoice_type === "proforma";
+  const isDelivery = invoice.invoice_type === "delivery_note" || !!invoice.delivery_number;
+  const isOrder = invoice.invoice_type === "order" || !!invoice.order_number;
+  const isOrderOrDelivery = isDelivery || isOrder;
+
+  // Same doc-type section rules as the exported PDF (getDocumentSectionFlags
+  // in invoicePdfShared.ts) — orders/deliveries are internal operational
+  // documents, not tax instruments, so TVA/timbre/montant-en-lettres/payment
+  // method don't apply to them. Kept in one place so the three theme
+  // renderers (Structure/Epure/Moderne) can't drift from each other.
+  const docTitle = invoice.custom_title
+    || (isCreditNote && "FACTURE D'AVOIR")
+    || (isProforma && "FACTURE PROFORMA")
+    || (isDelivery && "BON DE LIVRAISON")
+    || (isOrder && "BON DE COMMANDE")
+    || "FACTURE";
+  const showTva = !isOrderOrDelivery;
+  const showTimbre = !isOrderOrDelivery;
+  const showMontantEnLettres = !isOrderOrDelivery;
+  const showPaymentMethod = !isOrderOrDelivery;
+  const grandTotalLabel = isCreditNote ? "Net à déduire" : isOrderOrDelivery ? "Total" : "Total TTC";
 
   const pages = chunkItems(items);
   const subtotal = invoice.subtotal_ht || 0;
@@ -214,6 +234,14 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     netTotal,
     isCreditNote,
     isProforma,
+    isDelivery,
+    isOrder,
+    docTitle,
+    showTva,
+    showTimbre,
+    showMontantEnLettres,
+    showPaymentMethod,
+    grandTotalLabel,
     formatCurrency,
     updateInvoiceField,
     updateClient,

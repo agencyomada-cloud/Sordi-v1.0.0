@@ -2,8 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { Button, Input, Label, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useInvoices, useInvoice, useCreateInvoice } from "@/hooks/useInvoices";
@@ -320,12 +318,6 @@ export default function NewCreditNotePage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
         <main className="flex-1 p-8">
           <div className="mb-6 flex justify-between items-center">
             <div>
@@ -436,7 +428,5 @@ export default function NewCreditNotePage() {
             </div>
           </div>
         </main>
-      </div>
-    </div>
   );
 }

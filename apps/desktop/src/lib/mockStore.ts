@@ -1022,10 +1022,10 @@ const INITIAL_ORDERS: Order[] = [
 ];
 
 const INITIAL_EMPLOYEES: Employee[] = [
-  { id: "emp-001", name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@sordi.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-002", name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@sordi.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-003", name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@sordi.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
-  { id: "emp-004", name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@sordi.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" }
+  { id: "emp-001", name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@sordi.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-002", name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@sordi.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-003", name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@sordi.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-004", name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@sordi.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null }
 ];
 
 export const mockStore = {
@@ -1592,7 +1592,13 @@ export const mockStore = {
       address: data.address || null,
       is_active: true,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      base_salary: data.base_salary ?? null,
+      hire_date: data.hire_date ?? null,
+      contract_type: data.contract_type ?? null,
+      rib: data.rib ?? null,
+      external_code: data.external_code ?? null,
+      photo_path: null,
     };
     setStorage("employees", [...list, newEmp]);
     return newEmp;

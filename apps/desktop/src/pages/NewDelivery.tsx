@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { Button } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useOrders } from "@/hooks/useOrders";
@@ -127,13 +125,7 @@ export default function NewDeliveryPage() {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Header />
-
-        <div className="flex-1 overflow-auto bg-muted/40 p-8 flex flex-col items-center">
+    <main className="flex-1 overflow-auto bg-muted/40 p-8 flex flex-col items-center">
           <div className="w-full max-w-[210mm] flex items-center justify-between mb-6">
             <Button variant="ghost" onClick={() => navigate("/deliveries")} className="gap-2">
               <ArrowLeft className="w-4 h-4" />
@@ -161,8 +153,6 @@ export default function NewDeliveryPage() {
               />
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }

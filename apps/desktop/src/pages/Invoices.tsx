@@ -14,8 +14,6 @@ import {
 } from "@remixicon/react";
 import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
 import { cn } from "@/lib/utils";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
 import { generateInvoicePDF } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
@@ -239,20 +237,13 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <>
       {/* Off-screen Preview for PDF Generation */}
       <div className="fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]">
         {pdfInvoice && <InvoicePreview invoice={pdfInvoice} />}
       </div>
 
-      <Sidebar />
-
-      {/* ... rest of the component ... */}
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
-        <main className="flex-1 p-8 pt-4">
+      <main className="flex-1 p-8 pt-4 min-w-0">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
@@ -261,7 +252,7 @@ export default function InvoicesPage() {
               <p className="text-muted-foreground mt-1">Gérez vos factures et avoirs</p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="outline" onClick={() => navigate("/invoices/credit-note/new")}>
                 <MinusCircle className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Avoir</span>
@@ -279,13 +270,13 @@ export default function InvoicesPage() {
 
           {/* Stats row */}
           <div className="flex gap-4 mb-6 overflow-x-auto pb-2 animate-fade-in-up animation-delay-100">
-            <div className="bg-card rounded-3xl p-5 shadow-card border border-border/30 flex items-center gap-4 min-w-fit card-hover">
-              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center">
-                <FileText className="w-6 h-6 text-primary-foreground" />
+            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 min-w-fit card-hover">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5 text-primary-foreground" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground tracking-tight">{invoices?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Total factures</p>
+              <div className="min-w-0">
+                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{invoices?.length || 0}</p>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">Total factures</p>
               </div>
             </div>
           </div>
@@ -523,8 +514,7 @@ export default function InvoicesPage() {
             </Table>
           </div>
           </div>
-        </main>
-      </div>
+      </main>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="rounded-3xl">
@@ -542,6 +532,6 @@ export default function InvoicesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

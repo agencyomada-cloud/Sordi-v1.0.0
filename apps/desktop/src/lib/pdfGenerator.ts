@@ -1,7 +1,7 @@
 import React from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import { pdf } from '@react-pdf/renderer';
+import { pdf, DocumentProps } from '@react-pdf/renderer';
 import { invoke } from '@tauri-apps/api/core';
 import { Settings } from "@/hooks/useSettings";
 import { InvoicePDFDocument } from "@/components/pdf/InvoicePDFDocument";
@@ -146,7 +146,7 @@ export const generateInvoicePDFBlob = async (
     const theme = (settings?.invoice_pdf_theme as InvoicePdfTheme) || 'structure';
     const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
 
-    const instance = pdf(React.createElement(Template, { invoice: formattedInvoice, settings: pdfSettings }));
+    const instance = pdf(React.createElement(Template, { invoice: formattedInvoice, settings: pdfSettings }) as React.ReactElement<DocumentProps>);
     const blob = await instance.toBlob();
     return blob;
   } catch (error) {
@@ -189,7 +189,7 @@ export const generateCumulativesPDFBlob = async (
         primary_color: settings.primary_color,
         body_pattern_data: settings.body_pattern_data,
       } : {}
-    })
+    }) as React.ReactElement<DocumentProps>
   );
   return await instance.toBlob();
 };

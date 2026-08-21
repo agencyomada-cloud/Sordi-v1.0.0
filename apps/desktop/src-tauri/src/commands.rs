@@ -5,6 +5,9 @@ use tauri::State;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use chrono::Datelike;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use uuid::Uuid;
 
@@ -704,19 +707,9 @@ pub struct Invoice {
     pub selected_secondary_address: Option<String>,
     pub custom_title: Option<String>,
     pub payment_method: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct InvoiceItem {
-    pub id: String,
-    pub invoice_id: String,
-    pub product_id: String,
-    pub product_description: Option<String>,
-    pub quantity: f64,
-    pub unit_price: f64,
-    pub amount: Option<f64>,
-    pub tva_rate: Option<f64>,
-    pub timbre_exempt: Option<bool>,
+    /// omada-agency branch only — which project (if any) this invoice's
+    /// revenue counts toward. See get_project_stats.
+    pub project_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -793,10 +786,7 @@ pub fn get_invoices(db: State<'_, Mutex<Connection>>, status: Option<String>, in
     query.push_str(" ORDER BY invoice_date DESC");
     
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-    
-    // Check column count to handle migration gracefully
-    let column_count = stmt.column_count();
-    
+
     let invoices = stmt.query_map([], |row| {
         Ok(Invoice {
             id: row.get("id")?,
@@ -827,6 +817,7 @@ pub fn get_invoices(db: State<'_, Mutex<Connection>>, status: Option<String>, in
             selected_secondary_address: row.get("selected_secondary_address").ok(),
             custom_title: row.get("custom_title").ok(),
             payment_method: row.get("payment_method").ok(),
+            project_id: row.get("project_id").ok(),
         })
     }).map_err(|e| e.to_string())?;
     
@@ -841,8 +832,6 @@ pub fn get_invoices(db: State<'_, Mutex<Connection>>, status: Option<String>, in
 pub fn get_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<Option<Invoice>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT * FROM invoices WHERE id = ?1").map_err(|e| e.to_string())?;
-    
-    let column_count = stmt.column_count();
 
     let invoice = stmt.query_row(params![id], |row| {
         Ok(Invoice {
@@ -874,6 +863,7 @@ pub fn get_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<Optio
             selected_secondary_address: row.get("selected_secondary_address").ok(),
             custom_title: row.get("custom_title").ok(),
             payment_method: row.get("payment_method").ok(),
+            project_id: row.get("project_id").ok(),
         })
     });
     
@@ -907,7 +897,7 @@ pub fn get_invoices_with_clients(db: State<'_, Mutex<Connection>>, status: Optio
             i.id, i.invoice_number, i.client_id, i.invoice_date, i.due_date, i.month_period, 
             i.subtotal_ht, i.tva_rate, i.tva_amount, i.timbre, i.total_ttc, i.amount_paid, 
             i.balance_due, i.status, i.invoice_type, i.original_invoice_id, i.notes, 
-            i.created_at, i.updated_at, i.header_note, i.discount, i.discount_type, i.discount_value, i.use_secondary_register, i.custom_title, i.payment_method, i.selected_secondary_rc, i.selected_secondary_address,
+            i.created_at, i.updated_at, i.header_note, i.discount, i.discount_type, i.discount_value, i.use_secondary_register, i.custom_title, i.payment_method, i.selected_secondary_rc, i.selected_secondary_address, i.project_id,
             c.name, c.email
         FROM invoices i
         LEFT JOIN clients c ON i.client_id = c.id
@@ -960,10 +950,11 @@ pub fn get_invoices_with_clients(db: State<'_, Mutex<Connection>>, status: Optio
             payment_method: row.get(25).ok(),
             selected_secondary_rc: row.get(26).ok(),
             selected_secondary_address: row.get(27).ok(),
+            project_id: row.get(28).ok(),
         };
-        
-        let client_name: Option<String> = row.get(28).ok();
-        let client_email: Option<String> = row.get(29).ok();
+
+        let client_name: Option<String> = row.get(29).ok();
+        let client_email: Option<String> = row.get(30).ok();
         
         let client_info = if let Some(name) = client_name {
             Some(ClientInfo { name, email: client_email })
@@ -1376,16 +1367,6 @@ pub struct Order {
     pub custom_title: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct OrderItem {
-    pub id: String,
-    pub order_id: String,
-    pub product_id: String,
-    pub quantity: f64,
-    pub unit_price: f64,
-    pub amount: Option<f64>,
-}
-
 #[derive(Deserialize)]
 pub struct CreateOrderData {
     pub client_id: Option<String>,
@@ -1763,14 +1744,6 @@ pub struct DeliveryNote {
     pub reserves: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DeliveryNoteItem {
-    pub id: String,
-    pub delivery_note_id: String,
-    pub product_id: String,
-    pub quantity: f64,
 }
 
 #[derive(Deserialize)]
@@ -2471,12 +2444,6 @@ pub fn get_client_products(
 
 
 // ============= SETTINGS =============
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Setting {
-    pub key: String,
-    pub value: String,
-}
 
 #[tauri::command]
 pub fn get_settings(db: State<'_, Mutex<Connection>>) -> Result<std::collections::HashMap<String, String>, String> {
@@ -3473,6 +3440,17 @@ pub struct Employee {
     pub is_active: Option<bool>,
     pub created_at: String,
     pub updated_at: String,
+    // omada-agency branch only — HR/payroll fields.
+    pub base_salary: Option<f64>,
+    pub hire_date: Option<String>,
+    pub contract_type: Option<String>,
+    pub rib: Option<String>,
+    /// The attendance device's own numeric employee ID (e.g. ZKTeco PIN) —
+    /// how imported punches get matched to this employee. Not our UUID.
+    pub external_code: Option<String>,
+    /// Relative to app_data_dir (e.g. "employee_photos/<id>.jpg"), never
+    /// absolute — see migrate_employee_photos_and_documents_if_needed.
+    pub photo_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -3482,26 +3460,39 @@ pub struct CreateEmployeeData {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+    pub base_salary: Option<f64>,
+    pub hire_date: Option<String>,
+    pub contract_type: Option<String>,
+    pub rib: Option<String>,
+    pub external_code: Option<String>,
+}
+
+fn row_to_employee(row: &rusqlite::Row) -> rusqlite::Result<Employee> {
+    Ok(Employee {
+        id: row.get("id")?,
+        name: row.get("name")?,
+        role: row.get("role")?,
+        email: row.get("email")?,
+        phone: row.get("phone")?,
+        address: row.get("address")?,
+        is_active: row.get::<_, Option<i64>>("is_active")?.map(|v| v != 0),
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+        base_salary: row.get("base_salary").ok(),
+        hire_date: row.get("hire_date").ok(),
+        contract_type: row.get("contract_type").ok(),
+        rib: row.get("rib").ok(),
+        external_code: row.get("external_code").ok(),
+        photo_path: row.get("photo_path").ok(),
+    })
 }
 
 #[tauri::command]
 pub fn get_employees(db: State<'_, Mutex<Connection>>) -> Result<Vec<Employee>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT * FROM employees ORDER BY name").map_err(|e| e.to_string())?;
-    let employees = stmt.query_map([], |row| {
-        Ok(Employee {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            role: row.get(2)?,
-            email: row.get(3)?,
-            phone: row.get(4)?,
-            address: row.get(5)?,
-            is_active: row.get::<_, Option<i64>>(6)?.map(|v| v != 0),
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
-        })
-    }).map_err(|e| e.to_string())?;
-    
+    let employees = stmt.query_map([], row_to_employee).map_err(|e| e.to_string())?;
+
     let mut result = Vec::new();
     for emp in employees {
         result.push(emp.map_err(|e| e.to_string())?);
@@ -3516,9 +3507,9 @@ pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeDat
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     conn.execute(
-        "INSERT INTO employees (id, name, role, email, phone, address, is_active, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO employees (id, name, role, email, phone, address, is_active, created_at, updated_at, base_salary, hire_date, contract_type, rib, external_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             id,
             data.name,
@@ -3529,11 +3520,17 @@ pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeDat
             1i64, // is_active
             now,
             now,
+            data.base_salary,
+            data.hire_date,
+            data.contract_type,
+            data.rib,
+            data.external_code,
         ],
     ).map_err(|e| e.to_string())?;
-    
+
     let _ = log_activity(&conn, "CREATE", "EMPLOYEE", Some(&id), &format!("Nouvel employé créé: {}", data.name));
-    
+    backfill_punch_records_for_external_code(&conn, &id, data.external_code.as_deref())?;
+
     Ok(Employee {
         id,
         name: data.name,
@@ -3544,6 +3541,12 @@ pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeDat
         is_active: Some(true),
         created_at: now.clone(),
         updated_at: now,
+        base_salary: data.base_salary,
+        hire_date: data.hire_date,
+        contract_type: data.contract_type,
+        rib: data.rib,
+        external_code: data.external_code,
+        photo_path: None,
     })
 }
 
@@ -3553,9 +3556,9 @@ pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: Creat
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     conn.execute(
-        "UPDATE employees SET name = ?2, role = ?3, email = ?4, phone = ?5, address = ?6, updated_at = ?7 WHERE id = ?1",
+        "UPDATE employees SET name = ?2, role = ?3, email = ?4, phone = ?5, address = ?6, updated_at = ?7, base_salary = ?8, hire_date = ?9, contract_type = ?10, rib = ?11, external_code = ?12 WHERE id = ?1",
         params![
             id,
             data.name,
@@ -3564,26 +3567,34 @@ pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: Creat
             data.phone,
             data.address,
             now,
+            data.base_salary,
+            data.hire_date,
+            data.contract_type,
+            data.rib,
+            data.external_code,
         ],
     ).map_err(|e| e.to_string())?;
-    
-    let _ = log_activity(&conn, "UPDATE", "EMPLOYEE", Some(&id), &format!("Employé mis à jour: {}", data.name));
-    
-    // Retrieve updated employee (simplifying for now, could query database)
-    let mut stmt = conn.prepare("SELECT created_at, is_active FROM employees WHERE id = ?1").map_err(|e| e.to_string())?;
-    let (created_at, is_active_int): (String, i64) = stmt.query_row(params![id], |row| Ok((row.get(0)?, row.get(1)?))).map_err(|e| e.to_string())?;
 
-    Ok(Employee {
-        id,
-        name: data.name,
-        role: data.role,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        is_active: Some(is_active_int != 0),
-        created_at,
-        updated_at: now,
-    })
+    let _ = log_activity(&conn, "UPDATE", "EMPLOYEE", Some(&id), &format!("Employé mis à jour: {}", data.name));
+    backfill_punch_records_for_external_code(&conn, &id, data.external_code.as_deref())?;
+
+    conn.query_row("SELECT * FROM employees WHERE id = ?1", params![id], row_to_employee).map_err(|e| e.to_string())
+}
+
+/// Assigning/changing an employee's device ID retroactively claims any
+/// already-imported punches for that code that were sitting unmapped —
+/// no re-upload needed. Scoped to employee_id IS NULL so it never steals
+/// punches already correctly attributed to someone else.
+fn backfill_punch_records_for_external_code(conn: &Connection, employee_id: &str, external_code: Option<&str>) -> Result<(), String> {
+    let Some(code) = external_code else { return Ok(()) };
+    if code.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE punch_records SET employee_id = ?1 WHERE external_code = ?2 AND employee_id IS NULL",
+        params![employee_id, code],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -3596,54 +3607,914 @@ pub fn delete_employee(db: State<'_, Mutex<Connection>>, id: String) -> Result<(
     Ok(())
 }
 
-// ============= PROJECTS =============
+// ============= EMPLOYEE PHOTO & DOCUMENTS (omada-agency branch only) =============
+// Files are copied into app_data_dir (never referenced at their original
+// picked location, so the app doesn't break if that file moves/is deleted).
+// DB columns store paths RELATIVE to app_data_dir, resolved fresh here at
+// call time — same convention as database.db/license.token, so a future
+// app_data_dir change (reinstall, OS profile move) can't leave stale
+// absolute paths behind.
+
+static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Called once from lib.rs::run()'s setup(), alongside where the db path and
+/// license::init() are resolved — same app_data_dir.
+pub fn init_app_data_dir(dir: &Path) {
+    let _ = APP_DATA_DIR.set(dir.to_path_buf());
+}
+
+fn app_data_dir() -> &'static PathBuf {
+    APP_DATA_DIR
+        .get()
+        .expect("commands::init_app_data_dir() must run before any photo/document command is called")
+}
+
+#[tauri::command]
+pub fn set_employee_photo(db: State<'_, Mutex<Connection>>, employee_id: String, source_path: String) -> Result<Employee, String> {
+    crate::license::require_active_license()?;
+
+    let img = image::open(&source_path).map_err(|e| format!("Impossible de lire l'image: {}", e))?;
+    // Downscale-only (never upscales a smaller photo), longest edge capped
+    // at 512px — plenty for every avatar size used in this app.
+    let resized = img.thumbnail(512, 512);
+
+    let photos_dir = app_data_dir().join("employee_photos");
+    fs::create_dir_all(&photos_dir).map_err(|e| e.to_string())?;
+    let dest = photos_dir.join(format!("{}.jpg", employee_id));
+    // Always re-encoded to JPEG regardless of the source format, so the
+    // filename (and the stored photo_path) never has to track the original
+    // extension, and a re-upload cleanly overwrites the same file.
+    let mut out_file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out_file, 85);
+    encoder.encode_image(&resized).map_err(|e| format!("Impossible d'enregistrer l'image: {}", e))?;
+
+    let relative_path = format!("employee_photos/{}.jpg", employee_id);
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE employees SET photo_path = ?2, updated_at = ?3 WHERE id = ?1",
+        params![employee_id, relative_path, now],
+    ).map_err(|e| e.to_string())?;
+
+    conn.query_row("SELECT * FROM employees WHERE id = ?1", params![employee_id], row_to_employee).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_employee_photo(db: State<'_, Mutex<Connection>>, employee_id: String) -> Result<Employee, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let existing_path: Option<String> = conn
+        .query_row("SELECT photo_path FROM employees WHERE id = ?1", params![employee_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    if let Some(rel) = existing_path {
+        let _ = fs::remove_file(app_data_dir().join(&rel));
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE employees SET photo_path = NULL, updated_at = ?2 WHERE id = ?1",
+        params![employee_id, now],
+    ).map_err(|e| e.to_string())?;
+
+    conn.query_row("SELECT * FROM employees WHERE id = ?1", params![employee_id], row_to_employee).map_err(|e| e.to_string())
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Project {
+pub struct EmployeeDocument {
     pub id: String,
+    pub employee_id: String,
     pub name: String,
-    pub client_name: Option<String>,
-    pub team_members: Option<String>,
-    pub progress: i64,
-    pub status: Option<String>,
-    pub color: Option<String>,
+    pub doc_type: Option<String>,
+    /// Relative to app_data_dir, e.g. "employee_documents/<employee_id>/<doc_id>.pdf".
+    pub file_path: String,
+    pub created_at: String,
+}
+
+fn row_to_employee_document(row: &rusqlite::Row) -> rusqlite::Result<EmployeeDocument> {
+    Ok(EmployeeDocument {
+        id: row.get("id")?,
+        employee_id: row.get("employee_id")?,
+        name: row.get("name")?,
+        doc_type: row.get("doc_type")?,
+        file_path: row.get("file_path")?,
+        created_at: row.get("created_at")?,
+    })
+}
+
+/// Archival documents (CNI, diplôme, contrat...) — copied verbatim, unlike
+/// the photo, since these are meant to preserve the original file exactly
+/// (a PDF/DOCX/scan), not something to recompress.
+#[tauri::command]
+pub fn add_employee_document(
+    db: State<'_, Mutex<Connection>>,
+    employee_id: String,
+    source_path: String,
+    name: String,
+    doc_type: Option<String>,
+) -> Result<EmployeeDocument, String> {
+    crate::license::require_active_license()?;
+
+    let doc_id = Uuid::new_v4().to_string();
+    let ext = Path::new(&source_path).extension().and_then(|e| e.to_str()).unwrap_or("");
+    let file_name = if ext.is_empty() { doc_id.clone() } else { format!("{}.{}", doc_id, ext) };
+
+    let dest_dir = app_data_dir().join("employee_documents").join(&employee_id);
+    fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    let dest = dest_dir.join(&file_name);
+    fs::copy(&source_path, &dest).map_err(|e| format!("Impossible de copier le fichier: {}", e))?;
+
+    let relative_path = format!("employee_documents/{}/{}", employee_id, file_name);
+    let now = chrono::Utc::now().to_rfc3339();
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO employee_documents (id, employee_id, name, doc_type, file_path, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![doc_id, employee_id, name, doc_type, relative_path, now],
+    ).map_err(|e| e.to_string())?;
+
+    conn.query_row("SELECT * FROM employee_documents WHERE id = ?1", params![doc_id], row_to_employee_document).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_employee_documents(db: State<'_, Mutex<Connection>>, employee_id: String) -> Result<Vec<EmployeeDocument>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT * FROM employee_documents WHERE employee_id = ?1 ORDER BY created_at DESC").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![employee_id], row_to_employee_document).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn delete_employee_document(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let file_path: Option<String> = conn
+        .query_row("SELECT file_path FROM employee_documents WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let Some(rel) = file_path {
+        let _ = fs::remove_file(app_data_dir().join(&rel));
+    }
+
+    conn.execute("DELETE FROM employee_documents WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct EmployeeTaskWorkload {
+    pub employee_id: String,
+    pub employee_name: String,
+    pub task_count: i64,
+}
+
+/// Dashboard "Charge de travail par employé" chart. LEFT JOIN (not a GROUP
+/// BY on project_tasks) so an active employee with zero currently-assigned
+/// tasks still appears at count 0 — that's the "underutilized" half of the
+/// signal the chart exists to show, and a plain grouped count on the tasks
+/// table would silently omit them.
+#[tauri::command]
+pub fn get_employee_task_workload(db: State<'_, Mutex<Connection>>) -> Result<Vec<EmployeeTaskWorkload>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT e.id, e.name, COUNT(pt.id)
+         FROM employees e
+         LEFT JOIN project_tasks pt ON pt.assigned_resource_id = e.id AND pt.status != 'approuve'
+         WHERE e.is_active = 1
+         GROUP BY e.id, e.name
+         ORDER BY COUNT(pt.id) DESC"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        Ok(EmployeeTaskWorkload {
+            employee_id: row.get(0)?,
+            employee_name: row.get(1)?,
+            task_count: row.get(2)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+// ============= HR / PAYROLL (omada-agency branch only) =============
+// Attendance-derived absence + monthly payroll calculation. This agency's
+// actual work week is hardcoded here (a confirmed, non-configurable
+// business fact, not a setting): Saturday-Wednesday full days, Thursday
+// half-day, Friday off entirely (Algeria's legal weekly rest day). Not
+// part of the core Sordi product — see PROJECT_STATE.md.
+
+fn parse_year_month(month: &str) -> Result<(i32, u32), String> {
+    let parts: Vec<&str> = month.split('-').collect();
+    if parts.len() != 2 {
+        return Err("Format de mois invalide, attendu YYYY-MM".to_string());
+    }
+    let year: i32 = parts[0].parse().map_err(|_| "Année invalide".to_string())?;
+    let month_num: u32 = parts[1].parse().map_err(|_| "Mois invalide".to_string())?;
+    Ok((year, month_num))
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    let (next_year, next_month) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let first_of_next = chrono::NaiveDate::from_ymd_opt(next_year, next_month, 1).unwrap();
+    let first_of_this = chrono::NaiveDate::from_ymd_opt(year, month, 1).unwrap();
+    (first_of_next - first_of_this).num_days() as u32
+}
+
+/// This agency's fixed work week (hardcoded per an explicit, confirmed
+/// decision — not meant to be configurable): 1.0 for Sat-Wed, 0.5 for
+/// Thursday (half-day), 0.0 for Friday (full day off).
+fn day_weight(weekday: chrono::Weekday) -> f64 {
+    match weekday {
+        chrono::Weekday::Fri => 0.0,
+        chrono::Weekday::Thu => 0.5,
+        _ => 1.0,
+    }
+}
+
+fn weighted_days_in_range(year: i32, month: u32, from_day: u32, through_day: u32) -> f64 {
+    let mut total = 0.0;
+    for day in from_day..=through_day {
+        if let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, day) {
+            total += day_weight(date.weekday());
+        }
+    }
+    total
+}
+
+/// (working_days_in_month, absence_days) for one employee/month, both in the
+/// same weighted day-equivalent unit so daily_rate * absence_days stays
+/// internally consistent. Starts from hire_date if hired mid-month; never
+/// counts days beyond "today" so a live/in-progress month isn't penalized
+/// for days that haven't happened yet. "Absent" = zero punches that day —
+/// any single punch counts as present, no clock-in/out pairing logic.
+fn compute_absence_stats(
+    conn: &Connection,
+    employee_id: &str,
+    year: i32,
+    month: u32,
+    hire_date: Option<&str>,
+) -> Result<(f64, f64), String> {
+    let last_day = days_in_month(year, month);
+
+    let mut from_day: u32 = 1;
+    if let Some(hd) = hire_date.and_then(parse_ymd) {
+        if hd.year() == year && hd.month() == month {
+            from_day = hd.day();
+        } else if hd.year() > year || (hd.year() == year && hd.month() > month) {
+            return Ok((0.0, 0.0)); // hired after this month entirely
+        }
+    }
+
+    let today = chrono::Local::now().date_naive();
+    let mut through_day = last_day;
+    if today.year() == year && today.month() == month {
+        through_day = through_day.min(today.day());
+    }
+    if through_day < from_day {
+        return Ok((0.0, 0.0));
+    }
+
+    let working_days_in_month = weighted_days_in_range(year, month, from_day, through_day);
+
+    let month_prefix = format!("{:04}-{:02}", year, month);
+    let mut stmt = conn
+        .prepare("SELECT punch_time FROM punch_records WHERE employee_id = ?1 AND punch_time LIKE ?2")
+        .map_err(|e| e.to_string())?;
+    let pattern = format!("{}%", month_prefix);
+    let punch_days: std::collections::HashSet<u32> = stmt
+        .query_map(params![employee_id, pattern], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .filter_map(|s| parse_ymd(&s).map(|d| d.day()))
+        .collect();
+
+    let mut absence_days = 0.0;
+    for day in from_day..=through_day {
+        if punch_days.contains(&day) {
+            continue;
+        }
+        if let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, day) {
+            absence_days += day_weight(date.weekday());
+        }
+    }
+
+    Ok((working_days_in_month, absence_days))
+}
+
+const ABSENCE_FLAG_THRESHOLD: f64 = 3.0;
+
+#[derive(Serialize)]
+pub struct EmployeeAbsenceStats {
+    pub employee_id: String,
+    pub month: String,
+    pub working_days_in_month: f64,
+    pub absence_days: f64,
+    pub flagged: bool,
+}
+
+/// Live absence stats for one employee/month — usable for an in-progress
+/// month (dashboard, employee profile) independent of whether payroll has
+/// been run yet. run_payroll uses the same compute_absence_stats() and
+/// snapshots the result instead of calling this.
+#[tauri::command]
+pub fn get_employee_absence_stats(db: State<'_, Mutex<Connection>>, employee_id: String, month: String) -> Result<EmployeeAbsenceStats, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let hire_date: Option<String> = conn
+        .query_row("SELECT hire_date FROM employees WHERE id = ?1", params![employee_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let (year, month_num) = parse_year_month(&month)?;
+    let (working_days_in_month, absence_days) = compute_absence_stats(&conn, &employee_id, year, month_num, hire_date.as_deref())?;
+
+    Ok(EmployeeAbsenceStats {
+        employee_id,
+        month,
+        working_days_in_month,
+        absence_days,
+        flagged: absence_days > ABSENCE_FLAG_THRESHOLD,
+    })
+}
+
+// ---- Attendance / punch import ----
+
+#[derive(Deserialize)]
+pub struct PunchImportRow {
+    pub external_code: String,
+    pub punch_time: String,
+}
+
+#[derive(Serialize)]
+pub struct PunchImportSummary {
+    pub imported: i64,
+    pub skipped_duplicates: i64,
+    pub unmatched_employee_codes: Vec<String>,
+}
+
+/// Idempotent regardless of whether the export is month-specific or the
+/// full cumulative history since company start: (employee_id, punch_time)
+/// is a UNIQUE constraint at the DB level, INSERT OR IGNORE makes a repeat
+/// import of the same punch a silent no-op every time.
+#[tauri::command]
+pub fn import_punch_records(db: State<'_, Mutex<Connection>>, rows: Vec<PunchImportRow>) -> Result<PunchImportSummary, String> {
+    crate::license::require_active_license()?;
+
+    let mut conn = db.lock().map_err(|e| e.to_string())?;
+
+    let mut code_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT id, external_code FROM employees WHERE external_code IS NOT NULL AND external_code != ''")
+            .map_err(|e| e.to_string())?;
+        let mapped = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, String>(0)?)))
+            .map_err(|e| e.to_string())?;
+        for m in mapped {
+            let (code, id) = m.map_err(|e| e.to_string())?;
+            code_map.insert(code, id);
+        }
+    }
+
+    let mut imported = 0i64;
+    let mut skipped = 0i64;
+    let mut unmatched: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Every row is kept regardless of mapping status — an unrecognized
+    // device code is the expected normal case (an employee not yet
+    // assigned a device ID), never a reason to drop data. employee_id is
+    // NULL for those; get_unmapped_device_codes() surfaces them, and
+    // mapping the code later (create/update_employee) backfills these rows
+    // retroactively instead of requiring a re-import.
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for row in rows {
+        let employee_id = code_map.get(&row.external_code);
+        if employee_id.is_none() {
+            unmatched.insert(row.external_code.clone());
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let changed = tx
+            .execute(
+                "INSERT OR IGNORE INTO punch_records (id, external_code, employee_id, punch_time, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![id, row.external_code, employee_id, row.punch_time, now],
+            )
+            .map_err(|e| e.to_string())?;
+        if changed > 0 {
+            imported += 1;
+        } else {
+            skipped += 1;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+
+    let _ = log_activity(
+        &conn,
+        "IMPORT",
+        "PUNCH_RECORDS",
+        None,
+        &format!("{} pointages importés, {} doublons ignorés", imported, skipped),
+    );
+
+    Ok(PunchImportSummary {
+        imported,
+        skipped_duplicates: skipped,
+        unmatched_employee_codes: unmatched.into_iter().collect(),
+    })
+}
+
+#[derive(Serialize)]
+pub struct UnmappedDeviceCode {
+    pub external_code: String,
+    pub punch_count: i64,
+    pub last_punch_time: String,
+}
+
+/// Device codes still waiting to be assigned to an employee (create/update
+/// with a matching external_code backfills these automatically).
+#[tauri::command]
+pub fn get_unmapped_device_codes(db: State<'_, Mutex<Connection>>) -> Result<Vec<UnmappedDeviceCode>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT external_code, COUNT(*), MAX(punch_time) FROM punch_records
+             WHERE employee_id IS NULL GROUP BY external_code ORDER BY external_code",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(UnmappedDeviceCode {
+                external_code: row.get(0)?,
+                punch_count: row.get(1)?,
+                last_punch_time: row.get(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+// ---- Employee advances ----
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct EmployeeAdvance {
+    pub id: String,
+    pub employee_id: String,
+    pub amount: f64,
+    pub date_taken: String,
+    pub month_to_deduct: String,
+    pub deducted: bool,
+    pub deducted_in_payroll_run_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateEmployeeAdvanceData {
+    pub employee_id: String,
+    pub amount: f64,
+    pub date_taken: String,
+}
+
+fn row_to_employee_advance(row: &rusqlite::Row) -> rusqlite::Result<EmployeeAdvance> {
+    Ok(EmployeeAdvance {
+        id: row.get(0)?,
+        employee_id: row.get(1)?,
+        amount: row.get(2)?,
+        date_taken: row.get(3)?,
+        month_to_deduct: row.get(4)?,
+        deducted: row.get::<_, i64>(5)? != 0,
+        deducted_in_payroll_run_id: row.get(6)?,
+        created_at: row.get(7)?,
+    })
+}
+
+const EMPLOYEE_ADVANCE_COLUMNS: &str = "id, employee_id, amount, date_taken, month_to_deduct, deducted, deducted_in_payroll_run_id, created_at";
+
+/// "An advance taken in August is deducted in full from September's
+/// payroll" — month_to_deduct is always date_taken's month + 1.
+fn next_month_str(date_taken: &str) -> Result<String, String> {
+    let date = parse_ymd(date_taken).ok_or_else(|| "Date invalide".to_string())?;
+    let (y, m) = if date.month() == 12 { (date.year() + 1, 1) } else { (date.year(), date.month() + 1) };
+    Ok(format!("{:04}-{:02}", y, m))
+}
+
+#[tauri::command]
+pub fn create_employee_advance(db: State<'_, Mutex<Connection>>, data: CreateEmployeeAdvanceData) -> Result<EmployeeAdvance, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let month_to_deduct = next_month_str(&data.date_taken)?;
+
+    conn.execute(
+        "INSERT INTO employee_advances (id, employee_id, amount, date_taken, month_to_deduct, deducted, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
+        params![id, data.employee_id, data.amount, data.date_taken, month_to_deduct, now],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "CREATE", "EMPLOYEE_ADVANCE", Some(&id), &format!("Avance de {} accordée", data.amount));
+
+    Ok(EmployeeAdvance {
+        id,
+        employee_id: data.employee_id,
+        amount: data.amount,
+        date_taken: data.date_taken,
+        month_to_deduct,
+        deducted: false,
+        deducted_in_payroll_run_id: None,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn get_employee_advances(db: State<'_, Mutex<Connection>>, employee_id: String) -> Result<Vec<EmployeeAdvance>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(&format!("SELECT {} FROM employee_advances WHERE employee_id = ?1 ORDER BY date_taken DESC", EMPLOYEE_ADVANCE_COLUMNS))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![employee_id], row_to_employee_advance).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct EmployeeAdvanceTotals {
+    pub total_taken: f64,
+    pub total_pending: f64,
+}
+
+#[tauri::command]
+pub fn get_employee_advance_totals(db: State<'_, Mutex<Connection>>, employee_id: String) -> Result<EmployeeAdvanceTotals, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let total_taken: f64 = conn
+        .query_row("SELECT COALESCE(SUM(amount), 0) FROM employee_advances WHERE employee_id = ?1", params![employee_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    let total_pending: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM employee_advances WHERE employee_id = ?1 AND deducted = 0",
+            params![employee_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(EmployeeAdvanceTotals { total_taken, total_pending })
+}
+
+/// Manual override for an advance's status (e.g. paid back in cash outside
+/// payroll, or a correction). Clearing it back to pending also clears the
+/// payroll-run link, since it's no longer actually deducted by that run.
+#[tauri::command]
+pub fn set_employee_advance_deducted(db: State<'_, Mutex<Connection>>, id: String, deducted: bool) -> Result<EmployeeAdvance, String> {
+    crate::license::require_active_license()?;
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE employee_advances SET deducted = ?2, deducted_in_payroll_run_id = CASE WHEN ?2 = 0 THEN NULL ELSE deducted_in_payroll_run_id END WHERE id = ?1",
+        params![id, deducted as i64],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(
+        &conn, "UPDATE", "EMPLOYEE_ADVANCE", Some(&id),
+        if deducted { "Avance marquée comme déduite" } else { "Avance marquée en attente" },
+    );
+
+    let mut stmt = conn
+        .prepare(&format!("SELECT {} FROM employee_advances WHERE id = ?1", EMPLOYEE_ADVANCE_COLUMNS))
+        .map_err(|e| e.to_string())?;
+    stmt.query_row(params![id], row_to_employee_advance).map_err(|e| e.to_string())
+}
+
+// ---- Monthly payroll (bulletin de paie) ----
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PayrollRun {
+    pub id: String,
+    pub employee_id: String,
+    pub month: String,
+    pub base_salary: f64,
+    pub working_days_in_month: f64,
+    pub absence_days: f64,
+    pub daily_rate: f64,
+    pub absence_deduction: f64,
+    pub primes: f64,
+    pub avance_deduction: f64,
+    pub net_a_payer: f64,
+    pub paid: bool,
+    pub paid_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
+const PAYROLL_RUN_COLUMNS: &str = "id, employee_id, month, base_salary, working_days_in_month, absence_days, daily_rate, absence_deduction, primes, avance_deduction, net_a_payer, paid, paid_date, created_at, updated_at";
+
+fn row_to_payroll_run(row: &rusqlite::Row) -> rusqlite::Result<PayrollRun> {
+    Ok(PayrollRun {
+        id: row.get(0)?,
+        employee_id: row.get(1)?,
+        month: row.get(2)?,
+        base_salary: row.get(3)?,
+        working_days_in_month: row.get(4)?,
+        absence_days: row.get(5)?,
+        daily_rate: row.get(6)?,
+        absence_deduction: row.get(7)?,
+        primes: row.get(8)?,
+        avance_deduction: row.get(9)?,
+        net_a_payer: row.get(10)?,
+        paid: row.get::<_, i64>(11)? != 0,
+        paid_date: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
+    })
+}
+
+/// Computes and (re)saves one employee's bulletin de paie for one month —
+/// upserts on (employee_id, month), so re-running before it's paid updates
+/// the same row rather than duplicating it. Refuses to touch a run already
+/// marked paid. Consumes (marks deducted) any employee_advances whose
+/// month_to_deduct matches, in the same transaction — a re-run correctly
+/// re-includes advances it already consumed on a prior run (matched by
+/// this run's own id), so recalculating doesn't drop them.
+#[tauri::command]
+pub fn run_payroll(db: State<'_, Mutex<Connection>>, employee_id: String, month: String, primes: Option<f64>) -> Result<PayrollRun, String> {
+    crate::license::require_active_license()?;
+
+    let mut conn = db.lock().map_err(|e| e.to_string())?;
+
+    let existing: Option<(String, f64, i64)> = conn
+        .query_row(
+            "SELECT id, primes, paid FROM payroll_runs WHERE employee_id = ?1 AND month = ?2",
+            params![employee_id, month],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some((_, _, paid)) = existing {
+        if paid != 0 {
+            return Err("Ce bulletin de paie est déjà marqué payé — impossible de le recalculer.".to_string());
+        }
+    }
+
+    let run_id = existing.as_ref().map(|(id, _, _)| id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let primes = primes.unwrap_or_else(|| existing.as_ref().map(|(_, p, _)| *p).unwrap_or(0.0));
+
+    let (base_salary, hire_date): (Option<f64>, Option<String>) = conn
+        .query_row(
+            "SELECT base_salary, hire_date FROM employees WHERE id = ?1",
+            params![employee_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    let base_salary = base_salary.ok_or_else(|| "Cet employé n'a pas de salaire de base défini.".to_string())?;
+
+    let (year, month_num) = parse_year_month(&month)?;
+    let (working_days_in_month, absence_days) = compute_absence_stats(&conn, &employee_id, year, month_num, hire_date.as_deref())?;
+    if working_days_in_month <= 0.0 {
+        return Err("Aucun jour de travail attendu ce mois pour cet employé (vérifiez la date d'embauche).".to_string());
+    }
+
+    let daily_rate = base_salary / working_days_in_month;
+    let absence_deduction = absence_days * daily_rate;
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let avance_deduction: f64 = tx
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM employee_advances WHERE employee_id = ?1 AND month_to_deduct = ?2 AND (deducted = 0 OR deducted_in_payroll_run_id = ?3)",
+            params![employee_id, month, run_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let net_a_payer = base_salary + primes - absence_deduction - avance_deduction;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    tx.execute(
+        "INSERT INTO payroll_runs (id, employee_id, month, base_salary, working_days_in_month, absence_days, daily_rate, absence_deduction, primes, avance_deduction, net_a_payer, paid, paid_date, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, NULL, ?12, ?12)
+         ON CONFLICT(employee_id, month) DO UPDATE SET
+            base_salary = excluded.base_salary, working_days_in_month = excluded.working_days_in_month,
+            absence_days = excluded.absence_days, daily_rate = excluded.daily_rate,
+            absence_deduction = excluded.absence_deduction, primes = excluded.primes,
+            avance_deduction = excluded.avance_deduction, net_a_payer = excluded.net_a_payer,
+            updated_at = excluded.updated_at",
+        params![run_id, employee_id, month, base_salary, working_days_in_month, absence_days, daily_rate, absence_deduction, primes, avance_deduction, net_a_payer, now],
+    ).map_err(|e| e.to_string())?;
+
+    tx.execute(
+        "UPDATE employee_advances SET deducted = 1, deducted_in_payroll_run_id = ?3 WHERE employee_id = ?1 AND month_to_deduct = ?2 AND deducted = 0",
+        params![employee_id, month, run_id],
+    ).map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "CREATE", "PAYROLL_RUN", Some(&run_id), &format!("Paie calculée pour {}", month));
+
+    conn.query_row(&format!("SELECT {} FROM payroll_runs WHERE id = ?1", PAYROLL_RUN_COLUMNS), params![run_id], row_to_payroll_run)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_payroll_runs(
+    db: State<'_, Mutex<Connection>>,
+    employee_id: Option<String>,
+    month: Option<String>,
+    paid: Option<bool>,
+) -> Result<Vec<PayrollRun>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut query = format!("SELECT {} FROM payroll_runs", PAYROLL_RUN_COLUMNS);
+    let mut conditions: Vec<String> = Vec::new();
+    let mut bind_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(eid) = employee_id {
+        conditions.push("employee_id = ?".to_string());
+        bind_params.push(Box::new(eid));
+    }
+    if let Some(m) = month {
+        conditions.push("month = ?".to_string());
+        bind_params.push(Box::new(m));
+    }
+    if let Some(p) = paid {
+        conditions.push("paid = ?".to_string());
+        bind_params.push(Box::new(p as i64));
+    }
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    query.push_str(" ORDER BY month DESC");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = bind_params.iter().map(|b| b.as_ref()).collect();
+    let rows = stmt.query_map(param_refs.as_slice(), row_to_payroll_run).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn update_payroll_paid(db: State<'_, Mutex<Connection>>, id: String, paid: bool, paid_date: Option<String>) -> Result<PayrollRun, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE payroll_runs SET paid = ?2, paid_date = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, paid as i64, paid_date, now],
+    ).map_err(|e| e.to_string())?;
+
+    conn.query_row(&format!("SELECT {} FROM payroll_runs WHERE id = ?1", PAYROLL_RUN_COLUMNS), params![id], row_to_payroll_run)
+        .map_err(|e| e.to_string())
+}
+
+// ---- Manager dashboard ----
+
+#[derive(Serialize)]
+pub struct PayrollDashboardStats {
+    pub month: String,
+    pub total_payroll_cost: f64,
+    pub flagged_employee_count: i64,
+    pub pending_payroll_count: i64,
+}
+
+#[tauri::command]
+pub fn get_payroll_dashboard_stats(db: State<'_, Mutex<Connection>>, month: String) -> Result<PayrollDashboardStats, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    let total_payroll_cost: f64 = conn
+        .query_row("SELECT COALESCE(SUM(net_a_payer), 0) FROM payroll_runs WHERE month = ?1", params![month], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let pending_payroll_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM payroll_runs WHERE month = ?1 AND paid = 0", params![month], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let (year, month_num) = parse_year_month(&month)?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, hire_date FROM employees WHERE is_active = 1 OR is_active IS NULL")
+        .map_err(|e| e.to_string())?;
+    let employees: Vec<(String, Option<String>)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut flagged_employee_count = 0i64;
+    for (emp_id, hire_date) in employees {
+        let (_, absence_days) = compute_absence_stats(&conn, &emp_id, year, month_num, hire_date.as_deref())?;
+        if absence_days > ABSENCE_FLAG_THRESHOLD {
+            flagged_employee_count += 1;
+        }
+    }
+
+    Ok(PayrollDashboardStats {
+        month,
+        total_payroll_cost,
+        flagged_employee_count,
+        pending_payroll_count,
+    })
+}
+
+// ============= PROJECTS (omada-agency branch only) =============
+// Agency project-management module: client-linked, invoice-derived budget
+// (see get_project_stats), task/deliverable tracking. Replaces the old
+// loosely-typed projects/employee_scores tables (retired in database.rs's
+// migrate_legacy_projects_module — confirmed unused, zero real rows anywhere).
+// Not part of the core Sordi product.
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Project {
+    pub id: String,
+    pub client_id: String,
+    pub name: String,
+    pub service_categories: Vec<String>,
+    pub responsible_person: Option<String>,
+    pub start_date: Option<String>,
+    pub deadline: Option<String>,
+    pub planned_budget: f64,
+    pub created_at: String,
+    pub updated_at: String,
+    // omada-agency branch only — freelancer lump-sum payment tracking.
+    // Separate from responsible_person (deliberately plain free text) —
+    // only set when this project actually has a freelancer to pay.
+    pub freelancer_id: Option<String>,
+    pub montant_convenu: Option<f64>,
+    pub statut_paiement: String,
+    pub date_paiement: Option<String>,
+}
+
 #[derive(Deserialize)]
 pub struct CreateProjectData {
+    pub client_id: String,
     pub name: String,
-    pub client_name: Option<String>,
-    pub team_members: Option<String>,
-    pub progress: i64,
-    pub status: Option<String>,
-    pub color: Option<String>,
+    pub service_categories: Vec<String>,
+    pub responsible_person: Option<String>,
+    pub start_date: Option<String>,
+    pub deadline: Option<String>,
+    pub planned_budget: f64,
+    pub freelancer_id: Option<String>,
+    pub montant_convenu: Option<f64>,
 }
+
+fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<Project> {
+    let categories_json: String = row.get("service_categories")?;
+    Ok(Project {
+        id: row.get("id")?,
+        client_id: row.get("client_id")?,
+        name: row.get("name")?,
+        service_categories: serde_json::from_str(&categories_json).unwrap_or_default(),
+        responsible_person: row.get("responsible_person")?,
+        start_date: row.get("start_date")?,
+        deadline: row.get("deadline")?,
+        planned_budget: row.get("planned_budget")?,
+        created_at: row.get("created_at")?,
+        updated_at: row.get("updated_at")?,
+        freelancer_id: row.get("freelancer_id").ok(),
+        montant_convenu: row.get("montant_convenu").ok(),
+        statut_paiement: row.get::<_, Option<String>>("statut_paiement").ok().flatten().unwrap_or_else(|| "non_paye".to_string()),
+        date_paiement: row.get("date_paiement").ok(),
+    })
+}
+
+const PROJECT_COLUMNS: &str = "id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement, date_paiement";
 
 #[tauri::command]
 pub fn get_projects(db: State<'_, Mutex<Connection>>) -> Result<Vec<Project>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT * FROM projects ORDER BY created_at DESC").map_err(|e| e.to_string())?;
-    let projects = stmt.query_map([], |row| {
-        Ok(Project {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            client_name: row.get(2)?,
-            team_members: row.get(3)?,
-            progress: row.get(4)?,
-            status: row.get(5)?,
-            color: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
-        })
-    }).map_err(|e| e.to_string())?;
-    
+    let mut stmt = conn
+        .prepare(&format!("SELECT {} FROM projects ORDER BY created_at DESC", PROJECT_COLUMNS))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], row_to_project).map_err(|e| e.to_string())?;
     let mut result = Vec::new();
-    for p in projects {
+    for p in rows {
         result.push(p.map_err(|e| e.to_string())?);
     }
     Ok(result)
+}
+
+/// Singular fetch, matching get_client/get_order/get_invoice's convention —
+/// needed for the project detail page to work from a direct/refreshed
+/// navigation without depending on the list query being cached first.
+#[tauri::command]
+pub fn get_project(db: State<'_, Mutex<Connection>>, id: String) -> Result<Option<Project>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.query_row(
+        &format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS),
+        params![id],
+        row_to_project,
+    ).optional().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -3653,77 +4524,53 @@ pub fn create_project(db: State<'_, Mutex<Connection>>, data: CreateProjectData)
     let conn = db.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    
-    let status = data.status.clone().unwrap_or_else(|| "En cours".to_string());
-    let color = data.color.clone().unwrap_or_else(|| "bg-blue-500".to_string());
+    let categories_json = serde_json::to_string(&data.service_categories).map_err(|e| e.to_string())?;
 
     conn.execute(
-        "INSERT INTO projects (id, name, client_name, team_members, progress, status, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            id,
-            data.name,
-            data.client_name,
-            data.team_members,
-            data.progress,
-            status,
-            color,
-            now,
-            now,
-        ],
+        "INSERT INTO projects (id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 'non_paye')",
+        params![id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, now, data.freelancer_id, data.montant_convenu],
     ).map_err(|e| e.to_string())?;
-    
+
     let _ = log_activity(&conn, "CREATE", "PROJECT", Some(&id), &format!("Nouveau projet créé: {}", data.name));
-    
+
     Ok(Project {
         id,
+        client_id: data.client_id,
         name: data.name,
-        client_name: data.client_name,
-        team_members: data.team_members,
-        progress: data.progress,
-        status: data.status,
-        color: data.color,
+        service_categories: data.service_categories,
+        responsible_person: data.responsible_person,
+        start_date: data.start_date,
+        deadline: data.deadline,
+        planned_budget: data.planned_budget,
         created_at: now.clone(),
         updated_at: now,
+        freelancer_id: data.freelancer_id,
+        montant_convenu: data.montant_convenu,
+        statut_paiement: "non_paye".to_string(),
+        date_paiement: None,
     })
 }
 
+/// Field edit only — statut_paiement/date_paiement go through
+/// update_freelancer_payment_status below, same split as payroll_runs'
+/// update_payroll_paid vs. run_payroll.
 #[tauri::command]
 pub fn update_project(db: State<'_, Mutex<Connection>>, id: String, data: CreateProjectData) -> Result<Project, String> {
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
-    
-    conn.execute(
-        "UPDATE projects SET name = ?2, client_name = ?3, team_members = ?4, progress = ?5, status = ?6, color = ?7, updated_at = ?8 WHERE id = ?1",
-        params![
-            id,
-            data.name,
-            data.client_name,
-            data.team_members,
-            data.progress,
-            data.status,
-            data.color,
-            now,
-        ],
-    ).map_err(|e| e.to_string())?;
-    
-    let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&id), &format!("Projet mis à jour: {}", data.name));
-    
-    let mut stmt = conn.prepare("SELECT created_at FROM projects WHERE id = ?1").map_err(|e| e.to_string())?;
-    let created_at: String = stmt.query_row(params![id], |row| row.get(0)).map_err(|e| e.to_string())?;
+    let categories_json = serde_json::to_string(&data.service_categories).map_err(|e| e.to_string())?;
 
-    Ok(Project {
-        id,
-        name: data.name,
-        client_name: data.client_name,
-        team_members: data.team_members,
-        progress: data.progress,
-        status: data.status,
-        color: data.color,
-        created_at,
-        updated_at: now,
-    })
+    conn.execute(
+        "UPDATE projects SET client_id = ?2, name = ?3, service_categories = ?4, responsible_person = ?5, start_date = ?6, deadline = ?7, planned_budget = ?8, updated_at = ?9, freelancer_id = ?10, montant_convenu = ?11 WHERE id = ?1",
+        params![id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, data.freelancer_id, data.montant_convenu],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&id), &format!("Projet mis à jour: {}", data.name));
+
+    conn.query_row(&format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS), params![id], row_to_project)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -3736,160 +4583,464 @@ pub fn delete_project(db: State<'_, Mutex<Connection>>, id: String) -> Result<()
     Ok(())
 }
 
-// ============= SCORES =============
+// ---- Freelancer project payments ----
+
+#[tauri::command]
+pub fn update_freelancer_payment_status(db: State<'_, Mutex<Connection>>, project_id: String, statut_paiement: String, date_paiement: Option<String>) -> Result<Project, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE projects SET statut_paiement = ?2, date_paiement = ?3, updated_at = ?4 WHERE id = ?1",
+        params![project_id, statut_paiement, date_paiement, chrono::Utc::now().to_rfc3339()],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&project_id), &format!("Statut de paiement freelance : {}", statut_paiement));
+
+    conn.query_row(&format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS), params![project_id], row_to_project)
+        .map_err(|e| e.to_string())
+}
+
+/// Attaches a freelancer + agreed amount to an EXISTING project in one call
+/// (used by the Paie page's "Ajouter un paiement freelance" dialog, so
+/// logging a payment doesn't require going through the full New/Edit
+/// Project form). Superset of update_freelancer_payment_status, which stays
+/// untouched — it's still what the plain paid/unpaid toggle buttons use.
+#[tauri::command]
+pub fn assign_freelance_payment(
+    db: State<'_, Mutex<Connection>>,
+    project_id: String,
+    freelancer_id: String,
+    montant_convenu: f64,
+    statut_paiement: String,
+    date_paiement: Option<String>,
+) -> Result<Project, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE projects SET freelancer_id = ?2, montant_convenu = ?3, statut_paiement = ?4, date_paiement = ?5, updated_at = ?6 WHERE id = ?1",
+        params![project_id, freelancer_id, montant_convenu, statut_paiement, date_paiement, chrono::Utc::now().to_rfc3339()],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&project_id), "Paiement freelance assigné");
+
+    conn.query_row(&format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS), params![project_id], row_to_project)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct FreelancePayment {
+    pub project_id: String,
+    pub project_name: String,
+    pub freelancer_id: String,
+    pub freelancer_name: String,
+    pub montant_convenu: Option<f64>,
+    pub statut_paiement: String,
+    pub date_paiement: Option<String>,
+}
+
+/// Every project with a freelancer assigned, unpaid first — feeds the
+/// "Freelances" list on the Paie page and its running-total-owed figure
+/// (frontend sums montant_convenu where statut_paiement = non_paye).
+#[tauri::command]
+pub fn get_freelance_payments(db: State<'_, Mutex<Connection>>) -> Result<Vec<FreelancePayment>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.freelancer_id, e.name, p.montant_convenu, p.statut_paiement, p.date_paiement
+             FROM projects p
+             JOIN employees e ON e.id = p.freelancer_id
+             WHERE p.freelancer_id IS NOT NULL
+             ORDER BY CASE WHEN p.statut_paiement = 'non_paye' THEN 0 ELSE 1 END, p.created_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(FreelancePayment {
+                project_id: row.get(0)?,
+                project_name: row.get(1)?,
+                freelancer_id: row.get(2)?,
+                freelancer_name: row.get(3)?,
+                montant_convenu: row.get(4)?,
+                statut_paiement: row.get::<_, Option<String>>(5)?.unwrap_or_else(|| "non_paye".to_string()),
+                date_paiement: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+// ---- Project budget/progress aggregation (mirrors get_client_overview_stats:
+// raw numbers only, every threshold/status rule lives in TS) ----
+
+#[derive(Serialize, Debug, Clone)]
+pub struct ProjectStats {
+    pub project_id: String,
+    pub planned_budget: f64,
+    /// SUM(invoices.total_ttc) for every invoice linked to this project —
+    /// the derived budget the spec called for, never manually entered.
+    pub budget_facture: f64,
+    /// SUM(invoices.amount_paid) for the same set — reuses each invoice's
+    /// own tracked amount_paid rather than re-deriving from payments.
+    pub budget_paye: f64,
+    pub task_count: i64,
+    pub tasks_approved_count: i64,
+    pub start_date: Option<String>,
+    pub deadline: Option<String>,
+}
+
+#[tauri::command]
+pub fn get_project_stats(db: State<'_, Mutex<Connection>>, project_id: Option<String>) -> Result<Vec<ProjectStats>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    struct ProjectRow {
+        id: String,
+        planned_budget: f64,
+        start_date: Option<String>,
+        deadline: Option<String>,
+    }
+    let map_project_row = |row: &rusqlite::Row| -> rusqlite::Result<ProjectRow> {
+        Ok(ProjectRow {
+            id: row.get(0)?,
+            planned_budget: row.get(1)?,
+            start_date: row.get(2)?,
+            deadline: row.get(3)?,
+        })
+    };
+    let mut proj_stmt = if project_id.is_some() {
+        conn.prepare("SELECT id, planned_budget, start_date, deadline FROM projects WHERE id = ?1")
+    } else {
+        conn.prepare("SELECT id, planned_budget, start_date, deadline FROM projects")
+    }.map_err(|e| e.to_string())?;
+    let project_rows: Vec<ProjectRow> = if let Some(ref pid) = project_id {
+        proj_stmt.query_map(params![pid], map_project_row)
+    } else {
+        proj_stmt.query_map([], map_project_row)
+    }.map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for p in project_rows {
+        let (budget_facture, budget_paye): (f64, f64) = conn.query_row(
+            "SELECT COALESCE(SUM(total_ttc), 0), COALESCE(SUM(amount_paid), 0) FROM invoices WHERE project_id = ?1",
+            params![p.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| e.to_string())?;
+
+        let (task_count, tasks_approved_count): (i64, i64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN status = 'approuve' THEN 1 ELSE 0 END), 0) FROM project_tasks WHERE project_id = ?1",
+            params![p.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).map_err(|e| e.to_string())?;
+
+        result.push(ProjectStats {
+            project_id: p.id,
+            planned_budget: p.planned_budget,
+            budget_facture,
+            budget_paye,
+            task_count,
+            tasks_approved_count,
+            start_date: p.start_date,
+            deadline: p.deadline,
+        });
+    }
+    Ok(result)
+}
+
+/// Sets or clears (project_id: None) which project an invoice belongs to.
+/// One invoice -> at most one project, enforced by this being a single
+/// column assignment rather than a join table.
+#[tauri::command]
+pub fn assign_invoice_to_project(db: State<'_, Mutex<Connection>>, invoice_id: String, project_id: Option<String>) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE invoices SET project_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![invoice_id, project_id, now],
+    ).map_err(|e| e.to_string())?;
+    let _ = log_activity(&conn, "UPDATE", "INVOICE", Some(&invoice_id), "Facture liée à un projet");
+    Ok(())
+}
+
+// ---- Project tasks ----
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EmployeeScore {
+pub struct ProjectTask {
     pub id: String,
-    pub employee_id: String,
-    pub project_id: Option<String>,
-    pub month: String,
-    pub year: String,
-    pub feature: String,
-    pub score: f64,
-    pub notes: Option<String>,
+    pub project_id: String,
+    pub title: String,
+    pub assigned_resource_id: Option<String>,
+    pub status: String,
+    pub revision_count: i64,
+    pub due_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
+fn row_to_project_task(row: &rusqlite::Row) -> rusqlite::Result<ProjectTask> {
+    Ok(ProjectTask {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        title: row.get(2)?,
+        assigned_resource_id: row.get(3)?,
+        status: row.get(4)?,
+        revision_count: row.get(5)?,
+        due_date: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}
+
+const PROJECT_TASK_COLUMNS: &str = "id, project_id, title, assigned_resource_id, status, revision_count, due_date, created_at, updated_at";
+
 #[derive(Deserialize)]
-pub struct CreateScoreData {
-    pub employee_id: String,
-    pub project_id: Option<String>,
-    pub month: String,
-    pub year: String,
-    pub feature: String,
-    pub score: f64,
-    pub notes: Option<String>,
+pub struct CreateProjectTaskData {
+    pub project_id: String,
+    pub title: String,
+    pub assigned_resource_id: Option<String>,
+    pub due_date: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProjectTaskData {
+    pub title: String,
+    pub assigned_resource_id: Option<String>,
+    pub due_date: Option<String>,
 }
 
 #[tauri::command]
-pub fn get_employee_scores(
-    db: State<'_, Mutex<Connection>>,
-    month: String,
-    year: String,
-) -> Result<Vec<EmployeeScore>, String> {
+pub fn get_project_tasks(db: State<'_, Mutex<Connection>>, project_id: String) -> Result<Vec<ProjectTask>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT * FROM employee_scores WHERE month = ?1 AND year = ?2")
+        .prepare(&format!("SELECT {} FROM project_tasks WHERE project_id = ?1 ORDER BY created_at ASC", PROJECT_TASK_COLUMNS))
         .map_err(|e| e.to_string())?;
-    let scores = stmt
-        .query_map(params![month, year], |row| {
-            Ok(EmployeeScore {
-                id: row.get(0)?,
-                employee_id: row.get(1)?,
-                project_id: row.get(2)?,
-                month: row.get(3)?,
-                year: row.get(4)?,
-                feature: row.get(5)?,
-                score: row.get(6)?,
-                notes: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-
+    let rows = stmt.query_map(params![project_id], row_to_project_task).map_err(|e| e.to_string())?;
     let mut result = Vec::new();
-    for s in scores {
-        result.push(s.map_err(|e| e.to_string())?);
+    for t in rows {
+        result.push(t.map_err(|e| e.to_string())?);
     }
     Ok(result)
 }
 
 #[tauri::command]
-pub fn upsert_employee_score(
-    db: State<'_, Mutex<Connection>>,
-    data: CreateScoreData,
-) -> Result<EmployeeScore, String> {
+pub fn create_project_task(db: State<'_, Mutex<Connection>>, data: CreateProjectTaskData) -> Result<ProjectTask, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO project_tasks (id, project_id, title, assigned_resource_id, status, revision_count, due_date, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'à_faire', 0, ?5, ?6, ?7)",
+        params![id, data.project_id, data.title, data.assigned_resource_id, data.due_date, now, now],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "CREATE", "PROJECT_TASK", Some(&id), &format!("Nouvelle tâche créée: {}", data.title));
+
+    Ok(ProjectTask {
+        id,
+        project_id: data.project_id,
+        title: data.title,
+        assigned_resource_id: data.assigned_resource_id,
+        status: "à_faire".to_string(),
+        revision_count: 0,
+        due_date: data.due_date,
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+/// Field edit only (title/assignee/due date) — status transitions go through
+/// update_project_task_status below, same split as update_invoice vs
+/// update_invoice_status elsewhere in this file.
+#[tauri::command]
+pub fn update_project_task(db: State<'_, Mutex<Connection>>, id: String, data: UpdateProjectTaskData) -> Result<ProjectTask, String> {
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Check if score exists for this employee, project, feature, month, year
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, created_at FROM employee_scores 
-             WHERE employee_id = ?1 AND project_id IS ?2 AND feature = ?3 AND month = ?4 AND year = ?5",
-        )
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE project_tasks SET title = ?2, assigned_resource_id = ?3, due_date = ?4, updated_at = ?5 WHERE id = ?1",
+        params![id, data.title, data.assigned_resource_id, data.due_date, now],
+    ).map_err(|e| e.to_string())?;
 
-    let existing: Option<(String, String)> = stmt
-        .query_row(
-            params![
-                data.employee_id,
-                data.project_id,
-                data.feature,
-                data.month,
-                data.year
-            ],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
+    let _ = log_activity(&conn, "UPDATE", "PROJECT_TASK", Some(&id), &format!("Tâche mise à jour: {}", data.title));
 
-    if let Some((id, created_at)) = existing {
-        conn.execute(
-            "UPDATE employee_scores SET score = ?2, notes = ?3, updated_at = ?4 WHERE id = ?1",
-            params![&id, data.score, data.notes, &now],
-        )
-        .map_err(|e| e.to_string())?;
-
-        Ok(EmployeeScore {
-            id,
-            employee_id: data.employee_id,
-            project_id: data.project_id,
-            month: data.month,
-            year: data.year,
-            feature: data.feature,
-            score: data.score,
-            notes: data.notes,
-            created_at,
-            updated_at: now,
-        })
-    } else {
-        let id = uuid::Uuid::new_v4().to_string();
-        conn.execute(
-            "INSERT INTO employee_scores (id, employee_id, project_id, month, year, feature, score, notes, created_at, updated_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                id,
-                data.employee_id,
-                data.project_id,
-                data.month,
-                data.year,
-                data.feature,
-                data.score,
-                data.notes,
-                &now,
-                &now,
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-
-        Ok(EmployeeScore {
-            id,
-            employee_id: data.employee_id,
-            project_id: data.project_id,
-            month: data.month,
-            year: data.year,
-            feature: data.feature,
-            score: data.score,
-            notes: data.notes,
-            created_at: now.clone(),
-            updated_at: now,
-        })
-    }
+    conn.query_row(
+        &format!("SELECT {} FROM project_tasks WHERE id = ?1", PROJECT_TASK_COLUMNS),
+        params![id],
+        row_to_project_task,
+    ).map_err(|e| e.to_string())
 }
 
+/// The 5-stage status transition. revision_count only increments on the one
+/// transition that actually represents a real revision cycle — bounced back
+/// from the client (envoye_client) into rework (en_cours) — not every status
+/// change (e.g. à_faire -> en_cours doesn't count).
 #[tauri::command]
-pub fn delete_employee_score(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+pub fn update_project_task_status(db: State<'_, Mutex<Connection>>, id: String, status: String) -> Result<ProjectTask, String> {
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM employee_scores WHERE id = ?1", params![id])
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let current_status: String = conn
+        .query_row("SELECT status FROM project_tasks WHERE id = ?1", params![id], |row| row.get(0))
         .map_err(|e| e.to_string())?;
+    let bump_revision = current_status == "envoye_client" && status == "en_cours";
+
+    if bump_revision {
+        conn.execute(
+            "UPDATE project_tasks SET status = ?2, revision_count = revision_count + 1, updated_at = ?3 WHERE id = ?1",
+            params![id, status, now],
+        ).map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE project_tasks SET status = ?2, updated_at = ?3 WHERE id = ?1",
+            params![id, status, now],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT_TASK", Some(&id), &format!("Statut de tâche changé: {}", status));
+
+    conn.query_row(
+        &format!("SELECT {} FROM project_tasks WHERE id = ?1", PROJECT_TASK_COLUMNS),
+        params![id],
+        row_to_project_task,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_project_task(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM project_tasks WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let _ = log_activity(&conn, "DELETE", "PROJECT_TASK", Some(&id), "Tâche supprimée");
+    Ok(())
+}
+
+// ---- Project deliverables ----
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProjectDeliverable {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    pub r#type: Option<String>,
+    pub link_or_path: Option<String>,
+    pub delivered_to_client: bool,
+    pub approved: bool,
+    pub created_at: String,
+}
+
+fn row_to_project_deliverable(row: &rusqlite::Row) -> rusqlite::Result<ProjectDeliverable> {
+    Ok(ProjectDeliverable {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        name: row.get(2)?,
+        r#type: row.get(3)?,
+        link_or_path: row.get(4)?,
+        delivered_to_client: row.get::<_, i64>(5)? != 0,
+        approved: row.get::<_, i64>(6)? != 0,
+        created_at: row.get(7)?,
+    })
+}
+
+const PROJECT_DELIVERABLE_COLUMNS: &str = "id, project_id, name, type, link_or_path, delivered_to_client, approved, created_at";
+
+#[derive(Deserialize)]
+pub struct CreateProjectDeliverableData {
+    pub project_id: String,
+    pub name: String,
+    pub r#type: Option<String>,
+    pub link_or_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateProjectDeliverableData {
+    pub name: String,
+    pub r#type: Option<String>,
+    pub link_or_path: Option<String>,
+    pub delivered_to_client: bool,
+    pub approved: bool,
+}
+
+#[tauri::command]
+pub fn get_project_deliverables(db: State<'_, Mutex<Connection>>, project_id: String) -> Result<Vec<ProjectDeliverable>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(&format!("SELECT {} FROM project_deliverables WHERE project_id = ?1 ORDER BY created_at ASC", PROJECT_DELIVERABLE_COLUMNS))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![project_id], row_to_project_deliverable).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for d in rows {
+        result.push(d.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn create_project_deliverable(db: State<'_, Mutex<Connection>>, data: CreateProjectDeliverableData) -> Result<ProjectDeliverable, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO project_deliverables (id, project_id, name, type, link_or_path, delivered_to_client, approved, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, ?6)",
+        params![id, data.project_id, data.name, data.r#type, data.link_or_path, now],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "CREATE", "PROJECT_DELIVERABLE", Some(&id), &format!("Nouveau livrable: {}", data.name));
+
+    Ok(ProjectDeliverable {
+        id,
+        project_id: data.project_id,
+        name: data.name,
+        r#type: data.r#type,
+        link_or_path: data.link_or_path,
+        delivered_to_client: false,
+        approved: false,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn update_project_deliverable(db: State<'_, Mutex<Connection>>, id: String, data: UpdateProjectDeliverableData) -> Result<ProjectDeliverable, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE project_deliverables SET name = ?2, type = ?3, link_or_path = ?4, delivered_to_client = ?5, approved = ?6 WHERE id = ?1",
+        params![id, data.name, data.r#type, data.link_or_path, data.delivered_to_client as i64, data.approved as i64],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT_DELIVERABLE", Some(&id), &format!("Livrable mis à jour: {}", data.name));
+
+    conn.query_row(
+        &format!("SELECT {} FROM project_deliverables WHERE id = ?1", PROJECT_DELIVERABLE_COLUMNS),
+        params![id],
+        row_to_project_deliverable,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_project_deliverable(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM project_deliverables WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let _ = log_activity(&conn, "DELETE", "PROJECT_DELIVERABLE", Some(&id), "Livrable supprimé");
     Ok(())
 }
 

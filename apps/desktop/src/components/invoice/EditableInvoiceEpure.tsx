@@ -7,7 +7,7 @@ import {
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { numberToWords } from "@/lib/numberToWords";
-import { getCompanyPhones, formatPhone, resolveLegalFields } from "./invoiceHtmlShared";
+import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
 interface Props {
@@ -27,7 +27,8 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, formatCurrency,
+    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel,
+    formatCurrency,
     updateInvoiceField, updateClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleDeleteItem,
@@ -45,7 +46,7 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
             className="a4 relative bg-white text-[#1a1a1a] mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', padding: '14mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: "'Space Grotesk', sans-serif" }}
+            style={{ width: '210mm', height: '297mm', padding: '14mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
             <div className="flex flex-col h-full justify-between">
               <div>
@@ -59,7 +60,7 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
                   </div>
                   <div className="text-right">
                     <div className="text-[17pt] font-bold uppercase tracking-[2px]">
-                      {isCreditNote ? "FACTURE D'AVOIR" : (isProforma ? "FACTURE PROFORMA" : "FACTURE")}
+                      {docTitle}
                     </div>
                     <div className="text-[9pt] text-gray-500 mt-1 flex items-center justify-end gap-1">
                       N°
@@ -110,7 +111,7 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
                   </div>
                   <div className="w-[46%]">
                     <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">Détails</div>
-                    {!isProforma && !isCreditNote && (
+                    {showPaymentMethod && !isProforma && !isCreditNote && (
                       <div className="flex justify-between items-center text-[8.5pt]">
                         <span className="text-gray-500">Paiement</span>
                         <Select value={paymentMode} onValueChange={handlePaymentModeChange}>
@@ -194,8 +195,10 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
                     <div className="flex justify-end mb-6">
                       <div className="w-[46%]">
                         <div className="flex justify-between py-1 text-[8.5pt]"><span className="text-gray-500">Total HT</span><span>{formatCurrency(subtotal)}</span></div>
-                        <div className="flex justify-between py-1 text-[8.5pt]"><span className="text-gray-500">Total TVA</span><span>{formatCurrency(tvaAmount)}</span></div>
-                        {(timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
+                        {showTva && (
+                          <div className="flex justify-between py-1 text-[8.5pt]"><span className="text-gray-500">Total TVA</span><span>{formatCurrency(tvaAmount)}</span></div>
+                        )}
+                        {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
                           <div className="flex justify-between py-1 text-[8.5pt]"><span className="text-gray-500">Droit de Timbre</span><span>{formatCurrency(timbre)}</span></div>
                         )}
                         <div className="flex justify-between items-center py-1 text-[8.5pt]">
@@ -212,18 +215,20 @@ export function EditableInvoiceEpure({ invoice, onInvoiceChange, clients, produc
                           </div>
                         </div>
                         <div className="flex justify-between pt-2 mt-1 border-t" style={{ borderColor: '#111111' }}>
-                          <span className="text-[10pt] font-bold">{isCreditNote ? "Net à déduire" : "Total TTC"}</span>
+                          <span className="text-[10pt] font-bold">{grandTotalLabel}</span>
                           <span className="text-[12pt] font-bold" style={{ color: accent }}>{formatCurrency(netTotal)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mb-6">
-                      <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
-                        {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                    {showMontantEnLettres && (
+                      <div className="mb-6">
+                        <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
+                          {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                        </div>
+                        <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{numberToWords(netTotal)}</div>
                       </div>
-                      <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{numberToWords(netTotal)}</div>
-                    </div>
+                    )}
 
                     <div className="flex justify-end items-end mb-4">
                       <div className="w-[140px] flex flex-col items-center relative">

@@ -9,8 +9,6 @@ import {
   RiLoader4Line as Loader2
 } from "@remixicon/react";
 import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TableLoading, EmptyState } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useDeliveryNotes } from "@/hooks/useDeliveryNotes";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
@@ -84,13 +82,8 @@ export default function DeliveriesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col">
-        <Header />
-
-        <main className="flex-1 p-8 pt-4">
+    <>
+      <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
@@ -108,13 +101,13 @@ export default function DeliveriesPage() {
 
           {/* Stats */}
           <div className="mb-6">
-            <div className="bg-card rounded-3xl p-6 shadow-card border border-border/30 flex items-center gap-5 w-fit">
-              <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center">
-                <Truck className="w-7 h-7 text-primary-foreground" />
+            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 w-fit max-w-full">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
+                <Truck className="w-5 h-5 text-primary-foreground" />
               </div>
-              <div>
-                <p className="text-3xl font-bold text-foreground tracking-tight">{deliveryNotes?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Bons de livraison</p>
+              <div className="min-w-0">
+                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{deliveryNotes?.length || 0}</p>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">Bons de livraison</p>
               </div>
             </div>
           </div>
@@ -217,8 +210,7 @@ export default function DeliveriesPage() {
             </TableBody>
           </Table>
           </div>
-        </main>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }

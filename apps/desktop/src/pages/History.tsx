@@ -40,9 +40,6 @@ import {
     AlertDialogTitle,
 } from "@sordi/ui";
 
-import { Sidebar } from "../components/layout/Sidebar";
-import { Header } from "../components/layout/Header";
-
 export default function History() {
     const [limit, setLimit] = useState(500); // Increased limit as we do client-side filtering
     const [entityType, setEntityType] = useState<string>("all");
@@ -147,10 +144,7 @@ export default function History() {
     };
 
     return (
-        <div className="flex min-h-screen bg-background font-outfit">
-            <Sidebar />
-            <div className="flex-1 flex flex-col">
-                <Header />
+        <>
                 <main className="flex-1 p-8 pt-4 space-y-8">
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -321,7 +315,6 @@ export default function History() {
                         )}
                     </div>
                 </main>
-            </div>
 
             <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
                 <AlertDialogContent>
@@ -347,6 +340,6 @@ export default function History() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 }
