@@ -13,6 +13,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>(invoice.discount_type || 'percent');
   const [openPopoverIndex, setOpenPopoverIndex] = useState<number | null>(null);
   const [openClientCombo, setOpenClientCombo] = useState(false);
+  const [taxMode, setTaxMode] = useState<'standard' | 'exempt' | 'ttc_direct'>(invoice.tax_mode || 'standard');
 
   useEffect(() => {
     if (invoice.payment_method) setPaymentMode(invoice.payment_method);
@@ -22,7 +23,8 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     } else {
       setDiscountRate(0);
     }
-  }, [invoice.id, invoice.payment_method, invoice.discount_type, invoice.discount_rate, invoice.discount_value]);
+    if (invoice.tax_mode) setTaxMode(invoice.tax_mode);
+  }, [invoice.id, invoice.payment_method, invoice.discount_type, invoice.discount_rate, invoice.discount_value, invoice.tax_mode]);
 
   const items = invoice.invoice_items || [];
 
@@ -61,7 +63,8 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     currentDiscountRate: number = 0,
     currentDiscountAmount: number = 0,
     type: 'percent' | 'amount' = 'percent',
-    currentWithholdingRate: number = 0
+    currentWithholdingRate: number = 0,
+    currentTaxMode: 'standard' | 'exempt' | 'ttc_direct' = 'standard'
   ) => {
     const newSubtotal = itemsList.reduce((sum: number, item: any) =>
       sum + ((item.quantity || 0) * (item.unit_price || 0)), 0);
@@ -82,7 +85,10 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
 
     itemsList.forEach((item: any) => {
       const itemAmount = (item.quantity || 0) * (item.unit_price || 0);
-      const tvaRate = item.tva_rate === undefined ? 19.0 : item.tva_rate;
+      // "Exonéré" overrides every line to 0% regardless of its own stored
+      // rate — the toggle is meant to make the whole invoice tax-free in
+      // one action, not require re-editing every line individually.
+      const tvaRate = currentTaxMode === 'exempt' ? 0 : (item.tva_rate === undefined ? 19.0 : item.tva_rate);
       let itemTva = 0;
 
       if (tvaRate && tvaRate > 0) {
@@ -135,30 +141,43 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
       withholding_rate: currentWithholdingRate,
       withholding_amount: withholdingAmount,
       net_total: netTotal,
+      tax_mode: currentTaxMode,
     };
   };
 
   const handlePaymentModeChange = (newMode: string) => {
     setPaymentMode(newMode);
-    const newTotals = recalculateTotals(items, newMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0);
+    const newTotals = recalculateTotals(items, newMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, payment_method: newMode, ...newTotals });
   };
 
   const handleDiscountRateChange = (newRate: number) => {
     setDiscountRate(newRate);
-    const newTotals = recalculateTotals(items, paymentMode, newRate, 0, 'percent', invoice.withholding_rate || 0);
+    const newTotals = recalculateTotals(items, paymentMode, newRate, 0, 'percent', invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, ...newTotals });
   };
 
   const handleDiscountAmountChange = (newAmount: number) => {
-    const newTotals = recalculateTotals(items, paymentMode, 0, newAmount, 'amount', invoice.withholding_rate || 0);
+    const newTotals = recalculateTotals(items, paymentMode, 0, newAmount, 'amount', invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, ...newTotals });
   };
 
   const handleItemUpdate = (index: number, field: string, value: any) => {
     const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0);
+    // "TTC Direct" mode: the price the user types into unit_price is a
+    // final TTC figure, not HT. Back-compute the HT unit_price to store —
+    // Prix HT = Prix TTC / (1 + Taux TVA) — so invoice_items always holds
+    // HT unit prices like every other mode, and the Rust-side totals
+    // calculation never needs a TTC-vs-HT branch.
+    if (field === 'unit_price' && taxMode === 'ttc_direct') {
+      const rate = newItems[index].tva_rate === undefined ? 19.0 : (newItems[index].tva_rate || 0);
+      const ttcValue = parseFloat(value) || 0;
+      const htValue = rate > 0 ? ttcValue / (1 + rate / 100) : ttcValue;
+      newItems[index] = { ...newItems[index], unit_price: htValue };
+    } else {
+      newItems[index] = { ...newItems[index], [field]: value };
+    }
+    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
   };
 
@@ -169,18 +188,45 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
       product_name: product.name,
       quantity: 1,
       unit_price: product.unit_price || 0,
-      tva_rate: product.tva_rate !== undefined ? product.tva_rate : 19,
+      tva_rate: taxMode === 'exempt' ? 0 : (product.tva_rate !== undefined ? product.tva_rate : 19),
       timbre_exempt: product.timbre_exempt || false,
       products: product
     });
-    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0);
+    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
     setOpenPopoverIndex(null);
   };
 
+  const handleAddCustomItem = (name: string, index: number) => {
+    const newItems = [...items];
+    newItems.splice(index + 1, 0, {
+      product_name: name,
+      quantity: 1,
+      unit_price: 0,
+      tva_rate: taxMode === 'exempt' ? 0 : 19,
+      timbre_exempt: false,
+    });
+    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, taxMode);
+    onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
+    setOpenPopoverIndex(null);
+  };
+
+  const handleTaxModeChange = (newMode: 'standard' | 'exempt' | 'ttc_direct') => {
+    setTaxMode(newMode);
+    // Switching TO "exempt" zeroes every line's tva_rate immediately, so
+    // the line-item table itself reflects the change, not just the totals.
+    // Switching to "standard"/"ttc_direct" leaves each item's own tva_rate
+    // as-is — going back to standard restores whatever rate each line had.
+    const newItems = newMode === 'exempt'
+      ? items.map((item: any) => ({ ...item, tva_rate: 0 }))
+      : items;
+    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, newMode);
+    onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
+  };
+
   const handleDeleteItem = (index: number) => {
     const newItems = items.filter((_: any, i: number) => i !== index);
-    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0);
+    const newTotals = recalculateTotals(newItems, paymentMode, discountRate, invoice.discount_amount || 0, discountType, invoice.withholding_rate || 0, taxMode);
     onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
   };
 
@@ -201,7 +247,11 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     || (isDelivery && "BON DE LIVRAISON")
     || (isOrder && "BON DE COMMANDE")
     || "FACTURE";
-  const showTva = !isOrderOrDelivery;
+  const isTaxExempt = taxMode === 'exempt';
+  // In exempt mode there's no TVA breakdown row to show — Total HT and
+  // Total TTC are identical, so the 3-tier subtotal block collapses to a
+  // single "Montant Net à Payer" line plus the exemption legend instead.
+  const showTva = !isOrderOrDelivery && !isTaxExempt;
   const showTimbre = !isOrderOrDelivery;
   const showMontantEnLettres = !isOrderOrDelivery;
   const showPaymentMethod = !isOrderOrDelivery;
@@ -242,6 +292,9 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     showMontantEnLettres,
     showPaymentMethod,
     grandTotalLabel,
+    taxMode,
+    isTaxExempt,
+    handleTaxModeChange,
     formatCurrency,
     updateInvoiceField,
     updateClient,
@@ -250,6 +303,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     handleDiscountAmountChange,
     handleItemUpdate,
     handleAddProduct,
+    handleAddCustomItem,
     handleDeleteItem,
   };
 }

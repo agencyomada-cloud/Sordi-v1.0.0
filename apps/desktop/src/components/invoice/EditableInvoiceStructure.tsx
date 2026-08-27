@@ -6,8 +6,10 @@ import {
   RiExpandUpDownLine as ChevronsUpDown
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import { numberToWords } from "@/lib/numberToWords";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
+import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
 interface Props {
@@ -27,11 +29,11 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel,
+    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel, isTaxExempt,
     formatCurrency,
     updateInvoiceField, updateClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
-    handleItemUpdate, handleAddProduct, handleDeleteItem,
+    handleItemUpdate, handleAddProduct, handleAddCustomItem, handleDeleteItem,
   } = logic;
 
   return (
@@ -45,7 +47,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
           <div
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-black font-sans mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
+            className="a4 relative bg-white text-black font-sans mx-auto border border-border/40 rounded-2xl shadow-xl print:border-none print:rounded-none print:shadow-none print:m-0 mb-8"
             style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
@@ -59,7 +61,6 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                   {settings.company_name}
                 </div>
               )}
-              <div className="absolute left-0 right-0 bottom-0 h-[0.45mm] z-1" style={{ backgroundColor: primaryColor }} />
             </header>
 
             <main className="absolute left-0 top-[33.9mm] w-full h-[229.8mm] overflow-hidden bg-white">
@@ -72,14 +73,14 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
               <div className="relative w-full h-full z-1 px-[8mm] pt-[5mm] pb-[5mm] flex flex-col justify-between">
                 <div>
                   <div className="text-center mb-4">
-                    <h1 className="text-xl font-extrabold uppercase text-gray-800 tracking-wider">
+                    <h1 className="text-lg font-semibold tracking-[-0.02em] uppercase text-gray-800">
                       {docTitle}
                     </h1>
                   </div>
 
                   <div className="flex justify-between items-start mb-6 text-xs">
                     <div className="w-[55%] space-y-1">
-                      <div className="text-gray-500 text-[11px] font-medium uppercase">Destinataire</div>
+                      <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Destinataire</div>
 
                       {clients && clients.length > 0 ? (
                         <Popover open={openClientCombo} onOpenChange={setOpenClientCombo}>
@@ -118,9 +119,9 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                         )
                       )}
 
-                      <div className="space-y-0.5 pt-1 text-[11px] text-gray-700 uppercase">
+                      <div className="space-y-0.5 pt-1 text-[11px] font-mono text-gray-500 leading-relaxed uppercase">
                         <div className="flex items-center">
-                          <span className="font-bold mr-1">RC:</span>
+                          <span className="font-semibold text-gray-700 mr-1">RC:</span>
                           {invoice.clients && (invoice.clients.secondary_rc || invoice.clients.secondary_address) ? (
                             <Select
                               value={!invoice.use_secondary_register ? "principal_rc" : (invoice.selected_secondary_rc || "")}
@@ -155,25 +156,50 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                             <span>{invoice.clients?.rc || invoice.client_rc || ""}</span>
                           )}
                         </div>
-                        {(invoice.clients?.nif || invoice.client_nif) && <div><span className="font-bold">NIF:</span> {invoice.clients?.nif || invoice.client_nif}</div>}
-                        {(invoice.clients?.ai || invoice.client_ai) && <div><span className="font-bold">AI:</span> {invoice.clients?.ai || invoice.client_ai}</div>}
-                        {(invoice.clients?.nis || invoice.client_nis) && <div><span className="font-bold">NIS:</span> {invoice.clients?.nis || invoice.client_nis}</div>}
-                        {(invoice.clients?.activite || invoice.client_activite) && <div><span className="font-bold">Activité:</span> {invoice.clients?.activite || invoice.client_activite}</div>}
-                        {(invoice.clients?.contact || invoice.client_contact) && <div className="mt-1"><span className="font-bold">Contact:</span> {invoice.clients?.contact || invoice.client_contact}</div>}
+                        {(invoice.clients?.nif || invoice.client_nif) && <div><span className="font-semibold text-gray-700">NIF:</span> {invoice.clients?.nif || invoice.client_nif}</div>}
+                        {(invoice.clients?.ai || invoice.client_ai) && <div><span className="font-semibold text-gray-700">AI:</span> {invoice.clients?.ai || invoice.client_ai}</div>}
+                        {(invoice.clients?.nis || invoice.client_nis) && <div><span className="font-semibold text-gray-700">NIS:</span> {invoice.clients?.nis || invoice.client_nis}</div>}
+                        {(invoice.clients?.activite || invoice.client_activite) && <div><span className="font-semibold text-gray-700">Activité:</span> {invoice.clients?.activite || invoice.client_activite}</div>}
+                        {(invoice.clients?.contact || invoice.client_contact) && <div className="mt-1"><span className="font-semibold text-gray-700">Contact:</span> {invoice.clients?.contact || invoice.client_contact}</div>}
                       </div>
                     </div>
 
                     <div className="w-[35%] text-xs space-y-1.5 pt-1">
                       <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
-                        <span className="font-bold text-black">Date:</span>
-                        <Input type="date" value={invoice.invoice_date} onChange={(e) => updateInvoiceField('invoice_date', e.target.value)} className="h-5 w-32 border-none bg-transparent p-0 text-right shadow-none focus-visible:ring-0 text-xs" />
+                        <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Numéro</span>
+                        <Input type="text" value={invoice.invoice_number} onChange={(e) => updateInvoiceField('invoice_number', e.target.value)} className="h-5 w-32 border-none bg-transparent p-0 text-right shadow-none focus-visible:ring-0 font-mono tabular-nums tracking-tight font-semibold uppercase text-xs text-black" />
                       </div>
                       <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
-                        <span className="font-bold text-black">Numéro:</span>
-                        <Input type="text" value={invoice.invoice_number} onChange={(e) => updateInvoiceField('invoice_number', e.target.value)} className="h-5 w-32 border-none bg-transparent p-0 text-right shadow-none focus-visible:ring-0 font-bold uppercase text-xs" />
+                        <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Date d'émission</span>
+                        <DatePicker
+                          value={invoice.invoice_date}
+                          onChange={(v) => updateInvoiceField('invoice_date', v)}
+                          showIcon={false}
+                          className="h-5 w-32 border-none bg-transparent p-0 justify-end hover:bg-transparent font-mono tabular-nums tracking-tight text-xs text-black"
+                        />
                       </div>
+                      {!isProforma && !isCreditNote && (
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                          <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Échéance</span>
+                          <DatePicker
+                            value={invoice.due_date}
+                            onChange={(v) => updateInvoiceField('due_date', v)}
+                            showIcon={false}
+                            className="h-5 w-32 border-none bg-transparent p-0 justify-end hover:bg-transparent font-mono tabular-nums tracking-tight text-xs text-black"
+                          />
+                        </div>
+                      )}
+                      {showPaymentMethod && !isProforma && !isCreditNote && (
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                          <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Mode de paiement</span>
+                          <Select value={paymentMode} onValueChange={handlePaymentModeChange}>
+                            <SelectTrigger className="h-5 w-auto border-none bg-transparent shadow-none focus:ring-0 text-xs px-0 font-mono tracking-tight text-black"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="Espèces">Espèces</SelectItem><SelectItem value="Chèque">Chèque</SelectItem><SelectItem value="Virement bancaire">Virement bancaire</SelectItem></SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       {isCreditNote && (invoice.original_invoice_id || invoice.original_invoice?.invoice_number) && (
-                        <div className="mt-2 text-xs font-bold text-gray-700 text-right">
+                        <div className="mt-2 text-xs font-semibold text-gray-500 text-right">
                           Avoir relatif à la facture N° {invoice.original_invoice?.invoice_number || invoice.original_invoice_id}
                         </div>
                       )}
@@ -181,14 +207,14 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                   </div>
 
                   <div className="mb-6">
-                    <table className="w-full border-collapse border border-black text-xs">
+                    <table className="w-full border-collapse text-xs table-fixed">
                       <thead>
-                        <tr style={{ backgroundColor: primaryColor }} className="text-white font-bold border-b border-black">
-                          <th className="border border-black p-2 text-center w-[45%] uppercase">Désignation</th>
-                          <th className="border border-black p-2 text-right uppercase">P.U</th>
-                          <th className="border border-black p-2 text-right uppercase">Quantité</th>
-                          <th className="border border-black p-2 text-center uppercase">U/M</th>
-                          <th className="border border-black p-2 text-right uppercase">Montant</th>
+                        <tr className="border-y border-gray-300">
+                          <th className="py-2 text-left w-[42%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Désignation / Prestation</th>
+                          <th className="py-2 text-right w-[15%] text-[11px] font-medium tracking-wider uppercase text-gray-400">P.U (HT)</th>
+                          <th className="py-2 text-right w-[7%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Qté</th>
+                          <th className="py-2 text-center w-[16%] text-[11px] font-medium tracking-wider uppercase text-gray-400">U.M</th>
+                          <th className="py-2 text-right w-[20%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Total HT</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -196,44 +222,43 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                           const globalIdx = startIdx + relIdx;
                           const unit = item.products?.unit || item.unit || "TN";
                           return (
-                            <tr key={globalIdx} className="border-b border-black group hover:bg-gray-50 relative">
-                              <td className="border border-black p-2 font-bold uppercase align-top">
+                            <tr key={globalIdx} className="border-b border-gray-200 group hover:bg-gray-50 relative">
+                              <td className="py-2.5 font-semibold uppercase align-top">
                                 {item.product_name || item.products?.name || item.name || ""}
                                 {(item.product_description || item.products?.description || item.description) && (
-                                  <div className="font-normal text-[10px] normal-case mt-0.5 text-gray-600">{item.product_description || item.products?.description || item.description}</div>
+                                  <div className="font-normal text-[10px] normal-case mt-0.5 text-gray-500">{item.product_description || item.products?.description || item.description}</div>
                                 )}
                               </td>
-                              <td className="border border-black p-2 align-top font-mono">
-                                <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono font-semibold text-xs" />
+                              <td className="py-2.5 align-top font-mono whitespace-nowrap min-w-[130px]">
+                                <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-xs" />
                               </td>
-                              <td className="border border-black p-2 align-top font-mono">
-                                <Input type="number" step="0.001" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono text-xs" />
+                              <td className="py-2.5 align-top font-mono whitespace-nowrap">
+                                <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-xs" />
                               </td>
-                              <td className="border border-black p-2 text-center align-top uppercase font-semibold">{unit}</td>
-                              <td className="border border-black p-2 text-right align-top font-mono font-bold relative group-hover:pr-8">
+                              <td className="py-2.5 text-center align-top uppercase text-gray-500 text-[10px] leading-tight break-words">{unit}</td>
+                              <td className="py-2.5 text-right align-top font-mono tabular-nums tracking-tight font-semibold relative group-hover:pr-8 whitespace-nowrap min-w-[130px]">
                                 {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
                                 <button className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 p-1 hover:bg-red-50 rounded" onClick={() => handleDeleteItem(globalIdx)} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
                               </td>
                             </tr>
                           );
                         })}
-                        {isLastPage && products && (
-                          <tr className="border border-black">
+                        {isLastPage && (
+                          <tr>
                             <td colSpan={5} className="p-0">
-                              <Popover open={openPopoverIndex === -1} onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}>
-                                <PopoverTrigger asChild>
-                                  <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un produit</Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80 p-2">
-                                  <div className="max-h-60 overflow-y-auto space-y-1">
-                                    {products.map((p) => (
-                                      <Button key={p.id} variant="ghost" className="w-full justify-start text-left h-auto py-2" onClick={() => handleAddProduct(p, logic.items.length - 1)}>
-                                        <div className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-gray-500">{formatCurrency(p.unit_price || 0)}</span></div>
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
+                              <ProductPickerCombobox
+                                products={products}
+                                excludeProductIds={logic.items.map((it: any) => it.product_id)}
+                                open={openPopoverIndex === -1}
+                                onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
+                                onSelectProduct={(p) => handleAddProduct(p, logic.items.length - 1)}
+                                onAddCustomItem={(name) => handleAddCustomItem(name, logic.items.length - 1)}
+                                nextIndex={logic.items.length}
+                                formatCurrency={formatCurrency}
+                                trigger={
+                                  <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un article</Button>
+                                }
+                              />
                             </td>
                           </tr>
                         )}
@@ -254,22 +279,22 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                   {isLastPage && (
                     <>
                       <div className="flex justify-end mb-4">
-                        <div className="w-[42%] border border-black text-xs">
-                          <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                            <span>Total HT</span><span className="font-mono">{formatCurrency(subtotal)}</span>
+                        <div className="w-[42%] text-xs">
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-gray-500">Total HT</span><span className="font-mono tabular-nums tracking-tight">{formatCurrency(subtotal)}</span>
                           </div>
                           {showTva && (
-                            <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                              <span>Total TVA</span><span className="font-mono">{formatCurrency(tvaAmount)}</span>
+                            <div className="flex justify-between py-1.5">
+                              <span className="text-gray-500">TVA (19%)</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(tvaAmount)}</span>
                             </div>
                           )}
                           {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
-                            <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                              <span>Droit de Timbre</span><span className="font-mono">{formatCurrency(timbre)}</span>
+                            <div className="flex justify-between py-1.5">
+                              <span className="text-gray-500">Timbre Fiscal</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(timbre)}</span>
                             </div>
                           )}
-                          <div className="flex justify-between items-center p-1.5 border-b border-black">
-                            <div className="flex items-center gap-1 font-bold">
+                          <div className="flex justify-between items-center py-1.5">
+                            <div className="flex items-center gap-1 text-gray-500">
                               <span>Remise</span>
                               <Select value={discountType} onValueChange={(val: any) => { setDiscountType(val); val === 'percent' ? handleDiscountRateChange(0) : handleDiscountAmountChange(0); }}>
                                 <SelectTrigger className="h-5 w-auto text-[10px] p-0 px-1 border-none shadow-none"><SelectValue /></SelectTrigger>
@@ -278,38 +303,68 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                             </div>
                             <div className="flex items-center">
                               <span className="font-mono text-red-700 mr-1">-</span>
-                              <Input type="number" value={discountType === 'percent' ? discountRate : discountAmount} onChange={(e) => discountType === 'percent' ? handleDiscountRateChange(parseFloat(e.target.value) || 0) : handleDiscountAmountChange(parseFloat(e.target.value) || 0)} className="h-6 w-16 text-right bg-transparent border-none p-0 focus-visible:ring-0 font-mono text-red-700 font-bold" />
+                              <Input type="number" value={discountType === 'percent' ? discountRate : discountAmount} onChange={(e) => discountType === 'percent' ? handleDiscountRateChange(parseFloat(e.target.value) || 0) : handleDiscountAmountChange(parseFloat(e.target.value) || 0)} className="h-6 w-16 text-right bg-transparent border-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-red-700" />
                             </div>
                           </div>
-                          <div className="flex justify-between p-1.5 font-bold bg-gray-50">
-                            <span>{grandTotalLabel}</span><span className="font-mono">{formatCurrency(netTotal)}</span>
+                          <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-300">
+                            <span className="text-sm font-semibold text-black">{grandTotalLabel}</span><span className="text-base font-bold font-mono tabular-nums tracking-tight text-black">{formatCurrency(netTotal)}</span>
                           </div>
+                          {isTaxExempt && !isProforma && (
+                            <div className="text-right text-[9px] text-gray-500 mt-1">
+                              Régime d'exonération / Facturation sans TVA — Montant Net à Payer HT - TVA non applicable
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <div className="mb-4">
                         {showMontantEnLettres && (
-                          <div className="mb-3 text-[11px] text-gray-800">
-                            {isCreditNote ? "ARRÊTÉ LE PRÉSENT AVOIR À LA SOMME DE :" : "ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :"}
-                            <div className="mt-1 font-extrabold text-xs text-black uppercase tracking-wide">{numberToWords(netTotal)}</div>
+                          <div className="mb-3">
+                            <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">
+                              {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                            </div>
+                            <div className="mt-1 font-semibold text-xs text-black uppercase tracking-tight">{numberToWords(netTotal)}</div>
                           </div>
                         )}
 
-                        <div className="flex justify-between items-start">
-                          {showPaymentMethod && !isProforma && !isCreditNote && (
-                            <div className="text-xs text-black font-bold flex items-center gap-2">
-                              Mode de paiement:
-                              <Select value={paymentMode} onValueChange={handlePaymentModeChange}>
-                                <SelectTrigger className="h-5 w-auto border-none bg-transparent shadow-none focus:ring-0 text-xs px-0 font-normal"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="Espèces">Espèces</SelectItem><SelectItem value="Chèque">Chèque</SelectItem><SelectItem value="Virement bancaire">Virement bancaire</SelectItem></SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                          <div className="mr-8 font-bold text-xs underline flex flex-col items-center">
-                            Cachet et Signature
-                            {settings?.stamp_data && (
-                              <img src={settings.stamp_data} alt="Cachet" style={{ height: settings.stamp_size ? `${settings.stamp_size}px` : "70px", marginTop: '4px' }} className="object-contain" />
+                        {/* Mode de paiement now lives in the top metadata block
+                            alongside Date/Numéro — this row just anchors the
+                            signature block to the right, same as before. */}
+                        <div className="flex justify-end items-start">
+                          <div className="mr-8 flex flex-col items-center gap-1">
+                            {/* Signature is signed directly on top of the
+                                stamp, like a real paper document — an
+                                absolute overlay, not a stacked column. */}
+                            {(settings?.stamp_data || settings?.signature_data) && (
+                              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cachet et Signature</div>
                             )}
+                            <div
+                              className="min-w-44 relative flex items-center justify-center border-none px-4 py-3"
+                              style={{ height: `${Math.max(settings?.stamp_size || 64, settings?.signature_size || 64, 64) + 40}px` }}
+                            >
+                              {!settings?.stamp_data && !settings?.signature_data ? (
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
+                              ) : (
+                                <>
+                                  {settings?.stamp_data && (
+                                    <img
+                                      src={settings.stamp_data}
+                                      alt="Cachet"
+                                      style={{ height: `${settings.stamp_size || 64}px` }}
+                                      className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
+                                    />
+                                  )}
+                                  {settings?.signature_data && (
+                                    <img
+                                      src={settings.signature_data}
+                                      alt="Signature"
+                                      style={{ height: `${settings.signature_size || 64}px` }}
+                                      className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -341,7 +396,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                   )}
                 </section>
 
-                <section className="relative grid grid-cols-[20mm_1fr] gap-x-[2.5mm] pt-[6mm]">
+                <section className="relative pt-[6mm]">
                   {(settings?.footer_logo_data || settings?.company_name) && (
                     <div className="absolute top-0 left-0 h-[8mm] w-[43mm] flex items-center">
                       {settings?.footer_logo_data ? (
@@ -349,12 +404,6 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                       ) : (
                         <span className="font-extrabold text-[9pt] text-black tracking-tight uppercase">{settings.company_name}</span>
                       )}
-                    </div>
-                  )}
-
-                  {settings?.qr_code_data && (
-                    <div className="w-[18mm] h-[18mm] bg-gray-50 flex items-center justify-center overflow-hidden">
-                      <img src={settings.qr_code_data} alt="QR Code" className="w-full h-full object-contain" />
                     </div>
                   )}
 

@@ -1,18 +1,18 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { db } from "../lib/database";
-import { format, getMonth, getYear, parseISO, startOfYear, endOfYear } from "date-fns";
+import { format, formatDistanceToNow, getMonth, parseISO, startOfYear, endOfYear } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
-    RiHistoryLine as HistoryIcon,
-    RiLoader4Line as Loader2,
     RiRefreshLine as RefreshCw,
     RiFilter3Line as Filter,
     RiCloseLine as X,
     RiDownloadLine as Download,
     RiDeleteBinLine as Trash2,
 } from "@remixicon/react";
-import { getActionColor, getActionLabel, getEntityConfig } from "@/lib/activityLog";
+import { getActionColor, getActionLabel, getEntityConfig, getEntityRoute } from "@/lib/activityLog";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { exportToCSV } from "../lib/csvUtils";
 import {
@@ -22,14 +22,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Badge,
     MultiSelect,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -38,9 +31,21 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
+    Skeleton,
+    EmptyState,
 } from "@sordi/ui";
 
+// Same solid-dot palette as the Dashboard's Activité Récente timeline —
+// getActionColor's low-opacity chip classes read as near-invisible at dot size.
+const ACTION_DOT_COLORS: Record<string, string> = {
+    CREATE: "bg-emerald-500",
+    UPDATE: "bg-primary",
+    DELETE: "bg-destructive",
+    CONVERT: "bg-purple-500",
+};
+
 export default function History() {
+    const navigate = useNavigate();
     const [limit, setLimit] = useState(500); // Increased limit as we do client-side filtering
     const [entityType, setEntityType] = useState<string>("all");
     const [action, setAction] = useState<string>("all");
@@ -242,72 +247,78 @@ export default function History() {
                         )}
                     </div>
 
-                    {/* Table */}
-                    <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="hover:bg-transparent">
-                                    <TableHead className="w-[200px]">Date & Heure</TableHead>
-                                    <TableHead className="w-[150px]">Action</TableHead>
-                                    <TableHead className="w-[180px]">Entité</TableHead>
-                                    <TableHead>Description</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isLoading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">
-                                            <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                Chargement...
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : filteredLogs && filteredLogs.length > 0 ? (
-                                    filteredLogs.map((log) => (
-                                        <TableRow key={log.id} className="hover:bg-muted/50 transition-colors group">
-                                            <TableCell>
-                                                <div className="font-medium text-foreground">{format(new Date(log.created_at), "dd MMM yyyy", { locale: fr })}</div>
-                                                <div className="text-xs text-muted-foreground font-mono">{format(new Date(log.created_at), "HH:mm", { locale: fr })}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className={`rounded-full px-3 py-0.5 border-0 font-medium ${getActionColor(log.action)}`}>
-                                                    {getActionLabel(log.action)}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                {(() => {
-                                                    const config = getEntityConfig(log.entity_type);
-                                                    return (
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`p-2 rounded-xl transition-colors ${config.color}`}>
-                                                                {config.icon}
-                                                            </div>
-                                                            <span className="text-sm font-medium">{config.label}</span>
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </TableCell>
-                                            <TableCell className="text-foreground/80 font-medium">
-                                                {log.description}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <HistoryIcon className="w-8 h-8 opacity-20" />
-                                                <p>Aucune activité trouvée pour cette période</p>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                    {/* Interactive timeline / feed — same avatar-chip, entity-chip,
+                        and relative-date pattern as the Dashboard's Activité
+                        Récente card, instead of a flat raw database table. Days
+                        are grouped with a sticky date header so a long history
+                        still reads as a scannable feed rather than a log dump. */}
+                    <div className="bg-card/60 backdrop-blur-sm rounded-3xl border border-border/40 p-2">
+                        {isLoading ? (
+                            <div className="px-4 py-2">
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                    <div key={i} className="flex items-start gap-3 p-2">
+                                        <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                                        <div className="min-w-0 flex-1 pt-1 space-y-1.5">
+                                            <Skeleton className="h-4 w-2/3" />
+                                            <Skeleton className="h-3 w-24" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : filteredLogs && filteredLogs.length > 0 ? (
+                            (() => {
+                                // Group consecutive entries by calendar day for the
+                                // sticky day headers, preserving the existing sort order.
+                                const groups: { day: string; logs: typeof filteredLogs }[] = [];
+                                for (const log of filteredLogs) {
+                                    const day = format(new Date(log.created_at), "yyyy-MM-dd");
+                                    const last = groups[groups.length - 1];
+                                    if (last && last.day === day) last.logs.push(log);
+                                    else groups.push({ day, logs: [log] });
+                                }
+                                return groups.map((group) => (
+                                    <div key={group.day} className="mb-2 last:mb-0">
+                                        <div className="sticky top-0 z-10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-card/95 backdrop-blur-sm rounded-xl">
+                                            {format(parseISO(group.day), "EEEE d MMMM yyyy", { locale: fr })}
+                                        </div>
+                                        <ol className="relative px-4">
+                                            {group.logs.map((log, i) => {
+                                                const entityConfig = getEntityConfig(log.entity_type);
+                                                const isLast = i === group.logs.length - 1;
+                                                return (
+                                                    <li key={log.id} className="relative pb-4 last:pb-2">
+                                                        {!isLast && <span className="absolute left-4 top-9 bottom-0 w-px bg-border/60" />}
+                                                        <button
+                                                            onClick={() => navigate(getEntityRoute(log.entity_type, log.entity_id))}
+                                                            className="w-full flex items-start gap-3 text-left group/item p-2 rounded-xl hover:bg-muted/40 transition-colors"
+                                                        >
+                                                            <span className="relative shrink-0 z-10">
+                                                                <span className={cn("flex items-center justify-center w-8 h-8 rounded-full ring-4 ring-card", entityConfig.color)}>{entityConfig.icon}</span>
+                                                                <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card", ACTION_DOT_COLORS[log.action] || "bg-muted-foreground")} />
+                                                            </span>
+                                                            <span className="min-w-0 flex-1 pt-1">
+                                                                <span className="text-sm text-foreground leading-snug group-hover/item:text-primary transition-colors">{log.description}</span>
+                                                                <span className="flex items-center gap-1.5 mt-1">
+                                                                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", getActionColor(log.action))}>{getActionLabel(log.action)}</span>
+                                                                    <span className="text-[10px] text-muted-foreground/70 font-mono tabular-nums">
+                                                                        {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: fr })}
+                                                                    </span>
+                                                                </span>
+                                                            </span>
+                                                        </button>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ol>
+                                    </div>
+                                ));
+                            })()
+                        ) : (
+                            <EmptyState type="history" title="Aucune activité" description="Aucune activité enregistrée sur cette période" />
+                        )}
                         {/* Load More - optional, slightly simplistic with client-side filtering but useful if we hit limit */}
                         {logs && logs.length >= limit && (
-                            <div className="p-4 border-t border-border/50 flex justify-center bg-muted/20">
+                            <div className="p-4 flex justify-center">
                                 <Button variant="outline" onClick={() => setLimit(l => l + 500)} className="bg-background">
                                     Charger plus d'activités
                                 </Button>

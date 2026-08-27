@@ -12,13 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useProject, useCreateProject, useUpdateProject, type CreateProjectData } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
 import { useEmployees } from "@/hooks/useEmployees";
 import { SERVICE_CATEGORIES } from "@/lib/projectOverview";
 import { toast } from "sonner";
 
-const emptyForm: CreateProjectData = {
+const emptyForm: Omit<CreateProjectData, "company_id"> = {
   client_id: "",
   name: "",
   service_categories: [],
@@ -43,7 +44,7 @@ export default function NewProjectPage() {
 
   const freelancers = employees?.filter((e) => e.contract_type === "Freelance") ?? [];
 
-  const [formData, setFormData] = useState<CreateProjectData>(emptyForm);
+  const [formData, setFormData] = useState<Omit<CreateProjectData, "company_id">>(emptyForm);
 
   useEffect(() => {
     if (existingProject) {
@@ -142,7 +143,7 @@ export default function NewProjectPage() {
                   {SERVICE_CATEGORIES.map((cat) => (
                     <label
                       key={cat.key}
-                      className="flex items-center gap-2 px-3 py-2 rounded-[6px] border border-border/50 cursor-pointer hover:bg-secondary/40 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border/50 cursor-pointer hover:bg-secondary/40 transition-colors"
                     >
                       <Checkbox
                         checked={formData.service_categories.includes(cat.key)}
@@ -183,20 +184,18 @@ export default function NewProjectPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="start_date">Date de début</Label>
-                  <Input
+                  <DatePicker
                     id="start_date"
-                    type="date"
-                    value={formData.start_date ?? ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, start_date: e.target.value }))}
+                    value={formData.start_date}
+                    onChange={(v) => setFormData((p) => ({ ...p, start_date: v }))}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="deadline">Échéance</Label>
-                  <Input
+                  <DatePicker
                     id="deadline"
-                    type="date"
-                    value={formData.deadline ?? ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, deadline: e.target.value }))}
+                    value={formData.deadline}
+                    onChange={(v) => setFormData((p) => ({ ...p, deadline: v }))}
                   />
                 </div>
               </div>
@@ -217,7 +216,7 @@ export default function NewProjectPage() {
               </div>
 
               {/* Only relevant when a freelancer is doing the work — a separate lump-sum owed to them, distinct from the client budget above */}
-              <div className="space-y-1.5 rounded-[6px] border border-border/50 p-4">
+              <div className="space-y-1.5 rounded-2xl border border-border/50 p-4">
                 <Label htmlFor="freelancer">Freelance assigné (optionnel)</Label>
                 <Select
                   value={formData.freelancer_id ?? "none"}

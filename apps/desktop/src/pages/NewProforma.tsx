@@ -50,6 +50,7 @@ export default function NewProformaPage() {
     const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
     const [customTitle, setCustomTitle] = useState("Facture Proforma");
     const [isDownloading, setIsDownloading] = useState(false);
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
     // Load from LocalStorage on mount
     useEffect(() => {
@@ -58,7 +59,11 @@ export default function NewProformaPage() {
             try {
                 const parsed = JSON.parse(savedDraft);
                 if (parsed.clientId) setClientId(parsed.clientId);
-                if (parsed.invoiceDate) setInvoiceDate(parsed.invoiceDate);
+                // invoiceDate is deliberately NOT restored from the draft —
+                // it should always default to today (see the useState
+                // above), not silently resurrect a date from whenever this
+                // draft was last saved, which produces invoices dated in
+                // the past without the user noticing.
                 if (parsed.dueDate) setDueDate(parsed.dueDate);
                 if (parsed.notes) setNotes(parsed.notes);
                 if (parsed.headerNote) setHeaderNote(parsed.headerNote);
@@ -92,24 +97,10 @@ export default function NewProformaPage() {
         };
         if (clientId || items.length > 0 || notes || headerNote) {
             localStorage.setItem("draft_proforma", JSON.stringify(draft));
+            setLastSavedAt(new Date());
         }
     }, [clientId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, customTitle]);
 
-    useEffect(() => {
-        if (products && items.length === 0) {
-            setItems(products.map(p => ({
-                product_id: p.id,
-                product_code: p.code,
-                product_name: p.name,
-                product_description: p.description || "",
-                quantity: 0,
-                unit_price: p.unit_price,
-                amount: 0,
-                tva_rate: p.tva_rate === undefined ? 19.0 : p.tva_rate,
-                timbre_exempt: p.timbre_exempt === true,
-            })));
-        }
-    }, [products, items.length]);
 
     const calculateTotals = (
         itemsList: InvoiceItem[],
@@ -283,37 +274,23 @@ export default function NewProformaPage() {
             }
         }
 
+        // The preview (useEditableInvoiceLogic) already owns add/update/delete
+        // for invoice_items, so its output is the source of truth here —
+        // re-deriving via a catalog product_id lookup silently dropped any
+        // item without a matching catalog product, i.e. custom line items.
         if (updatedInvoice.invoice_items) {
-            const updatedItems = updatedInvoice.invoice_items.map((invoiceItem: any) => {
-                const product = products?.find(p => p.id === invoiceItem.product_id || p.code === invoiceItem.products?.code);
-                if (product) {
-                    return {
-                        product_id: product.id,
-                        product_code: product.code,
-                        product_name: product.name,
-                        product_description: product.description || "",
-                        quantity: invoiceItem.quantity || 0,
-                        unit_price: invoiceItem.unit_price || product.unit_price,
-                        amount: (invoiceItem.quantity || 0) * (invoiceItem.unit_price || product.unit_price),
-                        tva_rate: invoiceItem.tva_rate,
-                        timbre_exempt: invoiceItem.timbre_exempt,
-                    };
-                }
-                return null;
-            }).filter((item: any) => item !== null);
-
-            const mergedItems = items.map(item => {
-                const updatedItem = updatedItems.find((ui: any) => ui.product_id === item.product_id);
-                return updatedItem || { ...item, quantity: 0, amount: 0 };
-            });
-
-            updatedItems.forEach((updatedItem: any) => {
-                if (!mergedItems.find((mi: any) => mi.product_id === updatedItem.product_id)) {
-                    mergedItems.push(updatedItem);
-                }
-            });
-
-            setItems(mergedItems);
+            setItems(updatedInvoice.invoice_items.map((item: any) => ({
+                product_id: item.product_id,
+                product_code: item.product_code || item.products?.code || "",
+                product_name: item.product_name || item.products?.name || "",
+                product_description: item.product_description || item.products?.description || "",
+                quantity: item.quantity || 0,
+                unit_price: item.unit_price || 0,
+                amount: (item.quantity || 0) * (item.unit_price || 0),
+                tva_rate: item.tva_rate,
+                timbre_exempt: item.timbre_exempt,
+                products: item.products,
+            })));
         }
     };
 
@@ -347,7 +324,10 @@ export default function NewProformaPage() {
             discount_type: discountType,
             discount_value: discountType === 'percent' ? discountRate : discountAmount,
             items: validItems.map(item => ({
-                product_id: item.product_id,
+                product_id: item.product_id || undefined,
+                // Only meaningful when product_id is absent — a custom/one-off item.
+                product_name: item.product_id ? undefined : item.product_name || undefined,
+                product_code: item.product_id ? undefined : item.product_code || undefined,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
                 tva_rate: item.tva_rate === undefined ? 19.0 : item.tva_rate,
@@ -373,6 +353,12 @@ export default function NewProformaPage() {
                             </Button>
                             <h1 className="text-2xl font-semibold text-foreground">Nouvelle Facture Proforma</h1>
                             <p className="text-muted-foreground">Créer une facture proforma / devis</p>
+                            {lastSavedAt && (
+                                <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1.5">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    Brouillon enregistré à {lastSavedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex gap-3">
@@ -417,33 +403,31 @@ export default function NewProformaPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <div className="bg-secondary/30 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground">Sous-total H.T</p>
-                                    <p className="text-sm font-bold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
+                                    <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
                                 </div>
                                 <div className="bg-secondary/30 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground">Total TVA</p>
-                                    <p className="text-sm font-bold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
+                                    <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
                                 </div>
                                 <div className="bg-secondary/30 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground">Timbre</p>
-                                    <p className="text-sm font-bold">{formatCurrency(draftInvoice.timbre || 0)}</p>
+                                    <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.timbre || 0)}</p>
                                 </div>
                                 <div className="bg-primary/10 rounded-lg p-3">
                                     <p className="text-xs text-primary">Total TTC</p>
-                                    <p className="text-sm font-bold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
+                                    <p className="text-sm font-mono tabular-nums tracking-tight font-semibold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
                                 </div>
                             </div>
                         </div>
 
                         <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '500px' }}>
                             <div className="flex justify-center">
-                                <div className="shadow-2xl">
-                                    <EditableInvoicePreview
-                                        invoice={draftInvoice}
-                                        onInvoiceChange={handleDraftInvoiceChange}
-                                        clients={clients}
-                                        products={products}
-                                    />
-                                </div>
+                                <EditableInvoicePreview
+                                    invoice={draftInvoice}
+                                    onInvoiceChange={handleDraftInvoiceChange}
+                                    clients={clients}
+                                    products={products}
+                                />
                             </div>
                         </div>
                     </div>

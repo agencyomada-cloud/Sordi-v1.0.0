@@ -4,6 +4,7 @@ import { useCreateClient, useDeleteClient } from "@/hooks/useClients";
 import { useCreateProduct } from "@/hooks/useProducts";
 import { useCreateInvoice, useDeleteInvoice } from "@/hooks/useInvoices";
 import { db } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { 
     RiCheckLine as Check, 
     RiCloseLine as X, 
@@ -29,6 +30,7 @@ export default function VerificationTest() {
     ]);
 
     const [isRunning, setIsRunning] = useState(false);
+    const { activeCompanyId } = useWorkspace();
 
     // Hooks
     const createClient = useCreateClient();
@@ -109,7 +111,7 @@ export default function VerificationTest() {
             // Need a small delay for DB commit/invalidation if async background
             await new Promise(r => setTimeout(r, 1000));
 
-            const invoices = await db.invoices.getAll();
+            const invoices = await db.invoices.getAll(activeCompanyId);
             const clientInvoices = invoices.filter(i => i.client_id === clientId);
             const totalTTC = clientInvoices.reduce((sum, i) => sum + (i.total_ttc || 0), 0);
 

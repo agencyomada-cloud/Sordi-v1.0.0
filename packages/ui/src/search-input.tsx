@@ -31,7 +31,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           <button
             type="button"
             onClick={() => onChange("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-[6px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             aria-label="Effacer la recherche"
           >
             <RiCloseLine className="w-3.5 h-3.5" />

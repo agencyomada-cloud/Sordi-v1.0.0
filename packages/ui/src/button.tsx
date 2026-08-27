@@ -9,7 +9,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-soft hover:shadow-elevated",
+        // Inner top-edge highlight (a restrained glass touch) on top of the
+        // existing soft->elevated shadow lift on hover.
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary-hover shadow-[var(--shadow-soft),inset_0_1px_0_0_rgba(255,255,255,0.15)] hover:shadow-[var(--shadow-elevated),inset_0_1px_0_0_rgba(255,255,255,0.15)]",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-soft",
         outline: "border border-border bg-card hover:bg-secondary hover:text-foreground shadow-sm",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
@@ -17,10 +20,10 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-5 py-2 rounded-[6px]",
-        sm: "h-9 rounded-[6px] px-4",
-        lg: "h-12 rounded-[6px] px-8",
-        icon: "h-10 w-10 rounded-[6px]",
+        default: "h-10 px-5 py-2 rounded-full",
+        sm: "h-9 rounded-full px-4",
+        lg: "h-12 rounded-full px-8",
+        icon: "h-10 w-10 rounded-full",
       },
     },
     defaultVariants: {

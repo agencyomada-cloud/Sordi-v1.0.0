@@ -4,13 +4,13 @@ import {
     RiUserLine as User,
     RiPhoneLine as Phone,
     RiMailLine as Mail,
-    RiMapPinLine as MapPin,
     RiAddLine as Plus,
     RiPencilLine as Pencil,
     RiDeleteBinLine as Trash2,
     RiMoreFill as MoreHorizontal
 } from "@remixicon/react";
-import { Card, CardContent, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label, Input, TableLoading } from "@sordi/ui";
+import { Card, CardContent, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label, Input, Skeleton, EmptyState } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useEmployees } from "@/hooks/useEmployees";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 
@@ -111,9 +111,23 @@ const EmployeesSection = () => {
 
     if (isLoading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[1, 2, 3].map(i => (
-                    <Card key={i} className="h-48 animate-pulse bg-secondary/20 rounded-3xl" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                    <Card key={i} className="rounded-2xl">
+                        <CardContent className="p-4">
+                            <div className="flex items-start gap-3">
+                                <Skeleton className="h-11 w-11 rounded-full shrink-0" />
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                    <Skeleton className="h-4 w-3/4" />
+                                    <Skeleton className="h-4 w-1/2 rounded-full" />
+                                </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-border/40 flex items-center gap-3">
+                                <Skeleton className="h-3 flex-1" />
+                                <Skeleton className="h-3 w-16 shrink-0" />
+                            </div>
+                        </CardContent>
+                    </Card>
                 ))}
             </div>
         );
@@ -211,11 +225,11 @@ const EmployeesSection = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <Label>Date d'embauche</Label>
-                                            <Input
-                                                type="date"
+                                            <DatePicker
+                                                presets={false}
                                                 value={formData.hire_date}
-                                                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
-                                                className="mt-1.5 rounded-xl"
+                                                onChange={(v) => setFormData({ ...formData, hire_date: v })}
+                                                className="mt-1.5"
                                             />
                                         </div>
                                         <div>
@@ -268,66 +282,77 @@ const EmployeesSection = () => {
                 </Dialog>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* High-density team directory grid — compact avatar chip + role
+                badge per row instead of the old tall, sparse card (icon rows
+                for email/phone/address ate most of the card for fields that
+                are often empty anyway). Contact details now live in a
+                hover-revealed popover menu instead of being permanently
+                spelled out. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {employees?.length === 0 ? (
-                    <div className="col-span-full py-12 text-center text-muted-foreground bg-secondary/10 rounded-3xl border border-dashed border-border/50">
-                        Aucun employé enregistré
+                    <div className="col-span-full">
+                        <EmptyState
+                            type="employees"
+                            title="Aucun employé"
+                            description="Ajoutez votre premier employé pour commencer à suivre l'équipe"
+                            action={{ label: "Ajouter", onClick: () => setIsDialogOpen(true) }}
+                        />
                     </div>
                 ) : (
                     employees?.map((emp) => (
                         <Card
                             key={emp.id}
                             onClick={() => navigate(`/employees/${emp.id}`)}
-                            className="overflow-hidden border-border/50 hover:shadow-lg transition-all duration-300 rounded-3xl group relative cursor-pointer"
+                            className="group relative border-border/50 hover:border-primary/30 hover:shadow-md transition-all duration-150 rounded-2xl cursor-pointer"
                         >
-                            <CardContent className="p-6">
-                                <div className="absolute top-4 right-4" onClick={(e) => e.stopPropagation()}>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                                                <MoreHorizontal className="w-4 h-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="rounded-xl">
-                                            <DropdownMenuItem onClick={() => handleEdit(emp)}>
-                                                <Pencil className="w-4 h-4 mr-2" />
-                                                Modifier
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                className="text-destructive"
-                                                onClick={() => {
-                                                    setDeletingEmployeeId(emp.id);
-                                                    setIsDeleteDialogOpen(true);
-                                                }}
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                                Supprimer
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-
-                                <div className="flex items-start gap-4">
-                                    <EmployeeAvatar photoPath={emp.photo_path} name={emp.name} className="h-16 w-16 text-xl" />
-                                    <div className="flex-1 min-w-0 pr-6">
-                                        <h3 className="font-bold text-lg text-foreground truncate">{emp.name}</h3>
-                                        <p className="text-sm text-primary font-medium truncate">{emp.role || "Aucun rôle"}</p>
+                            <CardContent className="p-4">
+                                <div className="flex items-start gap-3">
+                                    <EmployeeAvatar photoPath={emp.photo_path} name={emp.name} className="h-11 w-11 text-sm shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-semibold text-sm text-foreground truncate">{emp.name}</h3>
+                                        <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary truncate max-w-full">
+                                            {emp.role || "Aucun rôle"}
+                                        </span>
+                                    </div>
+                                    <div
+                                        className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full -mt-1 -mr-1">
+                                                    <MoreHorizontal className="w-4 h-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" className="rounded-xl">
+                                                <DropdownMenuItem onClick={() => handleEdit(emp)}>
+                                                    <Pencil className="w-4 h-4 mr-2" />
+                                                    Modifier
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    className="text-destructive"
+                                                    onClick={() => {
+                                                        setDeletingEmployeeId(emp.id);
+                                                        setIsDeleteDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Supprimer
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </div>
 
-                                <div className="mt-6 space-y-3">
-                                    <div className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors group/item">
-                                        <Mail className="w-4 h-4 shrink-0" />
+                                <div className="mt-3 pt-3 border-t border-border/40 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1 min-w-0 flex-1">
+                                        <Mail className="w-3.5 h-3.5 shrink-0" />
                                         <span className="truncate">{emp.email || "-"}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors group/item">
-                                        <Phone className="w-4 h-4 shrink-0" />
-                                        <span>{emp.phone || "-"}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm text-muted-foreground hover:text-foreground transition-colors group/item">
-                                        <MapPin className="w-4 h-4 shrink-0" />
-                                        <span className="truncate">{emp.address || "-"}</span>
-                                    </div>
+                                    </span>
+                                    <span className="flex items-center gap-1 shrink-0">
+                                        <Phone className="w-3.5 h-3.5 shrink-0" />
+                                        {emp.phone || "-"}
+                                    </span>
                                 </div>
                             </CardContent>
                         </Card>

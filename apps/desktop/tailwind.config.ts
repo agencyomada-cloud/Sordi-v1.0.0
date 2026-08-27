@@ -35,8 +35,14 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Montserrat', 'system-ui', 'sans-serif'],
-        display: ['Montserrat', 'system-ui', 'sans-serif'],
+        // Plus Jakarta Sans for Latin/French, Readex Pro as the Arabic
+        // pairing (see src/i18n) — both geometric, modern SaaS faces.
+        sans: ['"Plus Jakarta Sans"', '"Readex Pro"', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', '"Readex Pro"', 'sans-serif'],
+        // Financial/tabular data only — monetary values, document numbers,
+        // stats. Not the body font: JetBrains Mono is a true monospace,
+        // Space Grotesk a geometric fallback, neither suited to prose.
+        mono: ['"JetBrains Mono"', '"Space Grotesk"', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -47,6 +53,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -67,6 +74,7 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          soft: "hsl(var(--accent-soft))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -112,6 +120,7 @@ export default {
         soft: "var(--shadow-soft)",
         card: "var(--shadow-card)",
         elevated: "var(--shadow-elevated)",
+        glow: "var(--shadow-glow)",
       },
       keyframes: {
         "accordion-down": {
@@ -158,6 +167,22 @@ export default {
           "0%, 100%": { transform: "translateY(0px)" },
           "50%": { transform: "translateY(-4px)" },
         },
+        "splash-in": {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "splash-out": {
+          from: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "0", transform: "scale(1.06)" },
+        },
+        "ambient-drift": {
+          "0%, 100%": { transform: "translate(0px, 0px) scale(1)" },
+          "50%": { transform: "translate(28px, 18px) scale(1.15)" },
+        },
+        "ambient-drift-reverse": {
+          "0%, 100%": { transform: "translate(0px, 0px) scale(1)" },
+          "50%": { transform: "translate(-24px, -20px) scale(1.12)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -171,6 +196,10 @@ export default {
         "pulse-subtle": "pulse-subtle 3s ease-in-out infinite",
         "shimmer": "shimmer 2.5s infinite linear",
         "float": "float 3s ease-in-out infinite",
+        "splash-in": "splash-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "splash-out": "splash-out 0.4s cubic-bezier(0.4, 0, 1, 1) forwards",
+        "ambient-drift": "ambient-drift 12s ease-in-out infinite",
+        "ambient-drift-reverse": "ambient-drift-reverse 14s ease-in-out infinite",
       },
     },
   },

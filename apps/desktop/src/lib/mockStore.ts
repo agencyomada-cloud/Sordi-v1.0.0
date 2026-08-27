@@ -1,6 +1,8 @@
-import { 
-  Client, CreateClientData, 
-  Product, CreateProductData, 
+import {
+  Company, CreateCompanyData,
+  Client, CreateClientData,
+  Supplier, CreateSupplierData, SupplierPurchaseTotal,
+  Product, CreateProductData,
   Invoice, CreateInvoiceData, InvoiceWithClient,
   Payment, CreatePaymentData,
   ClientAdvance, CreateClientAdvanceData, UpdateClientAdvanceData,
@@ -8,10 +10,44 @@ import {
   DeliveryNote, CreateDeliveryNoteData,
   Expense, CreateExpenseData,
   Employee, CreateEmployeeData,
+  Project, ProjectStats, ProjectProfitability,
+  Partner, CreatePartnerData, UpdatePartnerData, PartnerFinancials,
+  PartnerWithdrawal, CreateWithdrawalData,
+  MonthlyBusinessReport, MonthlyReportPartnerRow, MonthlyReportProjectRow,
   ActivityLog, DashboardStats, ClientCumulativeRecord
 } from "./database";
 
 const STORAGE_PREFIX = "sordi_mock_";
+
+// Web-preview mode has no real multi-company backend — every seed record
+// belongs to this single placeholder workspace.
+const MOCK_COMPANY_ID = "mock-company-default";
+
+const DEFAULT_COMPANIES: Company[] = [
+  {
+    id: MOCK_COMPANY_ID,
+    name: "Mon Entreprise",
+    logo_base64: null,
+    activity: null,
+    rc: null,
+    nif: null,
+    nis: null,
+    article_imposition: null,
+    address: null,
+    phone: null,
+    phones: null,
+    email: null,
+    website: null,
+    capital: null,
+    rib: null,
+    bank_agency: null,
+    extra_info: null,
+    cnas_adherent: null,
+    currency: "DZD",
+    invoice_prefix: "FAC-2026-",
+    created_at: "2025-01-01T00:00:00Z",
+  },
+];
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   company_name: "",
@@ -62,7 +98,8 @@ function setStorage<T>(key: string, value: T): void {
 // Initial Seed Data
 const INITIAL_CLIENTS: Client[] = [
   {
-    id: "cli-001",
+    id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-ALG-01",
     name: "SARL ALGERIE TELECOM SOLUTIONS",
     contact_person: "Karim Benali",
@@ -88,7 +125,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-01-10T09:00:00Z",
   },
   {
-    id: "cli-002",
+    id: "9bb7f633-dbf7-44de-8705-4f6a588c0a45",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-BLI-02",
     name: "EURL ATLAS AGRO INDUSTRIE",
     contact_person: "Samir Khelifi",
@@ -114,7 +152,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-01-15T10:30:00Z",
   },
   {
-    id: "cli-003",
+    id: "cd154201-afbc-4b12-82f9-38cd148a6671",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-BBA-03",
     name: "SPA CONDOR LOGISTICS & TRANS",
     contact_person: "Amine Bouzid",
@@ -140,7 +179,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-02-01T08:15:00Z",
   },
   {
-    id: "cli-004",
+    id: "7284dae0-956c-4023-b2df-1931f1fd7784",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-ORN-04",
     name: "SARL MEDITERRANEE DISTRIBUTION",
     contact_person: "Fatima Mansouri",
@@ -166,7 +206,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-02-10T14:00:00Z",
   },
   {
-    id: "cli-005",
+    id: "f810f124-ad3a-4db5-88a8-f39916e854a8",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-STF-05",
     name: "ETS BENHAMADI & FILS",
     contact_person: "Mustapha Benhamadi",
@@ -192,7 +233,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-02-20T11:45:00Z",
   },
   {
-    id: "cli-006",
+    id: "55664ee8-e0f5-4644-a06b-76fc9afea23e",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-BJA-06",
     name: "SARL HIGH TECH PACKAGING",
     contact_person: "Yacine Belkacemi",
@@ -218,7 +260,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-03-01T10:00:00Z",
   },
   {
-    id: "cli-007",
+    id: "5cc275d5-061d-44c8-a58c-43e629aeab72",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-CST-07",
     name: "EURL MAGHREB SERVICES PLUS",
     contact_person: "Nadia Chaoui",
@@ -244,7 +287,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-03-15T15:20:00Z",
   },
   {
-    id: "cli-008",
+    id: "fc2fc732-4e86-4591-bcee-75ef52019899",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-TPZ-08",
     name: "SARL BIO PHARMA ALGERIE",
     contact_person: "Dr. Khaled Rahal",
@@ -270,7 +314,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-04-01T09:30:00Z",
   },
   {
-    id: "cli-009",
+    id: "12685c5d-2243-4109-b1bf-34eb72fb174e",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-WRG-09",
     name: "SPA SAHARA TRANS & SERVICES",
     contact_person: "Mourad Touati",
@@ -296,7 +341,8 @@ const INITIAL_CLIENTS: Client[] = [
     updated_at: "2025-04-10T16:00:00Z",
   },
   {
-    id: "cli-010",
+    id: "145c6262-b0bc-437e-b537-dd5bef72c04b",
+    company_id: MOCK_COMPANY_ID,
     code: "CL-ANN-10",
     name: "EURL EL HILAL COMMERCE ET BTP",
     contact_person: "Tariq Guellil",
@@ -323,9 +369,9 @@ const INITIAL_CLIENTS: Client[] = [
   }
 ];
 
-const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
+const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active" | "company_id">[] = [
   {
-    id: "prod-001",
+    id: "a1ad9717-44b7-44d8-b705-5bdb14851f17",
     code: "0/3",
     name: "Sable Concassé 0/3",
     description: "Sable fin concassé de haute pureté pour mortier et béton",
@@ -337,7 +383,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-002",
+    id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27",
     code: "3/8",
     name: "Gravier Concassé 3/8",
     description: "Gravier calibré pour béton armé et préfabrication",
@@ -349,7 +395,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-003",
+    id: "2cad951b-651b-4e13-b905-6e8980ccbe92",
     code: "8/15",
     name: "Gravier Calibré 8/15",
     description: "Gravier pour couches de fondation et béton de structure",
@@ -361,7 +407,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-004",
+    id: "ca176491-7d9b-4b9d-9365-bb0dbd6608da",
     code: "15/25",
     name: "Gravillon 15/25",
     description: "Granulat grossier pour gros béton et drainage",
@@ -373,7 +419,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-005",
+    id: "958a6fd8-a38f-4284-81ed-f56a35c39826",
     code: "TVC",
     name: "Tout Venant Carrière",
     description: "Tout-venant 0/40 non traité pour remblais et voirie",
@@ -385,7 +431,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-006",
+    id: "a476a571-c721-4460-b180-6c35b505a6fa",
     code: "TVS",
     name: "Tout Venant Oued Calibré",
     description: "Matériau naturel sélectionné d'oued pour sous-couches",
@@ -397,7 +443,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-007",
+    id: "1d009e4a-bf6e-4dcb-9c67-35f56c37c378",
     code: "40/70",
     name: "Ballast & Enrochement 40/70",
     description: "Blocs concassés pour stabilisation des sols et gabions",
@@ -409,7 +455,7 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
     updated_at: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-008",
+    id: "b0225e65-5810-4339-bd2d-3828ec6efdc2",
     code: "SBL-LAV",
     name: "Sable Fin Lavé Extra",
     description: "Sable lavé d'une grande propreté pour enduits et crépis",
@@ -424,15 +470,16 @@ const PRODUCT_SEED_DATA: Omit<Product, "timbre_exempt" | "is_active">[] = [
 
 const INITIAL_PRODUCTS: Product[] = PRODUCT_SEED_DATA.map(p => ({
   ...p,
+  company_id: MOCK_COMPANY_ID,
   timbre_exempt: false,
   is_active: true,
 }));
 
-const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
+const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due" | "company_id">[] = [
   {
     id: "inv-001",
     invoice_number: "FACT-2025-0001",
-    client_id: "cli-001",
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
     invoice_date: "2025-01-15",
     due_date: "2025-02-15",
     subtotal_ht: 385000,
@@ -460,7 +507,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-002",
     invoice_number: "FACT-2025-0002",
-    client_id: "cli-002",
+    client_id: "9bb7f633-dbf7-44de-8705-4f6a588c0a45",
     invoice_date: "2025-01-22",
     due_date: "2025-02-06",
     subtotal_ht: 540000,
@@ -488,7 +535,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-003",
     invoice_number: "FACT-2025-0003",
-    client_id: "cli-003",
+    client_id: "cd154201-afbc-4b12-82f9-38cd148a6671",
     invoice_date: "2025-02-05",
     due_date: "2025-03-22",
     subtotal_ht: 1250000,
@@ -516,7 +563,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-004",
     invoice_number: "FACT-2025-0004",
-    client_id: "cli-004",
+    client_id: "7284dae0-956c-4023-b2df-1931f1fd7784",
     invoice_date: "2025-02-18",
     due_date: "2025-03-20",
     subtotal_ht: 820000,
@@ -544,7 +591,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-005",
     invoice_number: "FACT-2025-0005",
-    client_id: "cli-005",
+    client_id: "f810f124-ad3a-4db5-88a8-f39916e854a8",
     invoice_date: "2025-03-02",
     due_date: "2025-04-02",
     subtotal_ht: 460000,
@@ -572,7 +619,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-006",
     invoice_number: "PROF-2025-0001",
-    client_id: "cli-006",
+    client_id: "55664ee8-e0f5-4644-a06b-76fc9afea23e",
     invoice_date: "2025-03-10",
     due_date: "2025-03-30",
     subtotal_ht: 980000,
@@ -600,7 +647,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-007",
     invoice_number: "FACT-2025-0006",
-    client_id: "cli-007",
+    client_id: "5cc275d5-061d-44c8-a58c-43e629aeab72",
     invoice_date: "2025-03-25",
     due_date: "2025-04-10",
     subtotal_ht: 310000,
@@ -628,7 +675,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-008",
     invoice_number: "FACT-2025-0007",
-    client_id: "cli-008",
+    client_id: "fc2fc732-4e86-4591-bcee-75ef52019899",
     invoice_date: "2025-04-05",
     due_date: "2025-06-05",
     subtotal_ht: 2150000,
@@ -656,7 +703,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-009",
     invoice_number: "AVOIR-2025-0001",
-    client_id: "cli-004",
+    client_id: "7284dae0-956c-4023-b2df-1931f1fd7784",
     invoice_date: "2025-04-12",
     due_date: "2025-04-12",
     subtotal_ht: 75000,
@@ -684,7 +731,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-010",
     invoice_number: "FACT-2025-0008",
-    client_id: "cli-009",
+    client_id: "12685c5d-2243-4109-b1bf-34eb72fb174e",
     invoice_date: "2025-04-20",
     due_date: "2025-06-04",
     subtotal_ht: 3400000,
@@ -712,7 +759,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-011",
     invoice_number: "FACT-2025-0009",
-    client_id: "cli-010",
+    client_id: "145c6262-b0bc-437e-b537-dd5bef72c04b",
     invoice_date: "2025-05-02",
     due_date: "2025-06-02",
     subtotal_ht: 620000,
@@ -740,7 +787,7 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
   {
     id: "inv-012",
     invoice_number: "FACT-2025-0010",
-    client_id: "cli-001",
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
     invoice_date: "2025-05-18",
     due_date: "2025-06-18",
     subtotal_ht: 890000,
@@ -764,6 +811,38 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
     custom_title: "Facture",
     created_at: "2025-05-18T11:00:00Z",
     updated_at: "2025-05-18T11:00:00Z",
+  },
+  {
+    // Linked to project "Refonte Identité Visuelle & Site Web" (see
+    // INITIAL_PROJECTS) — seeded so the Rentabilité & Finances Réelles card
+    // and Dépenses tab have real, non-zero numbers to render in web preview.
+    id: "inv-013",
+    invoice_number: "FACT-2025-0011",
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
+    invoice_date: "2025-02-20",
+    due_date: "2025-03-20",
+    subtotal_ht: 150000,
+    tva_rate: 19,
+    tva_amount: 28500,
+    timbre: 3000,
+    total_ttc: 181500,
+    amount_paid: 181500,
+    status: "paid",
+    invoice_type: "invoice",
+    payment_method: "virement",
+    notes: "Acompte projet refonte identité visuelle",
+    header_note: "Facture liée au projet Refonte Identité Visuelle & Site Web",
+    original_invoice_id: null,
+    discount: null,
+    discount_type: null,
+    discount_value: null,
+    use_secondary_register: false,
+    selected_secondary_rc: null,
+    selected_secondary_address: null,
+    custom_title: "Facture Définitive",
+    created_at: "2025-02-20T10:00:00Z",
+    updated_at: "2025-02-25T14:00:00Z",
+    project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a",
   }
 ];
 
@@ -771,78 +850,89 @@ const INVOICE_SEED_DATA: Omit<Invoice, "month_period" | "balance_due">[] = [
 // seed record, so they can't drift out of sync with total_ttc/amount_paid.
 const INITIAL_INVOICES: Invoice[] = INVOICE_SEED_DATA.map(inv => ({
   ...inv,
+  company_id: MOCK_COMPANY_ID,
   month_period: inv.invoice_date.substring(0, 7),
   balance_due: (inv.total_ttc || 0) - (inv.amount_paid || 0),
 }));
 
 const INITIAL_INVOICE_ITEMS: Record<string, any[]> = {
   "inv-001": [
-    { id: "item-1", invoice_id: "inv-001", product_id: "prod-001", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 300, unit_price: 650, amount: 195000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-2", invoice_id: "inv-001", product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 200, unit_price: 750, amount: 150000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-3", invoice_id: "inv-001", product_id: "prod-005", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 100, unit_price: 400, amount: 40000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-1", invoice_id: "inv-001", product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 300, unit_price: 650, amount: 195000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-2", invoice_id: "inv-001", product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 200, unit_price: 750, amount: 150000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-3", invoice_id: "inv-001", product_id: "958a6fd8-a38f-4284-81ed-f56a35c39826", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 100, unit_price: 400, amount: 40000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-002": [
-    { id: "item-4", invoice_id: "inv-002", product_id: "prod-003", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 500, unit_price: 720, amount: 360000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-5", invoice_id: "inv-002", product_id: "prod-008", product_code: "SBL-LAV", product_name: "Sable Fin Lavé Extra", quantity: 200, unit_price: 900, amount: 180000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-4", invoice_id: "inv-002", product_id: "2cad951b-651b-4e13-b905-6e8980ccbe92", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 500, unit_price: 720, amount: 360000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-5", invoice_id: "inv-002", product_id: "b0225e65-5810-4339-bd2d-3828ec6efdc2", product_code: "SBL-LAV", product_name: "Sable Fin Lavé Extra", quantity: 200, unit_price: 900, amount: 180000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-003": [
-    { id: "item-6", invoice_id: "inv-003", product_id: "prod-007", product_code: "40/70", product_name: "Ballast & Enrochement 40/70", quantity: 1000, unit_price: 600, amount: 600000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-7", invoice_id: "inv-003", product_id: "prod-005", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 1500, unit_price: 380, amount: 570000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-8", invoice_id: "inv-003", product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 100, unit_price: 800, amount: 80000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-6", invoice_id: "inv-003", product_id: "1d009e4a-bf6e-4dcb-9c67-35f56c37c378", product_code: "40/70", product_name: "Ballast & Enrochement 40/70", quantity: 1000, unit_price: 600, amount: 600000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-7", invoice_id: "inv-003", product_id: "958a6fd8-a38f-4284-81ed-f56a35c39826", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 1500, unit_price: 380, amount: 570000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-8", invoice_id: "inv-003", product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 100, unit_price: 800, amount: 80000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-004": [
-    { id: "item-9", invoice_id: "inv-004", product_id: "prod-001", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 800, unit_price: 650, amount: 520000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-10", invoice_id: "inv-004", product_id: "prod-004", product_code: "15/25", product_name: "Gravillon 15/25", quantity: 400, unit_price: 750, amount: 300000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-9", invoice_id: "inv-004", product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 800, unit_price: 650, amount: 520000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-10", invoice_id: "inv-004", product_id: "ca176491-7d9b-4b9d-9365-bb0dbd6608da", product_code: "15/25", product_name: "Gravillon 15/25", quantity: 400, unit_price: 750, amount: 300000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-005": [
-    { id: "item-11", invoice_id: "inv-005", product_id: "prod-008", product_code: "SBL-LAV", product_name: "Sable Fin Lavé Extra", quantity: 400, unit_price: 850, amount: 340000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-12", invoice_id: "inv-005", product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 160, unit_price: 750, amount: 120000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-11", invoice_id: "inv-005", product_id: "b0225e65-5810-4339-bd2d-3828ec6efdc2", product_code: "SBL-LAV", product_name: "Sable Fin Lavé Extra", quantity: 400, unit_price: 850, amount: 340000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-12", invoice_id: "inv-005", product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 160, unit_price: 750, amount: 120000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-008": [
-    { id: "item-13", invoice_id: "inv-008", product_id: "prod-003", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 1500, unit_price: 720, amount: 1080000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-14", invoice_id: "inv-008", product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 1400, unit_price: 750, amount: 1050000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-15", invoice_id: "inv-008", product_id: "prod-001", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 30, unit_price: 666.66, amount: 20000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-13", invoice_id: "inv-008", product_id: "2cad951b-651b-4e13-b905-6e8980ccbe92", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 1500, unit_price: 720, amount: 1080000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-14", invoice_id: "inv-008", product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 1400, unit_price: 750, amount: 1050000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-15", invoice_id: "inv-008", product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 30, unit_price: 666.66, amount: 20000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-010": [
-    { id: "item-16", invoice_id: "inv-010", product_id: "prod-007", product_code: "40/70", product_name: "Ballast & Enrochement 40/70", quantity: 3000, unit_price: 600, amount: 1800000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-17", invoice_id: "inv-010", product_id: "prod-005", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 4000, unit_price: 400, amount: 1600000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-16", invoice_id: "inv-010", product_id: "1d009e4a-bf6e-4dcb-9c67-35f56c37c378", product_code: "40/70", product_name: "Ballast & Enrochement 40/70", quantity: 3000, unit_price: 600, amount: 1800000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-17", invoice_id: "inv-010", product_id: "958a6fd8-a38f-4284-81ed-f56a35c39826", product_code: "TVC", product_name: "Tout Venant Carrière", quantity: 4000, unit_price: 400, amount: 1600000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-011": [
-    { id: "item-18", invoice_id: "inv-011", product_id: "prod-006", product_code: "TVS", product_name: "Tout Venant Oued Calibré", quantity: 1000, unit_price: 480, amount: 480000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-19", invoice_id: "inv-011", product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 180, unit_price: 777.77, amount: 140000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-18", invoice_id: "inv-011", product_id: "a476a571-c721-4460-b180-6c35b505a6fa", product_code: "TVS", product_name: "Tout Venant Oued Calibré", quantity: 1000, unit_price: 480, amount: 480000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-19", invoice_id: "inv-011", product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", quantity: 180, unit_price: 777.77, amount: 140000, tva_rate: 19, timbre_exempt: false },
   ],
   "inv-012": [
-    { id: "item-20", invoice_id: "inv-012", product_id: "prod-001", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 700, unit_price: 650, amount: 455000, tva_rate: 19, timbre_exempt: false },
-    { id: "item-21", invoice_id: "inv-012", product_id: "prod-003", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 600, unit_price: 725, amount: 435000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-20", invoice_id: "inv-012", product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", quantity: 700, unit_price: 650, amount: 455000, tva_rate: 19, timbre_exempt: false },
+    { id: "item-21", invoice_id: "inv-012", product_id: "2cad951b-651b-4e13-b905-6e8980ccbe92", product_code: "8/15", product_name: "Gravier Calibré 8/15", quantity: 600, unit_price: 725, amount: 435000, tva_rate: 19, timbre_exempt: false },
+  ],
+  "inv-013": [
+    // Custom (non-catalog) service line item — no product_id, matches the
+    // Product Combobox's "add as custom item" shape.
+    { id: "item-22", invoice_id: "inv-013", product_id: null, product_name: "Prestation Refonte Identité Visuelle & Site Web", quantity: 1, unit_price: 150000, amount: 150000, tva_rate: 19, timbre_exempt: false },
   ]
 };
 
 const INITIAL_PAYMENTS: Payment[] = [
-  { id: "pay-001", invoice_id: "inv-001", payment_date: "2025-01-20", amount: 460650, payment_method: "virement", cheque_number: null, bank_name: "BNA", value_date: "2025-01-20", notes: "Règlement total", created_at: "2025-01-20T14:30:00Z" },
-  { id: "pay-002", invoice_id: "inv-002", payment_date: "2025-01-28", amount: 645100, payment_method: "cheque", cheque_number: "4891230", bank_name: "BEA", value_date: "2025-01-28", notes: "Chèque déposé", created_at: "2025-01-28T09:00:00Z" },
-  { id: "pay-003", invoice_id: "inv-003", payment_date: "2025-02-15", amount: 745000, payment_method: "virement", cheque_number: null, bank_name: "BADR", value_date: "2025-02-15", notes: "Premier acompte 50%", created_at: "2025-02-15T16:00:00Z" },
-  { id: "pay-004", invoice_id: "inv-005", payment_date: "2025-03-02", amount: 549900, payment_method: "especes", cheque_number: null, bank_name: null, value_date: "2025-03-02", notes: "Espèces caisse centrale", created_at: "2025-03-02T11:00:00Z" },
-  { id: "pay-005", invoice_id: "inv-007", payment_date: "2025-03-29", amount: 371400, payment_method: "virement", cheque_number: null, bank_name: "CPA", value_date: "2025-03-29", notes: "Solde facture", created_at: "2025-03-29T10:00:00Z" },
-  { id: "pay-006", invoice_id: "inv-010", payment_date: "2025-04-25", amount: 2000000, payment_method: "virement", cheque_number: null, bank_name: "Gulf Bank Algérie", value_date: "2025-04-25", notes: "Virement partiel", created_at: "2025-04-25T17:00:00Z" },
-  { id: "pay-007", invoice_id: "inv-011", payment_date: "2025-05-08", amount: 740300, payment_method: "cheque", cheque_number: "9812401", bank_name: "BDL", value_date: "2025-05-08", notes: "Chèque encaissé", created_at: "2025-05-08T12:00:00Z" }
+  { id: "pay-001", company_id: MOCK_COMPANY_ID, invoice_id: "inv-001", payment_date: "2025-01-20", amount: 460650, payment_method: "virement", cheque_number: null, bank_name: "BNA", value_date: "2025-01-20", notes: "Règlement total", created_at: "2025-01-20T14:30:00Z", employee_id: null },
+  { id: "pay-002", company_id: MOCK_COMPANY_ID, invoice_id: "inv-002", payment_date: "2025-01-28", amount: 645100, payment_method: "cheque", cheque_number: "4891230", bank_name: "BEA", value_date: "2025-01-28", notes: "Chèque déposé", created_at: "2025-01-28T09:00:00Z", employee_id: null },
+  { id: "pay-003", company_id: MOCK_COMPANY_ID, invoice_id: "inv-003", payment_date: "2025-02-15", amount: 745000, payment_method: "virement", cheque_number: null, bank_name: "BADR", value_date: "2025-02-15", notes: "Premier acompte 50%", created_at: "2025-02-15T16:00:00Z", employee_id: null },
+  { id: "pay-004", company_id: MOCK_COMPANY_ID, invoice_id: "inv-005", payment_date: "2025-03-02", amount: 549900, payment_method: "especes", cheque_number: null, bank_name: null, value_date: "2025-03-02", notes: "Espèces caisse centrale", created_at: "2025-03-02T11:00:00Z", employee_id: null },
+  { id: "pay-005", company_id: MOCK_COMPANY_ID, invoice_id: "inv-007", payment_date: "2025-03-29", amount: 371400, payment_method: "virement", cheque_number: null, bank_name: "CPA", value_date: "2025-03-29", notes: "Solde facture", created_at: "2025-03-29T10:00:00Z", employee_id: null },
+  { id: "pay-006", company_id: MOCK_COMPANY_ID, invoice_id: "inv-010", payment_date: "2025-04-25", amount: 2000000, payment_method: "virement", cheque_number: null, bank_name: "Gulf Bank Algérie", value_date: "2025-04-25", notes: "Virement partiel", created_at: "2025-04-25T17:00:00Z", employee_id: null },
+  { id: "pay-007", company_id: MOCK_COMPANY_ID, invoice_id: "inv-011", payment_date: "2025-05-08", amount: 740300, payment_method: "cheque", cheque_number: "9812401", bank_name: "BDL", value_date: "2025-05-08", notes: "Chèque encaissé", created_at: "2025-05-08T12:00:00Z", employee_id: null }
 ];
 
 const INITIAL_EXPENSES: Expense[] = [
-  { id: "exp-001", expense_date: "2025-01-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau janvier", amount: 180000, payment_method: "virement", reference: "LOY-JAN25", notes: "Propriétaire SARL Immo", month_period: "2025-01", created_at: "2025-01-05T10:00:00Z", updated_at: "2025-01-05T10:00:00Z" },
-  { id: "exp-002", expense_date: "2025-01-18", category: "Carburant & Transport", description: "Carburant camions et engins", amount: 95000, payment_method: "carte", reference: "NAFT-4521", notes: "Cartes Naftal", month_period: "2025-01", created_at: "2025-01-18T16:00:00Z", updated_at: "2025-01-18T16:00:00Z" },
-  { id: "exp-003", expense_date: "2025-02-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau février", amount: 180000, payment_method: "virement", reference: "LOY-FEV25", notes: null, month_period: "2025-02", created_at: "2025-02-05T10:00:00Z", updated_at: "2025-02-05T10:00:00Z" },
-  { id: "exp-004", expense_date: "2025-02-22", category: "Maintenance & Pièces", description: "Réparation chargeur Caterpillar", amount: 145000, payment_method: "cheque", reference: "REP-ENGIN-02", notes: "Société Technique Engins", month_period: "2025-02", created_at: "2025-02-22T14:30:00Z", updated_at: "2025-02-22T14:30:00Z" },
-  { id: "exp-005", expense_date: "2025-03-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau mars", amount: 180000, payment_method: "virement", reference: "LOY-MAR25", notes: null, month_period: "2025-03", created_at: "2025-03-05T10:00:00Z", updated_at: "2025-03-05T10:00:00Z" },
-  { id: "exp-006", expense_date: "2025-03-20", category: "Électricité & Eau", description: "Facture Sonelgaz 1er Trimestre", amount: 64500, payment_method: "virement", reference: "SON-2025-T1", notes: "Site carrière", month_period: "2025-03", created_at: "2025-03-20T11:00:00Z", updated_at: "2025-03-20T11:00:00Z" },
-  { id: "exp-007", expense_date: "2025-04-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau avril", amount: 180000, payment_method: "virement", reference: "LOY-AVR25", notes: null, month_period: "2025-04", created_at: "2025-04-05T10:00:00Z", updated_at: "2025-04-05T10:00:00Z" },
-  { id: "exp-008", expense_date: "2025-04-18", category: "Fournitures & Bureautique", description: "Achat consommables et impressions", amount: 32000, payment_method: "especes", reference: "FOURN-04", notes: "Facture payée", month_period: "2025-04", created_at: "2025-04-18T15:00:00Z", updated_at: "2025-04-18T15:00:00Z" }
+  { id: "exp-001", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau janvier", amount: 180000, payment_method: "virement", reference: "LOY-JAN25", notes: "Propriétaire SARL Immo", month_period: "2025-01", created_at: "2025-01-05T10:00:00Z", updated_at: "2025-01-05T10:00:00Z" },
+  { id: "exp-002", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-18", category: "Carburant & Transport", description: "Carburant camions et engins", amount: 95000, payment_method: "carte", reference: "NAFT-4521", notes: "Cartes Naftal", month_period: "2025-01", created_at: "2025-01-18T16:00:00Z", updated_at: "2025-01-18T16:00:00Z" },
+  { id: "exp-003", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau février", amount: 180000, payment_method: "virement", reference: "LOY-FEV25", notes: null, month_period: "2025-02", created_at: "2025-02-05T10:00:00Z", updated_at: "2025-02-05T10:00:00Z" },
+  { id: "exp-004", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-22", category: "Maintenance & Pièces", description: "Réparation chargeur Caterpillar", amount: 145000, payment_method: "cheque", reference: "REP-ENGIN-02", notes: "Société Technique Engins", month_period: "2025-02", created_at: "2025-02-22T14:30:00Z", updated_at: "2025-02-22T14:30:00Z" },
+  { id: "exp-005", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau mars", amount: 180000, payment_method: "virement", reference: "LOY-MAR25", notes: null, month_period: "2025-03", created_at: "2025-03-05T10:00:00Z", updated_at: "2025-03-05T10:00:00Z" },
+  { id: "exp-006", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-20", category: "Électricité & Eau", description: "Facture Sonelgaz 1er Trimestre", amount: 64500, payment_method: "virement", reference: "SON-2025-T1", notes: "Site carrière", month_period: "2025-03", created_at: "2025-03-20T11:00:00Z", updated_at: "2025-03-20T11:00:00Z" },
+  { id: "exp-007", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau avril", amount: 180000, payment_method: "virement", reference: "LOY-AVR25", notes: null, month_period: "2025-04", created_at: "2025-04-05T10:00:00Z", updated_at: "2025-04-05T10:00:00Z" },
+  { id: "exp-008", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-18", category: "Fournitures & Bureautique", description: "Achat consommables et impressions", amount: 32000, payment_method: "especes", reference: "FOURN-04", notes: "Facture payée", month_period: "2025-04", created_at: "2025-04-18T15:00:00Z", updated_at: "2025-04-18T15:00:00Z" },
+  // Both linked to project "Refonte Identité Visuelle & Site Web" — direct
+  // costs for the Rentabilité & Finances Réelles card / Dépenses tab.
+  { id: "exp-009", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-25", category: "Sous-traitance Design", description: "Freelance illustration & maquettes", amount: 35000, payment_method: "virement", reference: "FREELANCE-02", notes: "Prestataire externe", month_period: "2025-02", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: false, recurrence_interval: null, created_at: "2025-02-25T10:00:00Z", updated_at: "2025-02-25T10:00:00Z" },
+  { id: "exp-010", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-10", category: "Licences & Outils", description: "Abonnement Adobe Creative Cloud", amount: 18000, payment_method: "carte", reference: "ADOBE-MAR25", notes: "Licence mensuelle équipe design", month_period: "2025-03", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: true, recurrence_interval: "monthly", created_at: "2025-03-10T10:00:00Z", updated_at: "2025-03-10T10:00:00Z" }
 ];
 
 const INITIAL_DELIVERIES: DeliveryNote[] = [
   {
     id: "bl-001",
+    company_id: MOCK_COMPANY_ID,
     delivery_number: "BL-2025-0001",
-    client_id: "cli-001",
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
     delivery_date: "2025-01-14",
     invoice_id: "inv-001",
     order_id: null,
@@ -860,13 +950,16 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
     notes: "Marchandise reçue en bon état",
     reserves: null,
     custom_title: "Bon de Livraison",
+    status: "signed",
+    signed_at: "2025-01-14T10:00:00Z",
     created_at: "2025-01-14T08:00:00Z",
     updated_at: "2025-01-14T10:00:00Z",
   },
   {
     id: "bl-002",
+    company_id: MOCK_COMPANY_ID,
     delivery_number: "BL-2025-0002",
-    client_id: "cli-002",
+    client_id: "9bb7f633-dbf7-44de-8705-4f6a588c0a45",
     delivery_date: "2025-01-21",
     invoice_id: "inv-002",
     order_id: null,
@@ -884,13 +977,16 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
     notes: "Conforme au bon de commande",
     reserves: null,
     custom_title: "Bon de Livraison",
+    status: "signed",
+    signed_at: "2025-01-21T11:30:00Z",
     created_at: "2025-01-21T09:00:00Z",
     updated_at: "2025-01-21T11:30:00Z",
   },
   {
     id: "bl-003",
+    company_id: MOCK_COMPANY_ID,
     delivery_number: "BL-2025-0003",
-    client_id: "cli-003",
+    client_id: "cd154201-afbc-4b12-82f9-38cd148a6671",
     delivery_date: "2025-02-04",
     invoice_id: "inv-003",
     order_id: null,
@@ -908,13 +1004,16 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
     notes: "Livraison échelonnée lot 1",
     reserves: null,
     custom_title: "Bon de Livraison",
+    status: "signed",
+    signed_at: "2025-02-04T10:00:00Z",
     created_at: "2025-02-04T07:30:00Z",
     updated_at: "2025-02-04T10:00:00Z",
   },
   {
     id: "bl-004",
+    company_id: MOCK_COMPANY_ID,
     delivery_number: "BL-2025-0004",
-    client_id: "cli-008",
+    client_id: "fc2fc732-4e86-4591-bcee-75ef52019899",
     delivery_date: "2025-04-04",
     invoice_id: "inv-008",
     order_id: null,
@@ -932,6 +1031,8 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
     notes: "Grande livraison 2900 tonnes",
     reserves: null,
     custom_title: "Bon de Livraison",
+    status: "signed",
+    signed_at: "2025-04-04T13:00:00Z",
     created_at: "2025-04-04T08:00:00Z",
     updated_at: "2025-04-04T13:00:00Z",
   }
@@ -940,8 +1041,9 @@ const INITIAL_DELIVERIES: DeliveryNote[] = [
 const INITIAL_ORDERS: Order[] = [
   {
     id: "ord-001",
+    company_id: MOCK_COMPANY_ID,
     order_number: "BC-2025-0001",
-    client_id: "cli-001",
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
     supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
     supplier_email: "contact@sordi.dz",
@@ -967,8 +1069,9 @@ const INITIAL_ORDERS: Order[] = [
   },
   {
     id: "ord-002",
+    company_id: MOCK_COMPANY_ID,
     order_number: "BC-2025-0002",
-    client_id: "cli-002",
+    client_id: "9bb7f633-dbf7-44de-8705-4f6a588c0a45",
     supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
     supplier_email: "contact@sordi.dz",
@@ -994,8 +1097,9 @@ const INITIAL_ORDERS: Order[] = [
   },
   {
     id: "ord-003",
+    company_id: MOCK_COMPANY_ID,
     order_number: "BC-2025-0003",
-    client_id: "cli-003",
+    client_id: "cd154201-afbc-4b12-82f9-38cd148a6671",
     supplier_name: "SARL SORDI CARRIERES",
     supplier_address: "Zone Industrielle Oued Smar, Alger",
     supplier_email: "contact@sordi.dz",
@@ -1022,10 +1126,127 @@ const INITIAL_ORDERS: Order[] = [
 ];
 
 const INITIAL_EMPLOYEES: Employee[] = [
-  { id: "emp-001", name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@sordi.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
-  { id: "emp-002", name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@sordi.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
-  { id: "emp-003", name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@sordi.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
-  { id: "emp-004", name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@sordi.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null }
+  { id: "emp-001", company_id: MOCK_COMPANY_ID, name: "Rachid Tahiri", role: "Responsable Commercial", email: "r.tahiri@sordi.dz", phone: "0550 12 34 56", address: "Alger Centre", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-002", company_id: MOCK_COMPANY_ID, name: "Hamza Derouiche", role: "Chef de Dépôt", email: "h.derouiche@sordi.dz", phone: "0555 98 76 54", address: "Oued Smar", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-003", company_id: MOCK_COMPANY_ID, name: "Samia Larbi", role: "Comptable Principale", email: "s.larbi@sordi.dz", phone: "0560 45 67 89", address: "Kouba, Alger", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null },
+  { id: "emp-004", company_id: MOCK_COMPANY_ID, name: "Mourad Brahimi", role: "Chauffeur Poids Lourd", email: "m.brahimi@sordi.dz", phone: "0552 33 22 11", address: "Boufarik, Blida", is_active: true, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z", base_salary: null, hire_date: null, contract_type: null, rib: null, external_code: null, photo_path: null }
+];
+
+// omada-agency branch only — Projects module mock data. The real backend
+// (get_project_stats/get_project_profitability) previously had no mock
+// counterpart at all (db.projects.getAll's fallback was a hardcoded []),
+// so the Projects module was untestable in web preview. First project is
+// deliberately linked to inv-013/exp-009/exp-010 above so the Rentabilité &
+// Finances Réelles card and Dépenses tab render real, non-zero numbers.
+const INITIAL_PROJECTS: Project[] = [
+  {
+    id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a",
+    company_id: MOCK_COMPANY_ID,
+    client_id: "d2ca2c45-669d-4724-9b6e-913b1fe6d605", // SARL ALGERIE TELECOM SOLUTIONS
+    name: "Refonte Identité Visuelle & Site Web",
+    service_categories: ["branding", "developpement"],
+    responsible_person: "Amine Kaddour",
+    start_date: "2025-01-10",
+    deadline: "2025-06-30",
+    planned_budget: 250000,
+    created_at: "2025-01-10T09:00:00Z",
+    updated_at: "2025-02-25T10:00:00Z",
+    freelancer_id: null,
+    montant_convenu: null,
+    statut_paiement: "non_paye",
+    date_paiement: null,
+  },
+  {
+    id: "7c2b4d8e-1a3f-4e6c-b5d7-9f0a2c4e6b8d",
+    company_id: MOCK_COMPANY_ID,
+    client_id: "9bb7f633-dbf7-44de-8705-4f6a588c0a45", // EURL ATLAS AGRO INDUSTRIE
+    name: "Campagne Marketing Digital Q2",
+    service_categories: ["marketing_digital", "design_graphique"],
+    responsible_person: "Sarah Belkacem",
+    start_date: "2025-03-01",
+    deadline: "2025-05-31",
+    planned_budget: 180000,
+    created_at: "2025-03-01T09:00:00Z",
+    updated_at: "2025-03-01T09:00:00Z",
+    freelancer_id: null,
+    montant_convenu: null,
+    statut_paiement: "non_paye",
+    date_paiement: null,
+  },
+  {
+    id: "b4d6f8a0-3c5e-4a7b-9d1f-2e4c6a8b0d2f",
+    company_id: MOCK_COMPANY_ID,
+    client_id: "cd154201-afbc-4b12-82f9-38cd148a6671", // SPA CONDOR LOGISTICS & TRANS
+    name: "Production Vidéo Corporate",
+    service_categories: ["production_video"],
+    responsible_person: "Karim Toumi",
+    start_date: "2025-02-15",
+    deadline: "2025-04-15",
+    planned_budget: 120000,
+    created_at: "2025-02-15T09:00:00Z",
+    updated_at: "2025-02-15T09:00:00Z",
+    freelancer_id: null,
+    montant_convenu: null,
+    statut_paiement: "non_paye",
+    date_paiement: null,
+  },
+];
+
+const INITIAL_PARTNERS: Partner[] = [
+  {
+    id: "1e2d3c4b-5a69-4f78-8c91-0d2e3f4a5b6c",
+    company_id: MOCK_COMPANY_ID,
+    name: "Yacine Boudiaf",
+    email: "yacine.boudiaf@sordi-agency.dz",
+    phone: "0555 12 34 56",
+    role: "Gérant associé",
+    equity_percentage: 55,
+    is_active: true,
+    created_at: "2025-01-05T09:00:00Z",
+    updated_at: "2025-01-05T09:00:00Z",
+  },
+  {
+    id: "2f3e4d5c-6b7a-4e89-9d02-1e3f4a5b6c7d",
+    company_id: MOCK_COMPANY_ID,
+    name: "Nadia Cherfaoui",
+    email: "nadia.cherfaoui@sordi-agency.dz",
+    phone: "0666 78 90 12",
+    role: "Associée non gérante",
+    equity_percentage: 45,
+    is_active: true,
+    created_at: "2025-01-05T09:00:00Z",
+    updated_at: "2025-01-05T09:00:00Z",
+  },
+];
+
+const INITIAL_PARTNER_WITHDRAWALS: PartnerWithdrawal[] = [
+  {
+    id: "3a4b5c6d-7e8f-4091-a2b3-c4d5e6f7a8b9",
+    partner_id: "1e2d3c4b-5a69-4f78-8c91-0d2e3f4a5b6c",
+    withdrawal_date: "2025-03-15",
+    amount: 400000,
+    payment_method: "Virement",
+    notes: "Acompte T1 2025",
+    created_at: "2025-03-15T10:00:00Z",
+  },
+  {
+    id: "4b5c6d7e-8f90-4a12-b3c4-d5e6f7a8b9c0",
+    partner_id: "1e2d3c4b-5a69-4f78-8c91-0d2e3f4a5b6c",
+    withdrawal_date: "2025-06-20",
+    amount: 350000,
+    payment_method: "Virement",
+    notes: "Acompte T2 2025",
+    created_at: "2025-06-20T10:00:00Z",
+  },
+  {
+    id: "5c6d7e8f-9012-4b34-c5d6-e7f8a9b0c1d2",
+    partner_id: "2f3e4d5c-6b7a-4e89-9d02-1e3f4a5b6c7d",
+    withdrawal_date: "2025-04-10",
+    amount: 250000,
+    payment_method: "Chèque",
+    notes: "Acompte T1 2025",
+    created_at: "2025-04-10T10:00:00Z",
+  },
 ];
 
 export const mockStore = {
@@ -1038,6 +1259,7 @@ export const mockStore = {
   createClient: (data: CreateClientData): Client => {
     const list = getStorage("clients", INITIAL_CLIENTS);
     const newClient: Client = {
+      company_id: data.company_id,
       id: "cli-" + Date.now(),
       code: data.code || `CL-${list.length + 1}`,
       name: data.name,
@@ -1085,6 +1307,58 @@ export const mockStore = {
     setStorage("clients", list.filter(c => c.id !== id));
   },
 
+  // Suppliers (Fournisseurs)
+  getSuppliers: (): Supplier[] => getStorage<Supplier[]>("suppliers", []),
+  getSupplier: (id: string): Supplier | null => {
+    const list = getStorage<Supplier[]>("suppliers", []);
+    return list.find(s => s.id === id) || null;
+  },
+  createSupplier: (data: CreateSupplierData): Supplier => {
+    const list = getStorage<Supplier[]>("suppliers", []);
+    const newSupplier: Supplier = {
+      company_id: data.company_id,
+      id: "sup-" + Date.now(),
+      name: data.name,
+      category: data.category || null,
+      phone: data.phone || null,
+      email: data.email || null,
+      address: data.address || null,
+      city: data.city || null,
+      rc: data.rc || null,
+      nif: data.nif || null,
+      nis: data.nis || null,
+      solde_du: data.solde_du || 0,
+      notes: data.notes || null,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setStorage("suppliers", [newSupplier, ...list]);
+    return newSupplier;
+  },
+  updateSupplier: (id: string, data: CreateSupplierData): Supplier => {
+    const list = getStorage<Supplier[]>("suppliers", []);
+    const index = list.findIndex(s => s.id === id);
+    if (index === -1) throw new Error("Supplier not found");
+    const updatedSupplier = { ...list[index], ...data, updated_at: new Date().toISOString() };
+    list[index] = updatedSupplier;
+    setStorage("suppliers", list);
+    return updatedSupplier;
+  },
+  deleteSupplier: (id: string): void => {
+    const list = getStorage<Supplier[]>("suppliers", []);
+    setStorage("suppliers", list.filter(s => s.id !== id));
+  },
+  getSupplierPurchaseTotals: (): SupplierPurchaseTotal[] => {
+    const expenses = getStorage<Expense[]>("expenses", []);
+    const totals = new Map<string, number>();
+    for (const e of expenses) {
+      if (!e.supplier_id) continue;
+      totals.set(e.supplier_id, (totals.get(e.supplier_id) || 0) + Number(e.amount));
+    }
+    return Array.from(totals.entries()).map(([supplier_id, total_achats]) => ({ supplier_id, total_achats }));
+  },
+
   // Client Advances
   getClientAdvances: (client_id: string): ClientAdvance[] => {
     const list = getStorage<ClientAdvance[]>("client_advances", []);
@@ -1115,6 +1389,7 @@ export const mockStore = {
   createProduct: (data: CreateProductData): Product => {
     const list = getStorage("products", INITIAL_PRODUCTS);
     const newProd: Product = {
+      company_id: data.company_id,
       id: "prod-" + Date.now(),
       code: data.code,
       name: data.name,
@@ -1216,6 +1491,7 @@ export const mockStore = {
     const amount_paid = data.amount_paid || 0;
 
     const newInvoice: Invoice = {
+      company_id: data.company_id,
       id: "inv-" + Date.now(),
       invoice_number: data.invoice_number || mockStore.getNextInvoiceNumber(),
       client_id: data.client_id,
@@ -1258,8 +1534,10 @@ export const mockStore = {
         id: `item-${Date.now()}-${idx}`,
         invoice_id: newInvoice.id,
         product_id: it.product_id,
-        product_code: prod?.code || "PROD",
-        product_name: prod?.name || "Produit",
+        // Falls back to the item's own product_name/product_code for a
+        // custom/one-off line item with no matching catalog product.
+        product_code: prod?.code || it.product_code || "PROD",
+        product_name: prod?.name || it.product_name || "Produit",
         quantity: it.quantity,
         unit_price: it.unit_price,
         amount: it.quantity * it.unit_price,
@@ -1331,8 +1609,8 @@ export const mockStore = {
         id: `item-${Date.now()}-${idx}`,
         invoice_id: id,
         product_id: it.product_id,
-        product_code: prod?.code || "PROD",
-        product_name: prod?.name || "Produit",
+        product_code: prod?.code || it.product_code || "PROD",
+        product_name: prod?.name || it.product_name || "Produit",
         quantity: it.quantity,
         unit_price: it.unit_price,
         amount: it.quantity * it.unit_price,
@@ -1369,6 +1647,7 @@ export const mockStore = {
   createPayment: (data: CreatePaymentData): Payment => {
     const list = getStorage("payments", INITIAL_PAYMENTS);
     const newPay: Payment = {
+      company_id: data.company_id,
       id: "pay-" + Date.now(),
       invoice_id: data.invoice_id,
       payment_date: data.payment_date,
@@ -1378,21 +1657,32 @@ export const mockStore = {
       bank_name: data.bank_name || null,
       value_date: data.value_date || data.payment_date,
       notes: data.notes || null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      employee_id: data.employee_id || null,
     };
     setStorage("payments", [newPay, ...list]);
     return newPay;
   },
+  deletePayment: (id: string): void => {
+    const list = getStorage("payments", INITIAL_PAYMENTS);
+    setStorage("payments", list.filter(p => p.id !== id));
+  },
 
   // Expenses
-  getExpenses: (month_period?: string): Expense[] => {
+  getExpenses: (month_period?: string, project_id?: string): Expense[] => {
     let list = getStorage("expenses", INITIAL_EXPENSES);
     if (month_period) list = list.filter(e => e.month_period === month_period);
+    if (project_id) list = list.filter(e => e.project_id === project_id);
     return list;
   },
   createExpense: (data: CreateExpenseData): Expense => {
     const list = getStorage("expenses", INITIAL_EXPENSES);
+    // The Projects module has no mock data backing (db.projects.getAll's mock
+    // fallback is always []), so there's nothing to resolve a name from here
+    // — project_name stays null in mock/web-preview mode, same as every
+    // other project-derived field in this app.
     const newExp: Expense = {
+      company_id: data.company_id,
       id: "exp-" + Date.now(),
       expense_date: data.expense_date,
       category: data.category,
@@ -1402,6 +1692,12 @@ export const mockStore = {
       reference: data.reference || null,
       notes: data.notes || null,
       month_period: data.expense_date.substring(0, 7),
+      project_id: data.project_id || null,
+      project_name: null,
+      supplier_id: data.supplier_id || null,
+      supplier_name: null,
+      is_recurring: data.is_recurring || false,
+      recurrence_interval: data.recurrence_interval || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1411,6 +1707,267 @@ export const mockStore = {
   deleteExpense: (id: string): void => {
     const list = getStorage("expenses", INITIAL_EXPENSES);
     setStorage("expenses", list.filter(e => e.id !== id));
+  },
+
+  // Projects (omada-agency branch only)
+  getProjects: (): Project[] => getStorage("projects", INITIAL_PROJECTS),
+  getProject: (id: string): Project | null => getStorage("projects", INITIAL_PROJECTS).find(p => p.id === id) || null,
+  // Mirrors get_project_stats (Rust): budget_facture/budget_paye are
+  // TTC-basis sums of every invoice tied to the project, regardless of type.
+  getProjectStats: (project_id?: string): ProjectStats[] => {
+    const projects = getStorage("projects", INITIAL_PROJECTS).filter(p => !project_id || p.id === project_id);
+    const invoices = getStorage("invoices", INITIAL_INVOICES);
+    return projects.map(p => {
+      const linked = invoices.filter(i => i.project_id === p.id);
+      return {
+        project_id: p.id,
+        planned_budget: p.planned_budget,
+        budget_facture: linked.reduce((sum, i) => sum + (i.total_ttc || 0), 0),
+        budget_paye: linked.reduce((sum, i) => sum + (i.amount_paid || 0), 0),
+        task_count: 0,
+        tasks_approved_count: 0,
+        start_date: p.start_date,
+        deadline: p.deadline,
+      };
+    });
+  },
+  // Mirrors get_project_profitability (Rust): HT revenue net of credit
+  // notes, proformas excluded, minus direct expenses tied to the project.
+  getProjectProfitability: (project_id: string): ProjectProfitability => {
+    const invoices = getStorage("invoices", INITIAL_INVOICES).filter(
+      i => i.project_id === project_id && (i.invoice_type === "invoice" || i.invoice_type === "credit_note")
+    );
+    const revenueHt = invoices.reduce((sum, i) => {
+      const ht = i.subtotal_ht || 0;
+      return sum + (i.invoice_type === "credit_note" ? -ht : ht);
+    }, 0);
+    const directExpenses = getStorage("expenses", INITIAL_EXPENSES)
+      .filter(e => e.project_id === project_id)
+      .reduce((sum, e) => sum + e.amount, 0);
+    const netMargin = revenueHt - directExpenses;
+    // Mock has no separate payments ledger keyed usefully here, so this
+    // mirrors budget_paye above: each linked invoice's own amount_paid.
+    const totalCollected = invoices.reduce((sum, i) => sum + (i.amount_paid || 0), 0);
+    return {
+      project_id,
+      revenue_ht: revenueHt,
+      total_collected: totalCollected,
+      direct_expenses: directExpenses,
+      net_margin: netMargin,
+      margin_percentage: revenueHt > 0 ? (netMargin / revenueHt) * 100 : 0,
+    };
+  },
+
+  // Partners & equity distribution (omada-agency branch only)
+  // Mirrors get_partners (Rust): same HT-revenue-minus-charges period
+  // computation as getDashboardStats' revenueHt/netProfitHt, split by each
+  // partner's equity_percentage. total_withdrawn/remaining_balance are
+  // all-time, not period-scoped.
+  getPartners: (year = 2025, months?: string[]): PartnerFinancials[] => {
+    const invoices = mockStore.getInvoices("all", "invoice").filter(inv => {
+      const d = new Date(inv.invoice_date);
+      const y = d.getFullYear();
+      const m = (d.getMonth() + 1).toString();
+      return y === year && (!months || months.length === 0 || months.includes(m));
+    });
+    const expenses = getStorage("expenses", INITIAL_EXPENSES).filter(exp => {
+      const d = new Date(exp.expense_date);
+      const y = d.getFullYear();
+      const m = (d.getMonth() + 1).toString();
+      return y === year && (!months || months.length === 0 || months.includes(m));
+    });
+    const revenueHt = invoices.reduce((s, i) => s + (i.subtotal_ht || 0), 0);
+    const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+    const netProfitHt = revenueHt - totalExpenses;
+
+    const withdrawals = getStorage("partner_withdrawals", INITIAL_PARTNER_WITHDRAWALS);
+    const partners = getStorage("partners", INITIAL_PARTNERS);
+
+    return partners.map(p => {
+      const totalWithdrawn = withdrawals.filter(w => w.partner_id === p.id).reduce((s, w) => s + w.amount, 0);
+      const allocatedProfit = netProfitHt * (p.equity_percentage / 100);
+      return {
+        ...p,
+        allocated_profit: allocatedProfit,
+        total_withdrawn: totalWithdrawn,
+        remaining_balance: allocatedProfit - totalWithdrawn,
+      };
+    });
+  },
+  // Mirrors get_monthly_partners_report (Rust): a strict single-month
+  // aggregation for the executive PDF report, independent of getPartners'
+  // year+months-list/all-time-withdrawals shape. Payroll figures always
+  // fall back to 0/empty here — there is no mock payroll_runs data, same
+  // convention as db.payroll.* elsewhere in this file.
+  getMonthlyPartnersReport: (year: number, month: number): MonthlyBusinessReport => {
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+
+    const invoices = mockStore.getInvoices("all", "invoice").filter((inv) => {
+      const d = new Date(inv.invoice_date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+    const recettes_ht = invoices.reduce((s, i) => s + (i.subtotal_ht || 0), 0);
+
+    const payments = getStorage("payments", INITIAL_PAYMENTS).filter((p) => {
+      const d = new Date(p.payment_date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+    const recettes_encaissees = payments.reduce((s, p) => s + p.amount, 0);
+
+    const expenses = getStorage("expenses", INITIAL_EXPENSES).filter((e) => {
+      const d = new Date(e.expense_date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+    const charges_operationnelles = expenses.reduce((s, e) => s + e.amount, 0);
+
+    const masse_salariale = 0; // no mock payroll_runs data
+    const benefice_net = recettes_encaissees - (charges_operationnelles + masse_salariale);
+
+    // Solde initial: cumulative net cash movement across every prior month.
+    const allPayments = getStorage("payments", INITIAL_PAYMENTS).filter((p) => `${new Date(p.payment_date).getFullYear()}-${String(new Date(p.payment_date).getMonth() + 1).padStart(2, "0")}` < monthKey);
+    const allExpenses = getStorage("expenses", INITIAL_EXPENSES).filter((e) => `${new Date(e.expense_date).getFullYear()}-${String(new Date(e.expense_date).getMonth() + 1).padStart(2, "0")}` < monthKey);
+    const solde_initial = allPayments.reduce((s, p) => s + p.amount, 0) - allExpenses.reduce((s, e) => s + e.amount, 0);
+    const solde_final = solde_initial + recettes_encaissees - charges_operationnelles - masse_salariale;
+
+    const withdrawals = getStorage("partner_withdrawals", INITIAL_PARTNER_WITHDRAWALS);
+    const partnerList = getStorage("partners", INITIAL_PARTNERS);
+    let total_prelevements_mois = 0;
+    const partners: MonthlyReportPartnerRow[] = partnerList.map((p) => {
+      const prelevements_du_mois = withdrawals
+        .filter((w) => w.partner_id === p.id && `${new Date(w.withdrawal_date).getFullYear()}-${String(new Date(w.withdrawal_date).getMonth() + 1).padStart(2, "0")}` === monthKey)
+        .reduce((s, w) => s + w.amount, 0);
+      total_prelevements_mois += prelevements_du_mois;
+      const quote_part_benefice = benefice_net * (p.equity_percentage / 100);
+      return {
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        equity_percentage: p.equity_percentage,
+        quote_part_benefice,
+        prelevements_du_mois,
+        solde_net_a_verser: quote_part_benefice - prelevements_du_mois,
+      };
+    });
+
+    const clients = getStorage("clients", INITIAL_CLIENTS);
+    const projects = getStorage("projects", INITIAL_PROJECTS).filter((pr) => {
+      if (!pr.deadline) return false;
+      const d = new Date(pr.deadline);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+    const allInvoices = getStorage("invoices", []);
+    const allExpensesForProjects = getStorage("expenses", INITIAL_EXPENSES);
+    const projets_clotures: MonthlyReportProjectRow[] = projects.map((pr) => {
+      const revenue_ht = allInvoices
+        .filter((i: any) => i.project_id === pr.id && (i.invoice_type === "invoice" || i.invoice_type === "credit_note"))
+        .reduce((s: number, i: any) => s + (i.invoice_type === "credit_note" ? -(i.subtotal_ht || 0) : (i.subtotal_ht || 0)), 0);
+      const direct_expenses = allExpensesForProjects.filter((e) => e.project_id === pr.id).reduce((s, e) => s + e.amount, 0);
+      const net_margin = revenue_ht - direct_expenses;
+      return {
+        id: pr.id,
+        name: pr.name,
+        client_name: clients.find((c) => c.id === pr.client_id)?.name || "-",
+        deadline: pr.deadline || "-",
+        revenue_ht,
+        net_margin,
+        margin_percentage: revenue_ht > 0 ? (net_margin / revenue_ht) * 100 : 0,
+      };
+    });
+
+    const employees = getStorage("employees", INITIAL_EMPLOYEES);
+
+    return {
+      month: monthKey,
+      year,
+      month_num: month,
+      solde_initial,
+      recettes_ht,
+      recettes_encaissees,
+      charges_operationnelles,
+      masse_salariale,
+      solde_final,
+      benefice_net,
+      partners,
+      total_prelevements_mois,
+      employes_actifs_count: employees.filter((e) => e.is_active !== false).length,
+      total_jours_travailles: 0,
+      masse_salariale_payee: 0,
+      masse_salariale_en_attente: 0,
+      projets_clotures,
+      generated_at: new Date().toISOString(),
+    };
+  },
+  createPartner: (data: CreatePartnerData): Partner => {
+    const list = getStorage("partners", INITIAL_PARTNERS);
+    const existingTotal = list.filter(p => p.is_active).reduce((s, p) => s + p.equity_percentage, 0);
+    if (existingTotal + data.equity_percentage > 100.0001) {
+      throw new Error(`La répartition du capital dépasserait 100% (${existingTotal.toFixed(1)}% déjà attribués aux associés actifs)`);
+    }
+    const now = new Date().toISOString();
+    const newPartner: Partner = {
+      id: "partner-" + Date.now(),
+      company_id: data.company_id,
+      name: data.name,
+      email: data.email || null,
+      phone: data.phone || null,
+      role: data.role || null,
+      equity_percentage: data.equity_percentage,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+    setStorage("partners", [...list, newPartner]);
+    return newPartner;
+  },
+  updatePartner: (id: string, data: UpdatePartnerData): Partner => {
+    const list = getStorage("partners", INITIAL_PARTNERS);
+    const index = list.findIndex(p => p.id === id);
+    if (index === -1) throw new Error("Partner not found");
+    if (data.is_active) {
+      const existingTotal = list.filter(p => p.is_active && p.id !== id).reduce((s, p) => s + p.equity_percentage, 0);
+      if (existingTotal + data.equity_percentage > 100.0001) {
+        throw new Error(`La répartition du capital dépasserait 100% (${existingTotal.toFixed(1)}% déjà attribués par les autres associés actifs)`);
+      }
+    }
+    const updated: Partner = {
+      ...list[index],
+      name: data.name,
+      email: data.email || null,
+      phone: data.phone || null,
+      role: data.role || null,
+      equity_percentage: data.equity_percentage,
+      is_active: data.is_active,
+      updated_at: new Date().toISOString(),
+    };
+    list[index] = updated;
+    setStorage("partners", list);
+    return updated;
+  },
+  deletePartner: (id: string): void => {
+    const list = getStorage("partners", INITIAL_PARTNERS);
+    setStorage("partners", list.filter(p => p.id !== id));
+  },
+  getPartnerWithdrawals: (partner_id: string): PartnerWithdrawal[] =>
+    getStorage("partner_withdrawals", INITIAL_PARTNER_WITHDRAWALS)
+      .filter(w => w.partner_id === partner_id)
+      .sort((a, b) => b.withdrawal_date.localeCompare(a.withdrawal_date)),
+  recordPartnerWithdrawal: (data: CreateWithdrawalData): PartnerWithdrawal => {
+    const list = getStorage("partner_withdrawals", INITIAL_PARTNER_WITHDRAWALS);
+    const newWithdrawal: PartnerWithdrawal = {
+      id: "withdrawal-" + Date.now(),
+      partner_id: data.partner_id,
+      withdrawal_date: data.withdrawal_date,
+      amount: data.amount,
+      payment_method: data.payment_method || null,
+      notes: data.notes || null,
+      created_at: new Date().toISOString(),
+    };
+    setStorage("partner_withdrawals", [newWithdrawal, ...list]);
+    return newWithdrawal;
+  },
+  deletePartnerWithdrawal: (id: string): void => {
+    const list = getStorage("partner_withdrawals", INITIAL_PARTNER_WITHDRAWALS);
+    setStorage("partner_withdrawals", list.filter(w => w.id !== id));
   },
 
   // Deliveries
@@ -1433,6 +1990,7 @@ export const mockStore = {
   createDeliveryNote: (data: CreateDeliveryNoteData): DeliveryNote => {
     const list = getStorage("deliveries", INITIAL_DELIVERIES);
     const newNote: DeliveryNote = {
+      company_id: data.company_id,
       id: "bl-" + Date.now(),
       delivery_number: data.delivery_number || `BL-${new Date().getFullYear()}-${(list.length + 1).toString().padStart(4, "0")}`,
       client_id: data.client_id,
@@ -1453,6 +2011,8 @@ export const mockStore = {
       notes: data.notes || null,
       reserves: data.reserves || null,
       custom_title: data.custom_title || "Bon de Livraison",
+      status: "draft",
+      signed_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -1510,9 +2070,10 @@ export const mockStore = {
     const total_ttc = subtotal_ht + tva_amount;
 
     const newOrder: Order = {
+      company_id: data.company_id,
       id: "ord-" + Date.now(),
       order_number: data.order_number || `BC-${new Date().getFullYear()}-${(list.length + 1).toString().padStart(4, "0")}`,
-      client_id: data.client_id || "cli-001",
+      client_id: data.client_id || "d2ca2c45-669d-4724-9b6e-913b1fe6d605",
       supplier_name: data.supplier_name || "SARL SORDI",
       supplier_address: data.supplier_address || "Zone Industrielle Oued Smar",
       supplier_email: data.supplier_email || "contact@sordi.dz",
@@ -1584,6 +2145,7 @@ export const mockStore = {
   createEmployee: (data: CreateEmployeeData): Employee => {
     const list = getStorage("employees", INITIAL_EMPLOYEES);
     const newEmp: Employee = {
+      company_id: data.company_id,
       id: "emp-" + Date.now(),
       name: data.name,
       role: data.role || null,
@@ -1627,6 +2189,14 @@ export const mockStore = {
     const totalExpenses = filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0);
     const totalPaid = filteredInvoices.reduce((s, i) => s + (i.amount_paid || 0), 0);
     const totalUnpaid = Math.max(0, totalRevenue - totalPaid);
+    // True operating profitability (HT basis) — mirrors get_dashboard_stats
+    // (Rust): revenue_ht reuses the same subtotal_ht sum as sales_cumulatives
+    // below, TVA/timbre never counted as profit. Kept separate from
+    // totalRevenue/totalExpenses above, which stay TTC and keep feeding the
+    // existing chart/PeriodStats exactly as before.
+    const revenueHt = filteredInvoices.reduce((s, i) => s + (i.subtotal_ht || 0), 0);
+    const netProfitHt = revenueHt - totalExpenses;
+    const marginPercentageHt = revenueHt > 0 ? (netProfitHt / revenueHt) * 100 : 0;
 
     const monthLabels = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
     const monthlyData = monthLabels.map((lbl, idx) => {
@@ -1683,15 +2253,20 @@ export const mockStore = {
         { label: "30", revenue: 950000, expenses: 180000, profit: 770000 }
       ],
       product_stats: [
-        { product_id: "prod-001", product_code: "0/3", product_name: "Sable Concassé 0/3", total_quantity: 1830, total_amount: 1189500 },
-        { product_id: "prod-002", product_code: "3/8", product_name: "Gravier Concassé 3/8", total_quantity: 1860, total_amount: 1395000 },
-        { product_id: "prod-003", product_code: "8/15", product_name: "Gravier Calibré 8/15", total_quantity: 2600, total_amount: 1872000 },
-        { product_id: "prod-005", product_code: "TVC", product_name: "Tout Venant Carrière", total_quantity: 5600, total_amount: 2210000 },
-        { product_id: "prod-007", product_code: "40/70", product_name: "Ballast & Enrochement", total_quantity: 4000, total_amount: 2400000 }
+        { product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", total_quantity: 1830, total_amount: 1189500 },
+        { product_id: "13af0f82-1921-4cf0-988f-b99bf0fd2a27", product_code: "3/8", product_name: "Gravier Concassé 3/8", total_quantity: 1860, total_amount: 1395000 },
+        { product_id: "2cad951b-651b-4e13-b905-6e8980ccbe92", product_code: "8/15", product_name: "Gravier Calibré 8/15", total_quantity: 2600, total_amount: 1872000 },
+        { product_id: "958a6fd8-a38f-4284-81ed-f56a35c39826", product_code: "TVC", product_name: "Tout Venant Carrière", total_quantity: 5600, total_amount: 2210000 },
+        { product_id: "1d009e4a-bf6e-4dcb-9c67-35f56c37c378", product_code: "40/70", product_name: "Ballast & Enrochement", total_quantity: 4000, total_amount: 2400000 }
       ],
       growth: 14.8,
       invoice_count: filteredInvoices.length,
-      is_month_view: !!(months && months.length > 0)
+      is_month_view: !!(months && months.length > 0),
+      revenue_ht: revenueHt,
+      expense_count: filteredExpenses.length,
+      net_profit_ht: netProfitHt,
+      margin_percentage_ht: marginPercentageHt,
+      outstanding_receivables: totalUnpaid,
     };
   },
 
@@ -1752,6 +2327,57 @@ export const mockStore = {
     return result;
   },
 
+  getCompanies: (): Company[] => {
+    return getStorage("companies", DEFAULT_COMPANIES);
+  },
+  getCompany: (id: string): Company | null => {
+    const list = getStorage("companies", DEFAULT_COMPANIES);
+    return list.find(c => c.id === id) || null;
+  },
+  createCompany: (data: CreateCompanyData): Company => {
+    const list = getStorage("companies", DEFAULT_COMPANIES);
+    const newCompany: Company = {
+      id: "company-" + Date.now(),
+      name: data.name,
+      logo_base64: data.logo_base64 || null,
+      activity: data.activity || null,
+      rc: data.rc || null,
+      nif: data.nif || null,
+      nis: data.nis || null,
+      article_imposition: data.article_imposition || null,
+      address: data.address || null,
+      phone: data.phone || null,
+      phones: data.phones || null,
+      email: data.email || null,
+      website: data.website || null,
+      capital: data.capital || null,
+      rib: data.rib || null,
+      bank_agency: data.bank_agency || null,
+      extra_info: data.extra_info || null,
+      cnas_adherent: data.cnas_adherent || null,
+      currency: data.currency || "DZD",
+      invoice_prefix: data.invoice_prefix || "FAC-2026-",
+      created_at: new Date().toISOString(),
+    };
+    setStorage("companies", [...list, newCompany]);
+    return newCompany;
+  },
+  updateCompany: (id: string, data: CreateCompanyData): Company => {
+    const list = getStorage("companies", DEFAULT_COMPANIES);
+    const index = list.findIndex(c => c.id === id);
+    if (index === -1) throw new Error("Company not found");
+    const updated: Company = {
+      ...list[index],
+      ...data,
+      currency: data.currency || list[index].currency,
+      invoice_prefix: data.invoice_prefix || list[index].invoice_prefix,
+    };
+    const newList = [...list];
+    newList[index] = updated;
+    setStorage("companies", newList);
+    return updated;
+  },
+
   getSettings: (): Record<string, string> => {
     return getStorage("settings", DEFAULT_SETTINGS);
   },
@@ -1768,7 +2394,7 @@ export const mockStore = {
     const DEFAULT_LOGS: ActivityLog[] = [
       { id: "log-1", action: "CREATE", entity_type: "INVOICE", entity_id: "inv-012", description: "Facture FACT-2025-0010 créée pour SARL ALGERIE TELECOM", user_id: "local-user", created_at: "2025-05-18T11:00:00Z" },
       { id: "log-2", action: "CREATE", entity_type: "PAYMENT", entity_id: "pay-007", description: "Paiement de 740,300 DA enregistré pour FACT-2025-0009", user_id: "local-user", created_at: "2025-05-08T12:00:00Z" },
-      { id: "log-3", action: "CREATE", entity_type: "CLIENT", entity_id: "cli-010", description: "Nouveau client EURL EL HILAL ajouté", user_id: "local-user", created_at: "2025-05-01T10:15:00Z" },
+      { id: "log-3", action: "CREATE", entity_type: "CLIENT", entity_id: "145c6262-b0bc-437e-b537-dd5bef72c04b", description: "Nouveau client EURL EL HILAL ajouté", user_id: "local-user", created_at: "2025-05-01T10:15:00Z" },
       { id: "log-4", action: "CREATE", entity_type: "DELIVERY", entity_id: "bl-004", description: "Bon de livraison BL-2025-0004 généré pour SARL BIO PHARMA", user_id: "local-user", created_at: "2025-04-04T08:00:00Z" },
     ];
     let logs = getStorage<ActivityLog[]>("activity_logs", DEFAULT_LOGS);

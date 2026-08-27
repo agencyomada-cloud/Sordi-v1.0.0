@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { createInvoiceSchema } from "@/lib/validations";
 import { logError } from "@/lib/errorLogger";
 import { db, type Invoice, type CreateInvoiceData as DbCreateInvoiceData } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import type { Client } from "@/lib/database";
 
 export type InvoiceStatus = "draft" | "issued" | "paid" | "partial" | "overdue" | "cancelled";
@@ -48,8 +49,14 @@ export interface CreateInvoiceData {
   use_secondary_register?: boolean;
   selected_secondary_rc?: string | null;
   selected_secondary_address?: string | null;
+  tax_mode?: "standard" | "exempt" | "ttc_direct";
+  /** omada-agency branch only — which project (if any) this invoice's revenue counts toward. */
+  project_id?: string | null;
   items: {
-    product_id: string;
+    product_id?: string;
+    /** Only meaningful when product_id is absent — a custom/one-off item. */
+    product_name?: string;
+    product_code?: string;
     product_description?: string | null;
     quantity: number;
     unit_price: number;
@@ -59,12 +66,14 @@ export interface CreateInvoiceData {
 }
 
 export function useInvoices(status?: InvoiceStatus, invoiceType?: InvoiceType) {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["invoices", status, invoiceType],
+    queryKey: ["invoices", activeCompanyId, status, invoiceType],
     queryFn: async () => {
       // Use optimized backend command that performs the JOIN
-      return await db.invoices.getAllWithClients(status || undefined, invoiceType || undefined);
+      return await db.invoices.getAllWithClients(activeCompanyId, status || undefined, invoiceType || undefined);
     },
+    enabled: isReady,
   });
 }
 
@@ -102,6 +111,7 @@ export function useInvoice(id: string | undefined) {
           clients: client ? {
             id: client.id,
             name: client.name,
+            email: client.email,
             address: client.address,
             nif: client.nif,
             nis: client.nis,
@@ -124,17 +134,27 @@ export function useInvoice(id: string | undefined) {
 
 export function useCreateInvoice() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (data: CreateInvoiceData) => {
-      // Validate input
+      // Validate input. createInvoiceSchema has no company_id field (it's
+      // not something the form collects), so it's added back after
+      // validation rather than threaded through the schema.
       const validated = createInvoiceSchema.parse(data);
-      return await db.invoices.create(validated as DbCreateInvoiceData);
+      return await db.invoices.create({ ...validated, company_id: activeCompanyId } as DbCreateInvoiceData);
     },
     onSuccess: (invoice, variables) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+      // A project-linked invoice moves that project's Budget facturé/payé
+      // and profitability numbers — invalidate broadly (prefix-matches
+      // both ["projects", "stats", ...] and ["projects", "profitability",
+      // ...]) so the project detail page updates without a manual refresh.
+      if (invoice.project_id) {
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
+      }
       // Invalidate client products cache for this client
       if (invoice.client_id) {
         queryClient.invalidateQueries({ queryKey: ["client-products", invoice.client_id] });
@@ -177,6 +197,11 @@ export function useUpdateInvoice() {
       queryClient.invalidateQueries({ queryKey: ["invoices", invoice.id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+      // Unconditional (not gated on invoice.project_id like create/delete)
+      // because an edit can also REMOVE a project link — the previously
+      // linked project's numbers need refreshing too, and its id isn't
+      // available here to target it precisely.
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
 
       const inv = invoice as any;
       if (inv?.client_id) {
@@ -248,6 +273,10 @@ export function useDeleteInvoice() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["client-products"] });
       queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+      // mutationFn only receives the id, not the deleted invoice's
+      // project_id, so this can't be targeted — invalidate broadly like
+      // useUpdateInvoice does for the same reason.
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
 
       db.history.log({
         action: "DELETE",
@@ -258,8 +287,9 @@ export function useDeleteInvoice() {
 
       toast.success("Facture supprimée avec succès");
     },
-    onError: (error) => {
-      toast.error("Erreur lors de la suppression de la facture");
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la suppression de la facture");
       logError("Invoice deletion error", error);
     },
   });

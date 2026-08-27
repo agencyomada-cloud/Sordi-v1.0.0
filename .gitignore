@@ -8,6 +8,7 @@ src-tauri/gen/
 .env
 .env.*.local
 *.log
+*.tsbuildinfo
 
 # Local runtime data / real business records — never belongs in version control
 *.sqlite

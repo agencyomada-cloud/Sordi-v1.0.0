@@ -1,4 +1,4 @@
-mod database;
+pub mod database;
 mod commands;
 mod license;
 mod pdf_service;
@@ -36,12 +36,24 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      // Companies (multi-workspace)
+      commands::get_companies,
+      commands::get_company,
+      commands::create_company,
+      commands::update_company,
       // Clients
       commands::get_clients,
       commands::get_client,
       commands::create_client,
       commands::update_client,
       commands::delete_client,
+      // Suppliers (Fournisseurs)
+      commands::get_suppliers,
+      commands::get_supplier,
+      commands::create_supplier,
+      commands::update_supplier,
+      commands::delete_supplier,
+      commands::get_supplier_purchase_totals,
       // Products
       commands::get_products,
       commands::create_product,
@@ -68,6 +80,10 @@ pub fn run() {
       // Payments
       commands::get_payments,
       commands::create_payment,
+      commands::delete_payment,
+      commands::add_payment_attachment,
+      commands::get_payment_attachments,
+      commands::delete_payment_attachment,
       // Orders
       commands::get_orders,
       commands::get_order,
@@ -83,6 +99,8 @@ pub fn run() {
       commands::get_delivery_note_items,
       commands::create_delivery_note,
       commands::update_delivery_note,
+      commands::set_delivery_status,
+      commands::delete_delivery_note,
       commands::generate_invoice_from_delivery_notes,
       // Expenses
       commands::get_expenses,
@@ -115,6 +133,7 @@ pub fn run() {
       // History
       commands::get_activity_logs,
       commands::clear_activity_logs,
+      commands::reset_company_to_factory_state,
       // Employees
       commands::get_employees,
       commands::create_employee,
@@ -134,9 +153,12 @@ pub fn run() {
       commands::get_employee_advances,
       commands::get_employee_advance_totals,
       commands::set_employee_advance_deducted,
+      commands::save_pdf_backup,
       commands::run_payroll,
       commands::get_payroll_runs,
       commands::update_payroll_paid,
+      commands::update_payroll_run,
+      commands::delete_payroll_run,
       commands::get_payroll_dashboard_stats,
       // Projects (omada-agency branch only)
       commands::get_projects,
@@ -148,7 +170,20 @@ pub fn run() {
       commands::assign_freelance_payment,
       commands::get_freelance_payments,
       commands::get_project_stats,
+      commands::get_project_profitability,
       commands::assign_invoice_to_project,
+      commands::create_contract,
+      commands::get_all_contracts,
+      commands::get_project_contracts,
+      commands::delete_contract,
+      commands::get_partners,
+      commands::get_monthly_partners_report,
+      commands::create_partner,
+      commands::update_partner,
+      commands::delete_partner,
+      commands::get_partner_withdrawals,
+      commands::record_partner_withdrawal,
+      commands::delete_partner_withdrawal,
       commands::get_project_tasks,
       commands::create_project_task,
       commands::update_project_task,
@@ -161,7 +196,11 @@ pub fn run() {
       // PDF
       commands::generate_pdf,
       commands::open_pdf,
+      commands::open_file_path,
       commands::save_pdf,
+      commands::save_pdf_to_path,
+      // Email
+      commands::send_email_with_pdf,
       // Auth
       commands::has_password_set,
       commands::check_password,

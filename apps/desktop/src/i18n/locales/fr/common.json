@@ -1,0 +1,34 @@
+{
+  "actions": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "search": "Rechercher",
+    "downloadPdf": "Télécharger PDF",
+    "actions": "Actions",
+    "logout": "Déconnexion",
+    "back": "Retour",
+    "next": "Suivant",
+    "export": "Exporter",
+    "refresh": "Actualiser"
+  },
+  "help": "Centre d'aide",
+  "language": {
+    "label": "Langue",
+    "french": "Français",
+    "arabic": "العربية",
+    "switchedTo": "Langue changée : {{language}}"
+  },
+  "currency": {
+    "symbol": "DA"
+  },
+  "status": {
+    "loading": "Chargement...",
+    "success": "Succès",
+    "error": "Une erreur est survenue"
+  }
+}

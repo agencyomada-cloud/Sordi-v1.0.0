@@ -1,0 +1,34 @@
+{
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "search": "بحث",
+    "downloadPdf": "تحميل PDF",
+    "actions": "الإجراءات",
+    "logout": "تسجيل الخروج",
+    "back": "رجوع",
+    "next": "التالي",
+    "export": "تصدير",
+    "refresh": "تحديث"
+  },
+  "help": "مركز المساعدة",
+  "language": {
+    "label": "اللغة",
+    "french": "Français",
+    "arabic": "العربية",
+    "switchedTo": "تم تغيير اللغة إلى {{language}}"
+  },
+  "currency": {
+    "symbol": "د.ج"
+  },
+  "status": {
+    "loading": "جارٍ التحميل...",
+    "success": "تمت العملية بنجاح",
+    "error": "حدث خطأ"
+  }
+}

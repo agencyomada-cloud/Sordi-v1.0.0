@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { logError } from "@/lib/errorLogger";
 import { db, type Product, type CreateProductData } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 // Simple validation for price update
 const updatePriceSchema = z.object({
@@ -11,20 +12,23 @@ const updatePriceSchema = z.object({
 });
 
 export function useProducts() {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["products"],
+    queryKey: ["products", activeCompanyId],
     queryFn: async () => {
-      return await db.products.getAll();
+      return await db.products.getAll(activeCompanyId);
     },
+    enabled: isReady,
   });
 }
 
 export function useCreateProduct() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
 
   return useMutation({
-    mutationFn: async (product: CreateProductData) => {
-      return await db.products.create(product);
+    mutationFn: async (product: Omit<CreateProductData, "company_id">) => {
+      return await db.products.create({ ...product, company_id: activeCompanyId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -65,15 +69,16 @@ export function useUpdateProduct() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: CreateProductData }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Omit<CreateProductData, "company_id"> }) => {
       return await db.products.update(id, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Produit mis à jour avec succès");
     },
-    onError: (error: any) => {
-      toast.error("Erreur lors de la mise à jour du produit");
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la mise à jour du produit");
       logError("Product update error", error);
     },
   });

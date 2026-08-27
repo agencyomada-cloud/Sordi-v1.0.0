@@ -3,14 +3,17 @@ import { toast } from "sonner";
 import { clientSchema } from "@/lib/validations";
 import { logError } from "@/lib/errorLogger";
 import { db, type Client, type CreateClientData, type ClientOverviewStats } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 export type { CreateClientData };
 
 export function useClients() {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["clients"],
+    queryKey: ["clients", activeCompanyId],
     queryFn: async () => {
-      return await db.clients.getAll();
+      return await db.clients.getAll(activeCompanyId);
     },
+    enabled: isReady,
   });
 }
 
@@ -45,12 +48,13 @@ export function useClientOverviewStatsMap() {
 
 export function useCreateClient() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
 
   return useMutation({
-    mutationFn: async (client: CreateClientData) => {
+    mutationFn: async (client: Omit<CreateClientData, "company_id">) => {
       // Validate input
       const validated = clientSchema.parse(client);
-      return await db.clients.create(validated as CreateClientData);
+      return await db.clients.create({ ...validated, company_id: activeCompanyId } as CreateClientData);
     },
     onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -129,8 +133,14 @@ export function useDeleteClient() {
 
       toast.success("Client supprimé avec succès");
     },
-    onError: (error) => {
-      toast.error("Erreur lors de la suppression du client");
+    onError: (error: unknown) => {
+      // Tauri command errors (Result<T, String> on the Rust side) arrive
+      // here as a plain string — e.g. "Impossible de supprimer ce client :
+      // 1 facture liée. Supprimez-les d'abord." Falling back to a generic
+      // message discarded that detail and left the user with no idea why
+      // the delete didn't work.
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la suppression du client");
       logError("Client deletion error", error);
     },
   });

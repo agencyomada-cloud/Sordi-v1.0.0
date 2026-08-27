@@ -1,0 +1,44 @@
+{
+  "dashboard": "Tableau de bord",
+  "groups": {
+    "overview": "Vue d'ensemble",
+    "sales": "Ventes & Clients",
+    "purchasing": "Achats & Charges",
+    "operations": "Gestion & Opérations",
+    "system": "Système",
+    "pilotage": "Pilotage & RH"
+  },
+  "links": {
+    "invoicing": "Facturation",
+    "quotes": "Devis",
+    "payments": "Paiements",
+    "orders": "Commandes",
+    "deliveries": "Livraisons",
+    "contracts": "Contrats",
+    "clients": "Clients",
+    "suppliers": "Fournisseurs",
+    "projects": "Projets",
+    "products": "Produits",
+    "catalogue": "Catalogue & Services",
+    "expenses": "Dépenses & Charges",
+    "analytics": "Analyses & Rapports",
+    "history": "Historique d'activité",
+    "employees": "Employés & Contrats",
+    "payroll": "Équipe & Salaires",
+    "partners": "Associés & Dividendes",
+    "integrations": "Intégrations & Sauvegardes",
+    "settings": "Paramètres Entreprise"
+  },
+  "search": {
+    "placeholder": "Rechercher…",
+    "shortcutHint": "Rechercher (⌘K)",
+    "commandPlaceholder": "Rechercher une page, un client, une facture…",
+    "noResults": "Aucun résultat pour « {{query}} ».",
+    "continueTyping": "Continuez à taper pour rechercher…",
+    "pages": "Pages",
+    "clients": "Clients",
+    "invoices": "Factures"
+  },
+  "collapseMenu": "Réduire le menu",
+  "expandMenu": "Développer le menu"
+}

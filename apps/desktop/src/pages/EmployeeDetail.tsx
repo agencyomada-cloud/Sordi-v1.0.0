@@ -11,6 +11,7 @@ import {
   RiFileTextLine as FileIcon,
   RiExternalLinkLine as ExternalLink,
   RiDeleteBinLine as Trash2,
+  RiUserSearchLine as NotFoundIcon,
 } from "@remixicon/react";
 import {
   Button,
@@ -31,14 +32,15 @@ import {
   DialogFooter,
   Input,
   Label,
-  Badge,
+  StatusBadge,
+  Skeleton,
+  EmptyState,
 } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import type { CreateEmployeeData } from "@/lib/database";
 import { toast } from "sonner";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useEmployees, useSetEmployeePhoto, useRemoveEmployeePhoto } from "@/hooks/useEmployees";
 import { useEmployeeDocuments, useAddEmployeeDocument, useDeleteEmployeeDocument } from "@/hooks/useEmployeeDocuments";
 import { useAppDataDir, resolveAppDataAbsolutePath } from "@/hooks/useAppDataDir";
@@ -128,7 +130,7 @@ export default function EmployeeDetailPage() {
       return;
     }
     const isFreelance = editForm.contract_type === "Freelance";
-    const payload: CreateEmployeeData = {
+    const payload: Omit<CreateEmployeeData, "company_id"> = {
       ...editForm,
       // Freelancers don't punch in/out or have a monthly salary — clear
       // these rather than leave stale values hidden behind the toggle.
@@ -210,25 +212,49 @@ export default function EmployeeDetailPage() {
     runPayroll.mutate({ employeeId: id, month: currentMonth });
   };
 
-  if (isLoading || !employee) {
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 pt-4 text-muted-foreground">Chargement…</main>
+      <main className="flex-1 p-8 pt-4">
+        <div className="max-w-[1100px] mx-auto w-full space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
         </div>
-      </div>
+      </main>
+    );
+  }
+
+  // Not a loading state — the fetch resolved and no employee in the list
+  // matches this id (deleted, or a stale/invalid URL). Previously this
+  // fell through the isLoading branch above and showed "Chargement…"
+  // forever instead of ever telling the user the employee doesn't exist.
+  if (!employee) {
+    return (
+      <main className="flex-1 p-8 pt-4 flex items-center justify-center">
+        <div className="max-w-sm">
+          <EmptyState
+            icon={NotFoundIcon}
+            title="Employé introuvable"
+            description="Cet employé n'existe plus ou a été supprimé."
+          />
+          <Button onClick={() => navigate("/management")} className="w-full">
+            Retour aux employés
+          </Button>
+        </div>
+      </main>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8 pt-4">
-          <div className="max-w-[1100px] mx-auto w-full">
+    <>
+      <main className="flex-1 p-8 pt-4">
+        <div className="max-w-[1100px] mx-auto w-full">
             <button
               onClick={() => navigate("/management")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
@@ -264,10 +290,10 @@ export default function EmployeeDetailPage() {
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-bold">{employee.name}</h1>
                     {absenceStats?.flagged && (
-                      <Badge variant="error" className="gap-1">
+                      <StatusBadge tone="error" className="gap-1.5">
                         <WarningIcon className="w-3.5 h-3.5" />
                         {absenceStats.absence_days} jours d'absence ce mois
-                      </Badge>
+                      </StatusBadge>
                     )}
                   </div>
                   <p className="text-muted-foreground mt-1">
@@ -352,7 +378,7 @@ export default function EmployeeDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {!documents || documents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground p-6">Aucun document enregistré.</p>
+                  <EmptyState type="default" icon={FileIcon} title="Aucun document" description="Ajoutez un document pour cet employé" className="py-8" />
                 ) : (
                   <Table>
                     <TableHeader>
@@ -409,7 +435,7 @@ export default function EmployeeDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {!advances || advances.length === 0 ? (
-                  <p className="text-sm text-muted-foreground p-6">Aucune avance enregistrée.</p>
+                  <EmptyState type="payroll" title="Aucune avance" description="Aucune avance n'a été enregistrée pour cet employé" className="py-8" />
                 ) : (
                   <Table>
                     <TableHeader>
@@ -435,9 +461,9 @@ export default function EmployeeDetailPage() {
                               className="disabled:opacity-50"
                             >
                               {a.deducted ? (
-                                <Badge variant="success">Déduite</Badge>
+                                <StatusBadge tone="success">Déduite</StatusBadge>
                               ) : (
-                                <Badge variant="warning">En attente</Badge>
+                                <StatusBadge tone="warning">En attente</StatusBadge>
                               )}
                             </button>
                           </TableCell>
@@ -455,7 +481,7 @@ export default function EmployeeDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {!payrollRuns || payrollRuns.length === 0 ? (
-                  <p className="text-sm text-muted-foreground p-6">Aucun bulletin de paie calculé.</p>
+                  <EmptyState type="payroll" title="Aucun bulletin de paie" description="Aucun bulletin n'a encore été calculé pour cet employé" className="py-8" />
                 ) : (
                   <Table>
                     <TableHeader>
@@ -480,9 +506,9 @@ export default function EmployeeDetailPage() {
                           <TableCell className="font-semibold">{formatCurrency(run.net_a_payer)}</TableCell>
                           <TableCell>
                             {run.paid ? (
-                              <Badge variant="success">Payé</Badge>
+                              <StatusBadge tone="success">Payé</StatusBadge>
                             ) : (
-                              <Badge variant="warning">En attente</Badge>
+                              <StatusBadge tone="warning">En attente</StatusBadge>
                             )}
                           </TableCell>
                         </TableRow>
@@ -493,8 +519,7 @@ export default function EmployeeDetailPage() {
               </CardContent>
             </Card>
           </div>
-        </main>
-      </div>
+      </main>
 
       <Dialog open={advanceDialogOpen} onOpenChange={setAdvanceDialogOpen}>
         <DialogContent>
@@ -508,7 +533,7 @@ export default function EmployeeDetailPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Date</Label>
-              <Input type="date" value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)} />
+              <DatePicker value={advanceDate} onChange={setAdvanceDate} />
               <p className="text-xs text-muted-foreground">
                 Sera déduite automatiquement du mois suivant.
               </p>
@@ -596,10 +621,10 @@ export default function EmployeeDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Date d'embauche</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
+                    presets={false}
                     value={editForm.hire_date}
-                    onChange={(e) => setEditForm((p) => ({ ...p, hire_date: e.target.value }))}
+                    onChange={(v) => setEditForm((p) => ({ ...p, hire_date: v }))}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -671,6 +696,6 @@ export default function EmployeeDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

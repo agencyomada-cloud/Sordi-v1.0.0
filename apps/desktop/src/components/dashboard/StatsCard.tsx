@@ -14,48 +14,52 @@ interface StatsCardProps {
 
 /**
  * The one stat-card shape used everywhere a KPI row appears (Dashboard,
- * Suivi des Règlements, ...). Icon color is intentionally uniform — primary
- * tint on neutral cards, translucent white on the highlighted one — rather
- * than a different hue per card, since the hue was never carrying meaning.
+ * Suivi des Règlements, Charges, ...). `highlighted` used to mean a full
+ * primary-gradient fill; that read more "colorful dashboard template" than
+ * the restrained Linear/Stripe/Raycast benchmark, which never solid-fills a
+ * KPI tile — so it's now a neutral card with a crisp 2px primary top-border
+ * stripe instead, same emphasis signal with far less visual weight.
  */
 export function StatsCard({ title, value, icon: Icon, highlighted, subValue, trend }: StatsCardProps) {
   return (
     <div
       className={cn(
-        "p-4 rounded-[6px] border flex items-center gap-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-soft cursor-default group min-w-0",
-        highlighted ? "bg-primary border-primary text-primary-foreground" : "bg-card border-border hover:border-primary/30"
+        "group relative rounded-2xl border bg-card p-6 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out min-w-0 overflow-hidden",
+        highlighted ? "border-border/40 border-t-2 border-t-primary shadow-glow" : "border-border/40 hover:border-primary/30"
       )}
     >
-      <div
-        className={cn(
-          "w-10 h-10 rounded-[6px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110",
-          highlighted ? "bg-primary-foreground/15" : "bg-primary/10"
-        )}
-      >
-        <Icon className={cn("w-4 h-4", highlighted ? "text-primary-foreground" : "text-primary")} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className={cn(
-          "text-xs font-medium uppercase tracking-wide truncate",
-          highlighted ? "text-primary-foreground/70" : "text-muted-foreground"
-        )}>
-          {title}
-        </p>
-        <p className="text-xl font-bold tracking-tight tabular-nums mt-0.5 truncate">{value}</p>
+      {/* Top-edge accent line — the neutral cards' quieter equivalent of the
+          highlighted card's solid border-t-2 stripe above. */}
+      {!highlighted && (
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+      )}
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <span
+          className={cn(
+            "flex items-center justify-center w-10 h-10 rounded-xl shrink-0 transition-transform duration-150 group-hover:scale-105",
+            highlighted ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+          )}
+        >
+          <Icon className="w-5 h-5" />
+        </span>
         {trend && (
-          <p className={cn(
-            "text-xs mt-0.5 tabular-nums font-medium truncate",
-            highlighted ? "text-primary-foreground/90" : trend.positive ? "text-stat-positive" : "text-stat-negative"
-          )}>
-            {trend.value}
-          </p>
-        )}
-        {!trend && subValue && (
-          <p className={cn("text-xs mt-0.5 tabular-nums truncate", highlighted ? "text-primary-foreground/70" : "text-muted-foreground")}>
-            {subValue}
-          </p>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-xs font-mono font-medium tabular-nums whitespace-nowrap truncate max-w-[60%]",
+              trend.positive
+                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400"
+            )}
+          >
+            {trend.positive ? "▲" : "▼"} {trend.value}
+          </span>
         )}
       </div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider truncate text-muted-foreground">{title}</p>
+      <p className="font-mono text-lg xl:text-2xl font-bold tracking-tight tabular-nums mt-1.5 truncate whitespace-nowrap text-foreground">
+        {value}
+      </p>
+      {!trend && subValue && <p className="text-xs mt-1.5 tabular-nums truncate whitespace-nowrap text-muted-foreground">{subValue}</p>}
     </div>
   );
 }

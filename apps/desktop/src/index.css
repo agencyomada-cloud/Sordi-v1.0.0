@@ -1,4 +1,31 @@
+/* Montserrat/Inter/Poppins/Roboto stay loaded from Google Fonts — they're
+   still selectable as the invoice/delivery/order PDF document font
+   (Settings > invoice_pdf_font), a separate concern from the app's own UI
+   chrome typeface below. */
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;600;700;800&display=swap');
+
+/* App UI chrome typeface — self-hosted via @fontsource rather than a Google
+   Fonts CDN import, so it isn't a hard network dependency for an
+   offline-first desktop app. Plus Jakarta Sans (Latin/French) and Readex
+   Pro (Arabic, see src/i18n) are the sans pairing; JetBrains Mono and
+   Space Grotesk are the tabular/financial-figure pairing. */
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/plus-jakarta-sans/800.css";
+@import "@fontsource/readex-pro/400.css";
+@import "@fontsource/readex-pro/500.css";
+@import "@fontsource/readex-pro/600.css";
+@import "@fontsource/readex-pro/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
 
 @tailwind base;
 @tailwind components;
@@ -6,138 +33,152 @@
 
 @layer base {
   :root {
-    /* Background - Sordi Gray #F8F8F8 */
-    --background: 0 0% 97%;
-    --foreground: 0 0% 9%;
+    /* Background - Crimson/Coral Red rebrand base canvas (#F4F6F8) */
+    --background: 210 22% 96%;
+    --foreground: 224 25% 11%;
 
-    /* Card - Pure white, sits a level above the page background */
+    /* Card - Pure white (#FFFFFF), sits a level above the tinted page background */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 224 25% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --popover-foreground: 224 25% 11%;
 
-    /* Primary - Sordi Blue #476CFF */
-    --primary: 228 100% 64%;
+    /* Primary - Crimson/Coral Red brand accent (#EB3B48), replacing the
+       prior Electric Indigo. --primary-hover (#D82F3C) is the explicit
+       hover/pressed shade; --accent-soft (#FDF1F2) is the tint used for
+       active-nav/hover backgrounds behind the accent color. */
+    --primary: 356 81% 58%;
     --primary-foreground: 0 0% 100%;
+    --primary-hover: 355 68% 52%;
+    --accent-soft: 355 75% 97%;
 
-    /* Secondary - neutral black-based gray, no secondary hue */
-    --secondary: 0 0% 94%;
-    --secondary-foreground: 0 0% 9%;
+    /* Secondary - slate-tinted neutral, hue matches background/border */
+    --secondary: 222 18% 94%;
+    --secondary-foreground: 224 25% 11%;
 
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 222 18% 94%;
+    --muted-foreground: 215 16% 47%;
 
-    /* Accent - same Sordi Blue; one brand color, used consistently */
-    --accent: 228 100% 64%;
+    /* Accent - same Crimson/Coral Red as primary; one brand color, used consistently */
+    --accent: 356 81% 58%;
     --accent-foreground: 0 0% 100%;
 
-    /* Destructive - Red */
+    /* Destructive - Red (kept distinct from the brand accent so destructive
+       actions still read as their own semantic color, not just "the brand
+       color" — same relationship as the original indigo primary). */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Border - neutral black-based gray */
-    --border: 0 0% 89%;
-    --input: 0 0% 89%;
-    --ring: 228 100% 64%;
+    /* Border - delicate slate-tinted hairline (was flat 0%-saturation gray) */
+    --border: 222 20% 90%;
+    --input: 222 20% 90%;
+    --ring: 356 81% 58%;
 
-    /* Radius - 6px consistent across the UI */
-    --radius: 6px;
-    --radius-sm: 4px;
-    --radius-lg: 6px;
-    --radius-xl: 6px;
-    --radius-full: 6px;
+    /* Radius - soft/rounded system: small controls, cards, large panels,
+       true circles/pills. Was flat 6px everywhere ("minimal corporate");
+       widened for a softer, modern SaaS feel across the whole app. */
+    --radius: 10px;
+    --radius-sm: 8px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
 
-    /* Status Colors */
-    --status-paid: 142 70% 45%;
-    --status-paid-bg: 142 30% 95%;
+    /* Status Colors - crisp emerald for "paid" (was a flatter green),
+       amber/red unchanged, draft now slate-tinted to match the neutral scale */
+    --status-paid: 160 84% 33%;
+    --status-paid-bg: 160 60% 95%;
     --status-pending: 38 92% 50%;
     --status-pending-bg: 38 60% 95%;
     --status-unpaid: 0 84% 60%;
     --status-unpaid-bg: 0 30% 96%;
-    --status-draft: 0 0% 45%;
-    --status-draft-bg: 0 0% 94%;
+    --status-draft: 222 10% 46%;
+    --status-draft-bg: 222 18% 94%;
 
     /* Stats */
-    --stat-positive: 142 70% 45%;
+    --stat-positive: 160 84% 33%;
     --stat-negative: 0 84% 60%;
 
     /* Sidebar - minimal, white/corporate rather than premium-dark */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 9%;
+    --sidebar-foreground: 224 25% 11%;
 
-    --sidebar-primary: 228 100% 64%;
+    --sidebar-primary: 356 81% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
 
-    --sidebar-accent: 228 100% 96%;
-    /* Faint blue tint for hover/active */
-    --sidebar-accent-foreground: 228 100% 64%;
+    /* Accent Soft Tint (#FDF1F2) for the active/hover nav item background */
+    --sidebar-accent: 355 75% 97%;
+    --sidebar-accent-foreground: 356 81% 58%;
 
-    --sidebar-border: 0 0% 90%;
-    --sidebar-ring: 228 100% 64%;
+    --sidebar-border: 222 20% 91%;
+    --sidebar-ring: 356 81% 58%;
 
-    /* Charts - primary blue first, distinct hues after for series legibility */
-    --chart-1: 228 100% 64%;
-    /* Blue */
+    /* Charts - primary Crimson/Coral Red first, distinct hues after for series legibility */
+    --chart-1: 356 81% 58%;
+    /* Crimson/Coral Red */
     --chart-2: 38 92% 50%;
     /* Amber */
-    --chart-3: 142 70% 45%;
-    /* Green */
+    --chart-3: 160 84% 33%;
+    /* Emerald */
     --chart-4: 0 84% 60%;
     /* Red */
     --chart-5: 262 60% 55%;
     /* Purple */
 
     /* Shadows */
-    --shadow-soft: 0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
-    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.02);
-    --shadow-elevated: 0 10px 30px -10px rgba(71, 108, 255, 0.18);
-    /* Sordi blue tinted shadow */
+    --shadow-soft: 0 2px 8px -2px rgba(17, 24, 39, 0.06), 0 4px 16px -4px rgba(17, 24, 39, 0.08);
+    --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 2px 8px rgba(17, 24, 39, 0.03);
+    --shadow-elevated: 0 10px 30px -10px rgba(235, 59, 72, 0.28);
+    /* Crimson/Coral Red tinted shadow */
+    --shadow-glow: 0 0 0 1px rgba(235, 59, 72, 0.12), 0 8px 24px -6px rgba(235, 59, 72, 0.35);
 
-    font-family: 'Montserrat', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Readex Pro', system-ui, sans-serif;
   }
 
   .dark {
-    /* Dark Mode - kept in step with the light palette above (no toggle wired up yet) */
-    --background: 0 0% 7%;
-    --foreground: 0 0% 96%;
+    /* Dark Mode - kept in step with the light palette above (no toggle wired up yet).
+       Base canvas #0A0B0D / card #121316 per the Crimson/Coral Red rebrand spec. */
+    --background: 220 13% 5%;
+    --foreground: 222 15% 96%;
 
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 96%;
+    --card: 225 10% 8%;
+    --card-foreground: 222 15% 96%;
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 96%;
+    --popover: 225 10% 8%;
+    --popover-foreground: 222 15% 96%;
 
-    --primary: 228 100% 68%;
-    --primary-foreground: 0 0% 9%;
+    --primary: 356 81% 66%;
+    --primary-foreground: 224 25% 9%;
+    --primary-hover: 355 68% 60%;
+    --accent-soft: 355 30% 14%;
 
-    --secondary: 0 0% 16%;
-    --secondary-foreground: 0 0% 96%;
+    --secondary: 222 15% 16%;
+    --secondary-foreground: 222 15% 96%;
 
-    --muted: 0 0% 16%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 222 15% 16%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 228 100% 68%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 356 81% 66%;
+    --accent-foreground: 224 25% 9%;
 
     --destructive: 0 62% 40%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 228 100% 68%;
+    --border: 222 15% 18%;
+    --input: 222 15% 18%;
+    --ring: 356 81% 66%;
 
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 0 0% 96%;
-    --sidebar-primary: 228 100% 68%;
-    --sidebar-primary-foreground: 0 0% 9%;
-    --sidebar-accent: 0 0% 15%;
-    --sidebar-accent-foreground: 228 100% 68%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 228 100% 68%;
+    --sidebar-background: 220 13% 6%;
+    --sidebar-foreground: 222 15% 96%;
+    --sidebar-primary: 356 81% 66%;
+    --sidebar-primary-foreground: 224 25% 9%;
+    --sidebar-accent: 355 30% 14%;
+    --sidebar-accent-foreground: 356 81% 66%;
+    --sidebar-border: 222 15% 15%;
+    --sidebar-ring: 356 81% 66%;
   }
 }
 
@@ -156,16 +197,16 @@
 
   /* Headings get tighter leading than body copy (short lines don't need
      1.5x spacing) and `text-wrap: balance` so multi-line titles don't
-     leave a lonely orphan word on the last line. Weight/tracking stay as
-     Tailwind's font-bold + tracking-tight, which read well at Montserrat's
-     default optical size. */
+     leave a lonely orphan word on the last line. Semibold + tight tracking
+     (was bold) — the restrained weight Linear/Stripe/Raycast headings use;
+     bold at display sizes read heavier than those benchmarks. */
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-display font-bold tracking-tight;
+    @apply font-display font-semibold tracking-tight;
     line-height: 1.2;
     text-wrap: balance;
   }
@@ -183,34 +224,36 @@
 
   /* Soft card styling */
   .soft-card {
-    @apply bg-card rounded-[6px] border border-border/50 p-6;
+    @apply bg-card rounded-2xl border border-border/50 p-6;
     box-shadow: var(--shadow-card);
   }
 
   /* Pill button */
   .pill-button {
-    @apply rounded-[6px] px-4 py-2 text-sm font-medium transition-all;
+    @apply rounded-full px-4 py-2 text-sm font-medium transition-all;
   }
 
   /* Icon button */
   .icon-button {
-    @apply w-10 h-10 rounded-[6px] flex items-center justify-center transition-all hover:bg-secondary;
+    @apply w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:bg-secondary;
   }
 
   /* Soft input */
   .soft-input {
-    @apply rounded-[6px] border-border/50 bg-secondary/50 focus:bg-card;
+    @apply rounded-lg border-border/50 bg-secondary/50 focus:bg-card;
   }
 
-  /* Stats number - tabular-nums so a figure doesn't visually shift width
-     as it updates (e.g. revenue ticking between filters) */
+  /* Stats number - font-mono + tabular-nums so a figure doesn't visually
+     shift width as it updates (e.g. revenue ticking between filters), with
+     the laser-sharp digit alignment a tabular/mono face gives financial
+     figures that a proportional sans can't. */
   .stat-number {
-    @apply text-3xl font-bold tracking-tight tabular-nums;
+    @apply font-mono text-3xl font-bold tracking-tight tabular-nums;
   }
 
   /* Filter pill */
   .filter-pill {
-    @apply rounded-[6px] px-4 py-2 text-sm font-medium bg-secondary hover:bg-secondary/80 transition-all cursor-pointer;
+    @apply rounded-full px-4 py-2 text-sm font-medium bg-secondary hover:bg-secondary/80 transition-all cursor-pointer;
   }
 
   .filter-pill-active {
@@ -254,6 +297,12 @@
   }
   .animation-delay-500 {
     animation-delay: 500ms;
+  }
+  .animation-delay-600 {
+    animation-delay: 600ms;
+  }
+  .animation-delay-700 {
+    animation-delay: 700ms;
   }
 
   /* Scrollbar hide */

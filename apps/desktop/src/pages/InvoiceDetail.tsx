@@ -12,39 +12,27 @@ import {
   RiEditLine as Edit,
   RiTruckLine as Truck,
   RiLoader4Line as Loader2,
+  RiMailSendLine as MailSend,
   RiMore2Fill as MoreVertical
 } from "@remixicon/react";
 import { toast } from "sonner";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
-import { RiFolderChartLine as FolderIcon } from "@remixicon/react";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, statusBadgeVariants, StatusDot, Skeleton, EmptyState } from "@sordi/ui";
+import { RiFolderChartLine as FolderIcon, RiFileSearchLine as NotFoundIcon } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/database";
 import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
+import { useSetPageHeader } from "@/hooks/usePageHeader";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
 import { useProjects, useAssignInvoiceToProject } from "@/hooks/useProjects";
-import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64 } from "@/lib/pdfGenerator";
+import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, openSavedFile } from "@/lib/pdfGenerator";
 import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
 import { PDFViewerModal } from "@/components/pdf/PDFViewerModal";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import type { DraftInvoiceInput } from "@/lib/emailDrafter";
+import { getInvoiceStatusConfig } from "@/lib/invoiceStatus";
 
-const statusStyles: Record<string, string> = {
-  paid: "bg-status-paid-bg text-status-paid",
-  partial: "bg-status-pending-bg text-status-pending",
-  unpaid: "bg-status-unpaid-bg text-status-unpaid",
-  draft: "bg-status-draft-bg text-status-draft",
-  overdue: "bg-status-unpaid-bg text-status-unpaid",
-  issued: "bg-status-pending-bg text-status-pending",
-};
-
-const statusLabels: Record<string, string> = {
-  paid: "Payée",
-  partial: "Partielle",
-  unpaid: "Impayée",
-  draft: "Brouillon",
-  overdue: "En retard",
-  issued: "Émise",
-};
 
 const EditableHeader = ({ invoice, onUpdate }: { invoice: any, onUpdate: (title: string, number: string) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -100,7 +88,7 @@ const EditableHeader = ({ invoice, onUpdate }: { invoice: any, onUpdate: (title:
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: invoice, isLoading, error, refetch } = useInvoice(id);
+  const { data: invoice, isLoading, refetch } = useInvoice(id);
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
   const { data: projects } = useProjects();
@@ -111,6 +99,14 @@ export default function InvoiceDetailPage() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+
+  const listLabel =
+    invoice?.invoice_type === "credit_note" ? "Avoirs" : invoice?.invoice_type === "proforma" ? "Proformas" : "Facturation";
+  useSetPageHeader(listLabel, [
+    { label: listLabel, path: "/invoices" },
+    { label: invoice?.invoice_number || "…" },
+  ]);
 
   const handleOpenVectorPreview = async () => {
     if (!invoice) return;
@@ -130,19 +126,18 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  console.log("InvoiceDetailPage: ID from params:", id);
-  console.log("InvoiceDetailPage: Invoice data:", invoice);
-  console.log("InvoiceDetailPage: Loading:", isLoading);
-  console.log("InvoiceDetailPage: Error:", error);
-
   const handleDownloadPDF = async () => {
     if (!invoice) return;
 
     setIsGenerating(true);
     try {
-      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
-      toast.success("PDF téléchargé dans le dossier Téléchargements");
+      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
     } catch (error) {
       console.error("PDF generation error:", error);
       const msg = error instanceof Error ? error.message : String(error);
@@ -189,8 +184,20 @@ export default function InvoiceDetailPage() {
 
   if (isLoading) {
     return (
-      <main className="flex-1 p-8 flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      <main className="flex-1 p-8">
+        <div className="max-w-5xl mx-auto space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-40" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24 rounded-full" />
+              <Skeleton className="h-9 w-24 rounded-full" />
+            </div>
+          </div>
+          <Skeleton className="h-[600px] w-full rounded-2xl" />
+        </div>
       </main>
     );
   }
@@ -198,19 +205,13 @@ export default function InvoiceDetailPage() {
   if (!invoice && !isLoading) {
     return (
       <main className="flex-1 p-8 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-muted-foreground mb-4">Facture non trouvée</div>
-          {id && (
-            <div className="text-sm text-muted-foreground mb-4">
-              ID: {id}
-            </div>
-          )}
-          {error && (
-            <div className="text-sm text-destructive mb-4">
-              Erreur: {error instanceof Error ? error.message : String(error)}
-            </div>
-          )}
-          <Button onClick={() => navigate("/invoices")}>
+        <div className="max-w-sm">
+          <EmptyState
+            icon={NotFoundIcon}
+            title="Facture introuvable"
+            description="Cette facture n'existe plus ou a été déplacée."
+          />
+          <Button onClick={() => navigate("/invoices")} className="w-full">
             Retour aux factures
           </Button>
         </div>
@@ -250,11 +251,9 @@ export default function InvoiceDetailPage() {
                       }
                     }}
                   />
-                  <span className={cn(
-                    "inline-flex px-3 py-1 text-xs font-medium rounded-full",
-                    statusStyles[invoice.status || "draft"]
-                  )}>
-                    {statusLabels[invoice.status || "draft"]}
+                  <span className={statusBadgeVariants()}>
+                    <StatusDot tone={getInvoiceStatusConfig(invoice.status).variant} />
+                    {getInvoiceStatusConfig(invoice.status).label}
                   </span>
                 </div>
                 <p className="text-muted-foreground mt-1">
@@ -284,7 +283,7 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center flex-wrap gap-3">
               <Button
                 variant={showPreview ? "secondary" : "default"}
                 onClick={() => setShowPreview(!showPreview)}
@@ -329,6 +328,14 @@ export default function InvoiceDetailPage() {
               >
                 {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 <span>Télécharger</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setEmailModalOpen(true)}
+              >
+                <MailSend className="w-4 h-4 mr-2" />
+                <span>Envoyer par Email</span>
               </Button>
 
               <DropdownMenu>
@@ -525,6 +532,34 @@ export default function InvoiceDetailPage() {
             pdfBase64={pdfBase64}
             fileName={`Facture-${invoice.invoice_number || "000"}.pdf`}
             title={`Aperçu PDF Vectoriel - N° ${invoice.invoice_number || ""}`}
+          />
+
+          <SendDocumentEmailModal
+            open={emailModalOpen}
+            onOpenChange={setEmailModalOpen}
+            recipientEmail={invoice.clients?.email}
+            fileName={`${isCreditNote ? "Avoir" : "Facture"}-${invoice.invoice_number || "000"}.pdf`}
+            draftInput={{
+              docType: "invoice",
+              isCreditNote,
+              documentNumber: invoice.invoice_number,
+              clientName: invoice.clients?.name || "",
+              documentDate: invoice.invoice_date,
+              dueDate: invoice.due_date,
+              totalTTC: invoice.total_ttc,
+              bankRib: settings?.company_rib || null,
+              bankAgency: settings?.company_bank_agency || null,
+              senderCompany: settings?.company_name || "Sordi",
+              items: (invoice.invoice_items || []).map((item: any) => ({
+                name: item.product_name || item.products?.name || item.name || "Article",
+                quantity: item.quantity,
+                unitPrice: item.unit_price,
+              })),
+            } satisfies DraftInvoiceInput}
+            getPdfBase64={async () => {
+              const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.state === "active");
+              return blobToBase64(blob);
+            }}
           />
         </main>
   );

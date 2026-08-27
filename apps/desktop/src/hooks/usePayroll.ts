@@ -4,8 +4,10 @@ import {
   db,
   type CreateEmployeeAdvanceData,
   type PunchImportRow,
+  type UpdatePayrollRunData,
 } from "@/lib/database";
-export type { CreateEmployeeAdvanceData, PunchImportRow };
+import { useWorkspace } from "@/hooks/useWorkspace";
+export type { CreateEmployeeAdvanceData, PunchImportRow, UpdatePayrollRunData };
 
 // ---- Attendance import ----
 
@@ -14,8 +16,9 @@ export type { CreateEmployeeAdvanceData, PunchImportRow };
  *  success-styled toast, never an error. See PROJECT_STATE.md. */
 export function useImportPunchRecords() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
   return useMutation({
-    mutationFn: (rows: PunchImportRow[]) => db.attendance.import(rows),
+    mutationFn: (rows: PunchImportRow[]) => db.attendance.import(activeCompanyId, rows),
     onSuccess: (summary) => {
       queryClient.invalidateQueries({ queryKey: ["employee-absence-stats"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
@@ -144,22 +147,58 @@ export function useUpdatePayrollPaid() {
   });
 }
 
+export function useUpdatePayrollRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdatePayrollRunData) => db.payroll.update(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
+      toast.success("Bulletin de paie modifié");
+    },
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la modification du bulletin");
+    },
+  });
+}
+
+export function useDeletePayrollRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => db.payroll.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-advances"] });
+      toast.success("Bulletin de paie supprimé");
+    },
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la suppression du bulletin");
+    },
+  });
+}
+
 // ---- Manager dashboard ----
 
 export function usePayrollDashboardStats(month: string) {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["payroll-dashboard", month],
-    queryFn: () => db.payroll.getDashboardStats(month),
-    enabled: !!month,
+    queryKey: ["payroll-dashboard", activeCompanyId, month],
+    queryFn: () => db.payroll.getDashboardStats(activeCompanyId, month),
+    enabled: !!month && isReady,
   });
 }
 
 /** Device codes seen in imported punches with no matching employee yet —
  *  assigning that code on an employee's profile (external_code) backfills
- *  them automatically, no re-import needed. */
-export function useUnmappedDeviceCodes() {
+ *  them automatically, no re-import needed. Scoped to one month so the
+ *  Payroll page's warning banner reflects whatever month is selected there,
+ *  not an all-time count. */
+export function useUnmappedDeviceCodes(month?: string) {
   return useQuery({
-    queryKey: ["unmapped-device-codes"],
-    queryFn: () => db.attendance.getUnmappedCodes(),
+    queryKey: ["unmapped-device-codes", month ?? "all"],
+    queryFn: () => db.attendance.getUnmappedCodes(month),
   });
 }

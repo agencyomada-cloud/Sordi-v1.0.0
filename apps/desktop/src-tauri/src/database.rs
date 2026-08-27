@@ -8,6 +8,38 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     
     // Create tables
+
+    // Multi-company / multi-workspace support — one row per registered
+    // company, each with its own fiscal identity and invoice numbering.
+    // Business tables below (clients, invoices, ...) carry a company_id FK
+    // so every workspace's data is strictly isolated from every other.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS companies (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            logo_base64 TEXT,
+            activity TEXT,
+            rc TEXT,
+            nif TEXT,
+            nis TEXT,
+            article_imposition TEXT,
+            address TEXT,
+            phone TEXT,
+            phones TEXT,
+            email TEXT,
+            website TEXT,
+            capital TEXT,
+            rib TEXT,
+            bank_agency TEXT,
+            extra_info TEXT,
+            cnas_adherent TEXT,
+            currency TEXT NOT NULL DEFAULT 'DZD',
+            invoice_prefix TEXT NOT NULL DEFAULT 'FAC-2026-',
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS clients (
             id TEXT PRIMARY KEY,
@@ -36,6 +68,27 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
         [],
     )?;
     
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS suppliers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            city TEXT,
+            rc TEXT,
+            nif TEXT,
+            nis TEXT,
+            solde_du REAL DEFAULT 0,
+            notes TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS products (
             id TEXT PRIMARY KEY,
@@ -215,6 +268,8 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
             is_invoiced INTEGER DEFAULT 0,
             notes TEXT,
             reserves TEXT,
+            status TEXT NOT NULL DEFAULT 'draft',
+            signed_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (client_id) REFERENCES clients(id),
@@ -307,6 +362,17 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // Ensure migrations are run
     add_timbre_exempt_to_products(&conn)?;
     add_timbre_exempt_to_invoice_items(&conn)?;
+
+    // Migration: Ensure invoice_items.product_id can be NULL and add
+    // product_name/product_code, so a line item can be a custom/one-off
+    // entry that doesn't correspond to any row in the products catalog.
+    // Must run after the tva_rate/timbre_exempt migrations above — it
+    // recreates the table and needs those columns to already exist.
+    migrate_invoice_items_nullable_product_if_needed(&conn)?;
+
+    // Migration: Same as above for delivery_note_items — must run after
+    // migrate_delivery_note_items_tva_if_needed (tva_rate/unit_price columns).
+    migrate_delivery_note_items_nullable_product_if_needed(&conn)?;
 
     // Migration: Add initial_balance to clients table
     migrate_clients_table_if_needed(&conn)?;
@@ -483,6 +549,31 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
         [],
     )?;
 
+    // Bespoke client contracts (50/50 milestone billing) — one per project,
+    // built from the project's two Acompte/Solde invoices. company_id is
+    // NOT NULL from day one (this table is introduced after multi-company
+    // support already exists, so it never needs a backfill migration like
+    // COMPANY_SCOPED_TABLES' ALTER-TABLE path does).
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS contracts (
+            id TEXT PRIMARY KEY,
+            company_id TEXT NOT NULL REFERENCES companies(id),
+            project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            client_id TEXT NOT NULL REFERENCES clients(id),
+            contract_ref TEXT NOT NULL UNIQUE,
+            selected_services TEXT NOT NULL DEFAULT '[]',
+            payment_split TEXT NOT NULL DEFAULT '50_50',
+            total_amount_ht REAL NOT NULL,
+            tva_rate REAL NOT NULL DEFAULT 19.0,
+            tva_amount REAL NOT NULL,
+            total_amount_ttc REAL NOT NULL,
+            invoices_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+    migrate_contracts_services_if_needed(&conn)?;
+
     // Create settings table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS settings (
@@ -557,11 +648,45 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
         [],
     )?;
 
+    // Partners & equity distribution (omada-agency branch only). Brand-new
+    // tables, not a migration — nothing pre-existing depends on their shape.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS partners (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            role TEXT,
+            equity_percentage REAL NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS partner_withdrawals (
+            id TEXT PRIMARY KEY,
+            partner_id TEXT NOT NULL,
+            withdrawal_date TEXT NOT NULL,
+            amount REAL NOT NULL,
+            payment_method TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Migration: Add discount to invoices table
     migrate_invoices_discount_if_needed(&conn)?;
 
     // Migration: Add payment_method to invoices table
     migrate_invoices_payment_method_if_needed(&conn)?;
+
+    // Migration: Add tax_mode to invoices table
+    migrate_invoices_tax_mode_if_needed(&conn)?;
 
     // Migration: Add custom_title to invoices table
     migrate_invoices_custom_title_if_needed(&conn)?;
@@ -571,6 +696,12 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
 
     // Migration: Add project_id to invoices (omada-agency branch only)
     migrate_invoices_project_id_if_needed(&conn)?;
+
+    // Migration: Add project linkage + recurring metadata to expenses (omada-agency branch only)
+    migrate_expenses_project_linkage_if_needed(&conn)?;
+
+    // Migration: Add supplier linkage to expenses (Fournisseurs module)
+    migrate_expenses_supplier_linkage_if_needed(&conn)?;
 
     // Migration: Add payroll fields to employees (omada-agency branch only)
     migrate_employees_payroll_fields_if_needed(&conn)?;
@@ -582,9 +713,22 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // Migration: Add product_description to all items tables
     migrate_items_description_if_needed(&conn)?;
 
+    // Migration: Add operator (Encaissé par) + attachment support to payments
+    migrate_payments_attachments_and_operator_if_needed(&conn)?;
+
     // Fix existing NULL tva_rate values
     conn.execute("UPDATE invoice_items SET tva_rate = 19.0 WHERE tva_rate IS NULL", [])?;
     conn.execute("UPDATE products SET tva_rate = 19.0 WHERE tva_rate IS NULL", [])?;
+
+    // Migration: adds the extended company-profile columns (phones, website,
+    // capital, rib, bank_agency, extra_info, cnas_adherent) to `companies`
+    // for databases created before those columns existed.
+    migrate_companies_extra_fields_if_needed(&conn)?;
+
+    // Migration: Multi-company support — seed a default company and add
+    // company_id to every business table. Runs last so every table it
+    // touches is guaranteed to already exist.
+    migrate_multi_company_if_needed(&conn)?;
 
     Ok(conn)
 }
@@ -786,6 +930,39 @@ fn migrate_employee_photos_and_documents_if_needed(conn: &Connection) -> Result<
     Ok(())
 }
 
+/// Adds "Encaissé par" (employee_id, nullable — most existing rows predate
+/// this field) to payments, and a payment_attachments table for proof-of-
+/// payment scans (receipt/bank slip/cheque copy). Files are copied verbatim
+/// to app_data_dir/payment_attachments/<payment_id>/<file>, same convention
+/// as employee_documents — see commands.rs's add_payment_attachment.
+fn migrate_payments_attachments_and_operator_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(payments)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+        if !column_names.contains(&"employee_id".to_string()) {
+            conn.execute("ALTER TABLE payments ADD COLUMN employee_id TEXT REFERENCES employees(id)", [])?;
+        }
+    }
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS payment_attachments (
+            id TEXT PRIMARY KEY,
+            payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+            file_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    Ok(())
+}
+
 fn migrate_invoices_project_id_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
     let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoices)")?
         .query_map([], |row| {
@@ -798,6 +975,188 @@ fn migrate_invoices_project_id_if_needed(conn: &Connection) -> Result<(), rusqli
 
         if !column_names.contains(&"project_id".to_string()) {
             conn.execute("ALTER TABLE invoices ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration: link expenses to a project (for direct-cost/profitability
+// tracking, see get_project_profitability) and add optional recurring-charge
+// metadata. Purely additive — every existing row keeps working unchanged,
+// since nothing in the app filters or sums on these columns yet except the
+// new project-scoped query paths that require them to exist.
+fn migrate_expenses_project_linkage_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(expenses)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"project_id".to_string()) {
+            conn.execute("ALTER TABLE expenses ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL", [])?;
+        }
+        if !column_names.contains(&"is_recurring".to_string()) {
+            conn.execute("ALTER TABLE expenses ADD COLUMN is_recurring INTEGER DEFAULT 0", [])?;
+        }
+        if !column_names.contains(&"recurrence_interval".to_string()) {
+            conn.execute("ALTER TABLE expenses ADD COLUMN recurrence_interval TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration: Add supplier_id linkage to expenses (Fournisseurs module)
+// Multi-company migration — runs once per startup, idempotently:
+//  1. If `companies` is empty, seed one default company from whatever is
+//     already in `settings` (company_name/company_rc/...), so an existing
+//     single-workspace install gets a real company row instead of losing
+//     its identity on upgrade.
+//  2. Add company_id to every business table that needs data isolation,
+//     backfilling existing rows to that default company so nothing already
+//     in the database becomes orphaned/invisible after the migration.
+const COMPANY_SCOPED_TABLES: &[&str] = &[
+    "clients", "suppliers", "products", "invoices", "payments",
+    "orders", "delivery_notes", "expenses", "projects", "employees",
+    "partners",
+];
+
+fn migrate_contracts_services_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(contracts)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"selected_services".to_string()) {
+            conn.execute("ALTER TABLE contracts ADD COLUMN selected_services TEXT NOT NULL DEFAULT '[]'", [])?;
+        }
+        if !column_names.contains(&"tva_rate".to_string()) {
+            conn.execute("ALTER TABLE contracts ADD COLUMN tva_rate REAL NOT NULL DEFAULT 19.0", [])?;
+        }
+        if !column_names.contains(&"payment_split".to_string()) {
+            conn.execute("ALTER TABLE contracts ADD COLUMN payment_split TEXT NOT NULL DEFAULT '50_50'", [])?;
+        }
+    }
+
+    // Early builds of this table declared project_id NOT NULL — contracts
+    // are now allowed to stand alone with no linked project, and SQLite's
+    // ALTER TABLE can't relax a NOT NULL/FK constraint in place, so any
+    // database created before that change needs the table rebuilt (standard
+    // SQLite "12-step" table redefinition) with project_id nullable, copying
+    // every existing row across untouched.
+    let project_id_not_null: bool = conn.query_row(
+        "SELECT \"notnull\" FROM pragma_table_info('contracts') WHERE name = 'project_id'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(false);
+    if project_id_not_null {
+        conn.execute_batch(
+            "ALTER TABLE contracts RENAME TO contracts_old;
+             CREATE TABLE contracts (
+                 id TEXT PRIMARY KEY,
+                 company_id TEXT NOT NULL REFERENCES companies(id),
+                 project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+                 client_id TEXT NOT NULL REFERENCES clients(id),
+                 contract_ref TEXT NOT NULL UNIQUE,
+                 selected_services TEXT NOT NULL DEFAULT '[]',
+                 payment_split TEXT NOT NULL DEFAULT '50_50',
+                 total_amount_ht REAL NOT NULL,
+                 tva_rate REAL NOT NULL DEFAULT 19.0,
+                 tva_amount REAL NOT NULL,
+                 total_amount_ttc REAL NOT NULL,
+                 invoices_json TEXT NOT NULL,
+                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+             );
+             INSERT INTO contracts (id, company_id, project_id, client_id, contract_ref, selected_services, payment_split, total_amount_ht, tva_rate, tva_amount, total_amount_ttc, invoices_json, created_at)
+             SELECT id, company_id, project_id, client_id, contract_ref, selected_services, payment_split, total_amount_ht, tva_rate, tva_amount, total_amount_ttc, invoices_json, created_at FROM contracts_old;
+             DROP TABLE contracts_old;"
+        )?;
+    }
+
+    Ok(())
+}
+
+fn migrate_companies_extra_fields_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(companies)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+    if let Ok(column_names) = table_info {
+        for column in ["phones", "website", "capital", "rib", "bank_agency", "extra_info", "cnas_adherent"] {
+            if !column_names.contains(&column.to_string()) {
+                conn.execute(&format!("ALTER TABLE companies ADD COLUMN {} TEXT", column), [])?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn migrate_multi_company_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let company_count: i64 = conn.query_row("SELECT COUNT(*) FROM companies", [], |row| row.get(0))?;
+
+    let default_company_id: String = if company_count == 0 {
+        let get_setting = |key: &str| -> Option<String> {
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0)).ok()
+        };
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO companies (id, name, logo_base64, activity, rc, nif, nis, article_imposition, address, phone, phones, email, website, capital, rib, bank_agency, extra_info, cnas_adherent, currency, invoice_prefix, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 'DZD', ?19, ?20)",
+            params![
+                id,
+                get_setting("company_name").filter(|v| !v.is_empty()).unwrap_or_else(|| "Mon Entreprise".to_string()),
+                get_setting("logo_data"),
+                None::<String>,
+                get_setting("company_rc"),
+                get_setting("company_nif"),
+                get_setting("company_nis"),
+                get_setting("company_ai"),
+                get_setting("company_address"),
+                get_setting("company_phone"),
+                get_setting("company_phones"),
+                get_setting("company_email"),
+                get_setting("company_website"),
+                get_setting("company_capital"),
+                get_setting("company_rib"),
+                get_setting("company_bank_agency"),
+                get_setting("company_extra_info"),
+                get_setting("company_cnas_adherent"),
+                "FAC-2026-",
+                now,
+            ],
+        )?;
+        id
+    } else {
+        conn.query_row("SELECT id FROM companies ORDER BY created_at LIMIT 1", [], |row| row.get(0))?
+    };
+
+    for table in COMPANY_SCOPED_TABLES {
+        let table_info: Result<Vec<_>, _> = conn.prepare(&format!("PRAGMA table_info({})", table))?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect();
+        if let Ok(column_names) = table_info {
+            if !column_names.contains(&"company_id".to_string()) {
+                conn.execute(
+                    &format!("ALTER TABLE {} ADD COLUMN company_id TEXT REFERENCES companies(id)", table),
+                    [],
+                )?;
+                conn.execute(
+                    &format!("UPDATE {} SET company_id = ?1 WHERE company_id IS NULL", table),
+                    params![default_company_id],
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn migrate_expenses_supplier_linkage_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(expenses)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"supplier_id".to_string()) {
+            conn.execute("ALTER TABLE expenses ADD COLUMN supplier_id TEXT REFERENCES suppliers(id) ON DELETE SET NULL", [])?;
         }
     }
 
@@ -1126,11 +1485,14 @@ fn migrate_delivery_notes_table_if_needed(conn: &Connection) -> Result<(), rusql
         let has_client_signature = column_names.contains(&"client_signature".to_string());
         let has_supplier_delivered_date = column_names.contains(&"supplier_delivered_date".to_string());
         let has_reserves = column_names.contains(&"reserves".to_string());
-        
-        if !has_order_id || !has_deliverer_name || !has_deliverer_nin || 
+        let has_status = column_names.contains(&"status".to_string());
+        let has_signed_at = column_names.contains(&"signed_at".to_string());
+
+        if !has_order_id || !has_deliverer_name || !has_deliverer_nin ||
            !has_transporter_name || !has_transporter_nin || !has_delivery_location ||
-           !has_client_received_date || !has_client_signature || 
-           !has_supplier_delivered_date || !has_reserves {
+           !has_client_received_date || !has_client_signature ||
+           !has_supplier_delivered_date || !has_reserves ||
+           !has_status || !has_signed_at {
             needs_migration = true;
         }
         
@@ -1168,11 +1530,17 @@ fn migrate_delivery_notes_table_if_needed(conn: &Connection) -> Result<(), rusql
             if !has_reserves {
                 conn.execute("ALTER TABLE delivery_notes ADD COLUMN reserves TEXT", [])?;
             }
-            
+            if !has_status {
+                conn.execute("ALTER TABLE delivery_notes ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'", [])?;
+            }
+            if !has_signed_at {
+                conn.execute("ALTER TABLE delivery_notes ADD COLUMN signed_at TEXT", [])?;
+            }
+
             conn.execute("COMMIT", [])?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -1254,6 +1622,136 @@ fn add_timbre_exempt_to_invoice_items(conn: &Connection) -> Result<(), rusqlite:
         
         if !column_names.contains(&"timbre_exempt".to_string()) {
             conn.execute("ALTER TABLE invoice_items ADD COLUMN timbre_exempt INTEGER DEFAULT 0", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration function to make invoice_items.product_id nullable and add
+// product_name/product_code — mirrors migrate_order_items_table_if_needed.
+// Custom/one-off line items (added via the product picker's "add as custom
+// item" path) have no catalog product, so product_id can't stay NOT NULL.
+fn migrate_invoice_items_nullable_product_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoice_items)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+
+        let product_id_info = columns.iter().find(|(name, _)| name == "product_id");
+        let has_product_name = column_names.contains(&"product_name".to_string());
+        let has_product_code = column_names.contains(&"product_code".to_string());
+
+        let needs_recreation = matches!(product_id_info, Some((_, Some(1))));
+
+        if needs_recreation || !has_product_name || !has_product_code {
+            conn.execute("BEGIN TRANSACTION", [])?;
+
+            if needs_recreation {
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS invoice_items_new (
+                        id TEXT PRIMARY KEY,
+                        invoice_id TEXT NOT NULL,
+                        product_id TEXT,
+                        product_name TEXT,
+                        product_code TEXT,
+                        product_description TEXT,
+                        quantity REAL NOT NULL DEFAULT 0,
+                        unit_price REAL NOT NULL,
+                        amount REAL,
+                        tva_rate REAL DEFAULT 19.0,
+                        timbre_exempt INTEGER DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+                    )",
+                    [],
+                )?;
+
+                conn.execute(
+                    "INSERT INTO invoice_items_new (id, invoice_id, product_id, product_name, product_code, product_description, quantity, unit_price, amount, tva_rate, timbre_exempt, created_at)
+                     SELECT id, invoice_id, product_id, NULL, NULL, product_description, quantity, unit_price, amount, COALESCE(tva_rate, 19.0), COALESCE(timbre_exempt, 0), created_at FROM invoice_items",
+                    [],
+                )?;
+
+                conn.execute("DROP TABLE invoice_items", [])?;
+                conn.execute("ALTER TABLE invoice_items_new RENAME TO invoice_items", [])?;
+            } else {
+                if !has_product_name {
+                    conn.execute("ALTER TABLE invoice_items ADD COLUMN product_name TEXT", [])?;
+                }
+                if !has_product_code {
+                    conn.execute("ALTER TABLE invoice_items ADD COLUMN product_code TEXT", [])?;
+                }
+            }
+
+            conn.execute("COMMIT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration function to make delivery_note_items.product_id nullable and add
+// product_name/product_code — same reasoning as the invoice_items migration.
+fn migrate_delivery_note_items_nullable_product_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(delivery_note_items)")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
+        })?
+        .collect();
+
+    if let Ok(columns) = table_info {
+        let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
+
+        let product_id_info = columns.iter().find(|(name, _)| name == "product_id");
+        let has_product_name = column_names.contains(&"product_name".to_string());
+        let has_product_code = column_names.contains(&"product_code".to_string());
+
+        let needs_recreation = matches!(product_id_info, Some((_, Some(1))));
+
+        if needs_recreation || !has_product_name || !has_product_code {
+            conn.execute("BEGIN TRANSACTION", [])?;
+
+            if needs_recreation {
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS delivery_note_items_new (
+                        id TEXT PRIMARY KEY,
+                        delivery_note_id TEXT NOT NULL,
+                        product_id TEXT,
+                        product_name TEXT,
+                        product_code TEXT,
+                        product_description TEXT,
+                        quantity REAL NOT NULL DEFAULT 0,
+                        unit_price REAL,
+                        tva_rate REAL DEFAULT 19.0,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY (delivery_note_id) REFERENCES delivery_notes(id) ON DELETE CASCADE
+                    )",
+                    [],
+                )?;
+
+                conn.execute(
+                    "INSERT INTO delivery_note_items_new (id, delivery_note_id, product_id, product_name, product_code, product_description, quantity, unit_price, tva_rate, created_at)
+                     SELECT id, delivery_note_id, product_id, NULL, NULL, product_description, quantity, unit_price, COALESCE(tva_rate, 19.0), created_at FROM delivery_note_items",
+                    [],
+                )?;
+
+                conn.execute("DROP TABLE delivery_note_items", [])?;
+                conn.execute("ALTER TABLE delivery_note_items_new RENAME TO delivery_note_items", [])?;
+            } else {
+                if !has_product_name {
+                    conn.execute("ALTER TABLE delivery_note_items ADD COLUMN product_name TEXT", [])?;
+                }
+                if !has_product_code {
+                    conn.execute("ALTER TABLE delivery_note_items ADD COLUMN product_code TEXT", [])?;
+                }
+            }
+
+            conn.execute("COMMIT", [])?;
         }
     }
 
@@ -1444,11 +1942,59 @@ pub fn generate_order_number(conn: &Connection) -> Result<String, rusqlite::Erro
         "UPDATE sequences SET value = value + 1 WHERE name = 'order_number'",
         [],
     )?;
-    
+
     let mut stmt = conn.prepare("SELECT value FROM sequences WHERE name = 'order_number'")?;
     let number: i64 = stmt.query_row([], |row| row.get(0))?;
-    
+
     Ok(format!("{:06}", number))
+}
+
+/// Recomputes a sequence counter from what's actually left in its table,
+/// so deleting a record doesn't leave the counter permanently ahead of
+/// reality (e.g. delete every invoice and the next one created still
+/// starts at 025 instead of 001). Called after every delete on the
+/// corresponding table.
+///
+/// Scans `number_column` on `table` (optionally restricted by
+/// `where_clause`, e.g. to exclude proforma/credit-note rows whose number
+/// format isn't part of the plain sequence), keeps only the digits of each
+/// value (so a plain "024" and a prefixed "BL-0024" both contribute 24,
+/// while a non-numeric manual reference contributes nothing and is
+/// ignored), and sets the sequence to the max of those — 0 if nothing
+/// matches, meaning the table is now empty of that number type. The next
+/// `generate_*_number()` call does `value + 1`, landing exactly on the
+/// next real number instead of continuing from wherever the counter
+/// happened to be before the delete.
+pub fn resync_sequence_from_table(
+    conn: &Connection,
+    sequence_name: &str,
+    table: &str,
+    number_column: &str,
+    where_clause: Option<&str>,
+) -> Result<(), rusqlite::Error> {
+    let query = match where_clause {
+        Some(clause) => format!("SELECT {} FROM {} WHERE {}", number_column, table, clause),
+        None => format!("SELECT {} FROM {}", number_column, table),
+    };
+    let mut stmt = conn.prepare(&query)?;
+    let numbers: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let max_value = numbers
+        .iter()
+        .filter_map(|raw| {
+            let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+            digits.parse::<i64>().ok()
+        })
+        .max()
+        .unwrap_or(0);
+
+    conn.execute(
+        "UPDATE sequences SET value = ?1 WHERE name = ?2",
+        params![max_value, sequence_name],
+    )?;
+    Ok(())
 }
 
 // Migration function to add discount column to invoices table
@@ -1773,17 +2319,40 @@ fn migrate_invoices_payment_method_if_needed(conn: &Connection) -> Result<(), ru
             Ok((row.get::<_, String>(1)?, row.get::<_, Option<i64>>(3)?))
         })?
         .collect();
-    
+
     if let Ok(columns) = table_info {
         let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
-        
+
         let has_payment_method = column_names.contains(&"payment_method".to_string());
-        
+
         if !has_payment_method {
             conn.execute("ALTER TABLE invoices ADD COLUMN payment_method TEXT", [])?;
         }
     }
-    
+
+    Ok(())
+}
+
+// Migration function to add tax_mode column to invoices table — records
+// which of the three tax-entry modes (Standard/Exonéré/TTC Direct) the
+// invoice was created under, purely for UI/PDF display purposes (which
+// legend text to print, which toggle option to show as selected on
+// re-open). The actual tax math is unaffected by this column: it's still
+// entirely driven by each invoice_item's own tva_rate, exactly as before —
+// "Exonéré" just means every item's tva_rate was set to 0 at entry time,
+// and "TTC Direct" means the unit_price stored is already the back-computed
+// HT value. recalculate_invoice_totals() doesn't need to know the mode.
+fn migrate_invoices_tax_mode_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoices)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"tax_mode".to_string()) {
+            conn.execute("ALTER TABLE invoices ADD COLUMN tax_mode TEXT NOT NULL DEFAULT 'standard'", [])?;
+        }
+    }
+
     Ok(())
 }
 

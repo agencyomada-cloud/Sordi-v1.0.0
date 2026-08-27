@@ -1,27 +1,30 @@
 import { Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
 import { RiAddLine as Plus, RiDeleteBinLine as Trash2, RiCheckLine as Check, RiExpandUpDownLine as ChevronsUpDown } from "@remixicon/react";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import { numberToWords } from "@/lib/numberToWords";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "@/components/invoice/invoiceHtmlShared";
+import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { EditableOrderLogic } from "./useEditableOrderLogic";
 
 interface Props {
   order: any;
   onOrderChange: (order: any) => void;
   clients?: any[];
+  products?: any[];
   settings: any;
   logic: EditableOrderLogic;
   readOnly?: boolean;
 }
 
 /** "Moderne" theme for bons de commande — accent header band + rounded cards, same visual language as EditableInvoiceModerne. */
-export function OrderEditableModerne({ order, clients, settings, logic, readOnly = false }: Props) {
+export function OrderEditableModerne({ order, clients, products, settings, logic, readOnly = false }: Props) {
   const accent = settings?.primary_color || "#476CFF";
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
   const {
-    pages, openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
-    formatCurrency, updateOrderField, updateClient, updateItem, removeItem, addItem,
+    items, pages, openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
+    formatCurrency, updateOrderField, updateClient, updateItem, removeItem, handleAddProduct, handleAddCustomItem,
   } = logic;
 
   return (
@@ -66,7 +69,12 @@ export function OrderEditableModerne({ order, clients, settings, logic, readOnly
                     )}
                     ·
                     {readOnly ? <span>{order.order_date}</span> : (
-                      <Input type="date" value={order.order_date || ""} onChange={(e) => updateOrderField('order_date', e.target.value)} className="h-5 w-28 border-none bg-transparent p-0 text-right shadow-none focus-visible:ring-0 text-[8.5pt] text-white" />
+                      <DatePicker
+                        value={order.order_date}
+                        onChange={(v) => updateOrderField('order_date', v)}
+                        showIcon={false}
+                        className="h-5 w-28 border-none bg-transparent p-0 justify-end hover:bg-transparent text-[8.5pt] text-white"
+                      />
                     )}
                   </div>
                 </div>
@@ -167,7 +175,7 @@ export function OrderEditableModerne({ order, clients, settings, logic, readOnly
                                 )}
                               </td>
                               <td className="px-2.5 py-2 text-right">{readOnly ? item.quantity : (
-                                <Input type="number" step="0.001" value={item.quantity} onChange={(e) => updateItem(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-5 w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[8.5pt]" />
+                                <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => updateItem(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-5 w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[8.5pt]" />
                               )}</td>
                               <td className="px-2.5 py-2 text-right">{readOnly ? formatCurrency(item.unit_price) : (
                                 <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-5 w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[8.5pt]" />
@@ -199,9 +207,21 @@ export function OrderEditableModerne({ order, clients, settings, logic, readOnly
                         {isLastPage && !readOnly && (
                           <tr>
                             <td colSpan={6} className="p-0">
-                              <Button variant="ghost" className="w-full h-7 text-[8pt] text-gray-400 hover:text-gray-700 rounded-none border-none" onClick={addItem}>
-                                <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter une ligne
-                              </Button>
+                              <ProductPickerCombobox
+                                products={products}
+                                excludeProductIds={items.map((it: any) => it.product_id)}
+                                open={openPopoverIndex === -1}
+                                onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
+                                onSelectProduct={(p) => handleAddProduct(p, items.length - 1)}
+                                onAddCustomItem={(name) => handleAddCustomItem(name, items.length - 1)}
+                                nextIndex={items.length}
+                                formatCurrency={formatCurrency}
+                                trigger={
+                                  <Button variant="ghost" className="w-full h-7 text-[8pt] text-gray-400 hover:text-gray-700 rounded-none border-none">
+                                    <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un article
+                                  </Button>
+                                }
+                              />
                             </td>
                           </tr>
                         )}
@@ -240,10 +260,40 @@ export function OrderEditableModerne({ order, clients, settings, logic, readOnly
                       </div>
 
                       <div className="flex justify-end items-end">
-                        <div className="w-[140px] flex flex-col items-center relative">
-                          {settings?.stamp_data && <img src={settings.stamp_data} alt="Cachet" style={{ maxHeight: 55 }} className="object-contain mb-1" />}
-                          <div className="w-full h-px bg-gray-300 mt-6 mb-1" />
-                          <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
+                        <div className="w-44 flex flex-col items-center relative">
+                          {(settings?.stamp_data || settings?.signature_data) && (
+                            <>
+                              <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
+                              <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
+                            </>
+                          )}
+                          <div
+                            className="w-full relative flex items-center justify-center border-none px-3 py-3"
+                            style={{ height: `${Math.max(settings?.stamp_size || 56, settings?.signature_size || 56, 56) + 32}px` }}
+                          >
+                            {!settings?.stamp_data && !settings?.signature_data ? (
+                              <span className="text-[9pt] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
+                            ) : (
+                              <>
+                                {settings?.stamp_data && (
+                                  <img
+                                    src={settings.stamp_data}
+                                    alt="Cachet"
+                                    style={{ height: `${settings.stamp_size || 56}px` }}
+                                    className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
+                                  />
+                                )}
+                                {settings?.signature_data && (
+                                  <img
+                                    src={settings.signature_data}
+                                    alt="Signature"
+                                    style={{ height: `${settings.signature_size || 56}px` }}
+                                    className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
+                                  />
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </>

@@ -1,9 +1,12 @@
 import { forwardRef } from "react";
-import { RiUserLine, RiCalendarLine } from "@remixicon/react";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@sordi/ui";
+import { useTranslation } from "react-i18next";
+import { RiArrowRightSLine, RiQuestionLine } from "@remixicon/react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
 import { NotificationBell } from "@/components/layout/NotificationBell";
-import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/hooks/useLanguage";
 import { useNavigate } from "react-router-dom";
+import { usePageHeaderState } from "@/hooks/usePageHeader";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   className?: string;
@@ -11,54 +14,66 @@ interface HeaderProps {
 
 export const Header = forwardRef<HTMLDivElement, HeaderProps>(
   function Header({ className }, ref) {
-    const { user, signOut } = useAuth();
+    const { t } = useTranslation("common");
     const navigate = useNavigate();
-
-    const handleLogout = async () => {
-      await signOut();
-      navigate('/auth');
-    };
+    const { isRtl } = useLanguage();
+    const { title, breadcrumb } = usePageHeaderState();
 
     return (
-      <header 
+      <header
         ref={ref}
-        className="h-16 bg-transparent flex items-center justify-between px-8 pl-20 lg:pl-8"
+        data-tauri-drag-region
+        className="h-16 bg-transparent flex items-center justify-between px-8 ps-20 lg:ps-8"
       >
-        {/* Date pill */}
-        <div className="hidden sm:flex items-center gap-2 bg-card rounded-[6px] px-4 py-2 shadow-card border border-border/30 hover:border-border/60 transition-all duration-200 group cursor-default">
-          <RiCalendarLine className="w-4 h-4 text-muted-foreground transition-transform duration-200 group-hover:scale-110 group-hover:text-primary" />
-          <span className="text-sm font-medium">
-            {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
-          </span>
+        {/* Page title / breadcrumb — the app's only "where am I" indicator
+            once you're past the sidebar's active-state highlight. */}
+        <div className="min-w-0">
+          {breadcrumb && breadcrumb.length > 0 ? (
+            <nav className="flex items-center gap-1.5 min-w-0 text-sm">
+              {breadcrumb.map((item, i) => {
+                const isLast = i === breadcrumb.length - 1;
+                return (
+                  <span key={i} className="flex items-center gap-1.5 min-w-0">
+                    {item.path ? (
+                      <button
+                        onClick={() => navigate(item.path!)}
+                        className="text-muted-foreground hover:text-foreground transition-colors truncate"
+                      >
+                        {item.label}
+                      </button>
+                    ) : (
+                      <span className={isLast ? "font-semibold text-foreground truncate" : "text-muted-foreground truncate"}>
+                        {item.label}
+                      </span>
+                    )}
+                    {!isLast && (
+                      <RiArrowRightSLine className={cn("w-3.5 h-3.5 shrink-0 text-muted-foreground/50", isRtl && "-scale-x-100")} />
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+          ) : (
+            <h1 className="text-sm font-semibold text-foreground truncate">{title}</h1>
+          )}
         </div>
 
+        {/* Account identity, language, and theme now live in one place —
+            the Sidebar's Account Popover — instead of being duplicated
+            here too; this stays a lean utility row. */}
         <div className="flex items-center gap-3">
           <NotificationBell />
-
-          {/* User dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-10 h-10 rounded-[6px] bg-primary flex items-center justify-center shadow-card hover:opacity-95 hover:shadow-elevated transition-all duration-200 active:scale-[0.96] group">
-                <RiUserLine className="w-4 h-4 text-primary-foreground transition-transform duration-200 group-hover:scale-110" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-[6px] p-2 animate-in fade-in-0 zoom-in-95 duration-200 shadow-elevated">
-              {user && (
-                <>
-                  <div className="px-3 py-2">
-                    <p className="text-sm font-medium truncate">{user.email}</p>
-                  </div>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem 
-                onClick={handleLogout} 
-                className="text-destructive rounded-[6px] cursor-pointer"
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <a
+                href="mailto:contact@sordi.app"
+                className="w-10 h-10 rounded-full bg-card border border-border/50 shadow-card flex items-center justify-center hover:bg-secondary transition-all duration-200 active:scale-[0.96] text-muted-foreground hover:text-foreground"
               >
-                Déconnexion
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <RiQuestionLine className="w-4 h-4" />
+              </a>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("help")}</TooltipContent>
+          </Tooltip>
         </div>
       </header>
     );

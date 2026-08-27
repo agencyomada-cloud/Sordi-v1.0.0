@@ -1,0 +1,37 @@
+{
+  "documents": {
+    "invoice": "Facture",
+    "proforma": "Devis",
+    "deliveryNote": "Bon de livraison",
+    "creditNote": "Facture d'avoir",
+    "order": "Commande",
+    "payment": "Paiement"
+  },
+  "fields": {
+    "documentNumber": "Numéro",
+    "issueDate": "Date d'émission",
+    "dueDate": "Date d'échéance",
+    "client": "Client",
+    "subtotalHt": "Sous-total H.T",
+    "amountHt": "Montant HT",
+    "amountTtc": "Montant TTC",
+    "vat": "TVA",
+    "vatAmount": "Montant TVA",
+    "fiscalStamp": "Timbre fiscal",
+    "discount": "Remise",
+    "totalDue": "Total à payer",
+    "amountPaid": "Montant payé",
+    "balanceDue": "Solde restant",
+    "paymentMethod": "Mode de paiement",
+    "reference": "Référence",
+    "notes": "Notes"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "issued": "Émise",
+    "paid": "Payée",
+    "partial": "Partielle",
+    "overdue": "En retard",
+    "cancelled": "Annulée"
+  }
+}

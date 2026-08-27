@@ -1,26 +1,29 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { 
-  RiArrowLeftLine as ArrowLeft, 
-  RiDownloadLine as Download, 
-  RiPrinterLine as Printer, 
-  RiEditLine as Edit, 
-  RiLoader4Line as Loader2 
+import {
+  RiArrowLeftLine as ArrowLeft,
+  RiDownloadLine as Download,
+  RiPrinterLine as Printer,
+  RiEditLine as Edit,
+  RiLoader4Line as Loader2,
+  RiMailSendLine as MailSend,
 } from "@remixicon/react";
-import { Button, Badge } from "@sordi/ui";
+import { Button, StatusBadge, type StatusBadgeTone } from "@sordi/ui";
 import { useOrder, useOrderItems } from "@/hooks/useOrders";
-import { generateOrderPDF } from "@/lib/pdfGenerator";
+import { useSetPageHeader } from "@/hooks/usePageHeader";
+import { generateOrderPDF, generateInvoicePDFBlob, blobToBase64, openSavedFile } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
 import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import type { DraftOrderInput } from "@/lib/emailDrafter";
 
-const statusStyles: Record<string, string> = {
-  draft: "bg-status-draft-bg text-status-draft",
-  confirmed: "bg-status-paid-bg text-status-paid",
-  delivered: "bg-status-pending-bg text-status-pending",
-  cancelled: "bg-destructive/10 text-destructive",
+const statusTones: Record<string, StatusBadgeTone> = {
+  draft: "neutral",
+  confirmed: "success",
+  delivered: "neutral",
+  cancelled: "error",
 };
 
 const statusLabels: Record<string, string> = {
@@ -38,6 +41,12 @@ export default function OrderDetailPage() {
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+
+  useSetPageHeader("Commandes", [
+    { label: "Commandes", path: "/orders" },
+    { label: order?.order_number || "…" },
+  ]);
 
   const buildOrderData = () => {
     if (!order) return null;
@@ -53,8 +62,13 @@ export default function OrderDetailPage() {
 
     try {
       setIsGenerating(true);
-      await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
+      await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -148,12 +162,9 @@ export default function OrderDetailPage() {
                   <h1 className="text-3xl font-bold text-foreground tracking-tight">
                     Bon de commande {order.order_number}
                   </h1>
-                  <Badge
-                    variant={statusStyles[order.status || "draft"]?.includes("bg-") ? "outline" : "default"}
-                    className={cn(statusStyles[order.status || "draft"])}
-                  >
+                  <StatusBadge tone={statusTones[order.status || "draft"] ?? "neutral"}>
                     {statusLabels[order.status || "draft"]}
-                  </Badge>
+                  </StatusBadge>
                 </div>
                 <p className="text-muted-foreground mt-1">
                   {order.clients?.name || order.supplier_name || "N/A"} • {formatDate(order.order_date)}
@@ -161,7 +172,7 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="outline" onClick={() => navigate(`/orders/${id}/edit`)}>
                 <Edit className="w-4 h-4 mr-2" />
                 Modifier
@@ -173,6 +184,10 @@ export default function OrderDetailPage() {
               <Button onClick={handleDownloadPDF} disabled={isGenerating}>
                 {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 {isGenerating ? "Téléchargement..." : "Télécharger PDF"}
+              </Button>
+              <Button variant="outline" onClick={() => setEmailModalOpen(true)}>
+                <MailSend className="w-4 h-4 mr-2" />
+                Envoyer par Email
               </Button>
             </div>
           </div>
@@ -191,6 +206,33 @@ export default function OrderDetailPage() {
               </div>
             </div>
           </div>
+
+          <SendDocumentEmailModal
+            open={emailModalOpen}
+            onOpenChange={setEmailModalOpen}
+            recipientEmail={order.clients?.email || order.supplier_email}
+            fileName={`BonCommande-${order.order_number || "000"}.pdf`}
+            draftInput={{
+              docType: "order",
+              documentNumber: order.order_number,
+              clientName: order.clients?.name || order.supplier_name || "",
+              documentDate: order.order_date,
+              deliveryDate: order.delivery_date,
+              totalTTC: order.total_ttc,
+              senderCompany: settings?.company_name || "Sordi",
+              items: (orderItems || []).map((item: any) => ({
+                name: item.product_name || "Article",
+                quantity: item.quantity,
+                unitPrice: item.unit_price,
+              })),
+            } satisfies DraftOrderInput}
+            getPdfBase64={async () => {
+              const orderData = buildOrderData();
+              if (!orderData) throw new Error("Commande introuvable");
+              const blob = await generateInvoicePDFBlob(orderData, settings, licenseStatus?.state === "active");
+              return blobToBase64(blob);
+            }}
+          />
         </main>
   );
 }

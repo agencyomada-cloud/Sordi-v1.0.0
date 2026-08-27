@@ -1,8 +1,12 @@
-import { Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
+import {
+  Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger,
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@sordi/ui";
 import { RiAddLine as Plus, RiDeleteBinLine as Trash2, RiCheckLine as Check, RiExpandUpDownLine as ChevronsUpDown } from "@remixicon/react";
 import { cn } from "@/lib/utils";
-import { numberToWords } from "@/lib/numberToWords";
-import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "@/components/invoice/invoiceHtmlShared";
+import { DatePicker } from "@/components/ui/date-picker";
+import { getCompanyPhones, formatPhone, resolveInvoiceHtmlFontFamily } from "@/components/invoice/invoiceHtmlShared";
+import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { EditableDeliveryLogic } from "./useEditableDeliveryLogic";
 
 interface Props {
@@ -15,325 +19,312 @@ interface Props {
   readOnly?: boolean;
 }
 
-/** "Structuré" theme for bons de livraison — same header band/bordered grid/footer chrome as EditableInvoiceStructure/OrderEditableStructure. */
-export function DeliveryEditableStructure({ deliveryNote, clients, products, settings, logic, readOnly = false }: Props) {
+/**
+ * The one editable Bon de Livraison layout — deliberately no epure/moderne
+ * variant here (unlike invoices/orders): DeliveryNotePDFDocument.tsx isn't
+ * themed either, so this is the single source that stays in lockstep with
+ * it instead of three hand-maintained copies that can each drift on their
+ * own. Sections and column order match the PDF exactly: header (supplier
+ * block + document box), client block, N°/Réf/Désignation/Qté/P.U HT/Total
+ * HT table + totals box, réserves, dual signature boxes.
+ */
+export function DeliveryEditableStructure({
+  deliveryNote, onDeliveryChange, clients, products,
+  settings, logic, readOnly = false,
+}: Props) {
   const primaryColor = settings?.primary_color || "#476CFF";
   const phones = getCompanyPhones(settings);
-  const legalFields = resolveLegalFields(settings);
   const {
-    pages, client, totals, openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
-    formatCurrency, updateDeliveryField, updateClient, updateItem, removeItem, handleAddProduct, items,
+    client, openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
+    updateDeliveryField, updateClient, updateItem, removeItem, handleAddProduct, handleAddCustomItem, items, totals, formatCurrency,
   } = logic;
 
   return (
-    <div id="invoice-preview">
-      {pages.map((pageItems, pageIndex) => {
-        const isFirstPage = pageIndex === 0;
-        const isLastPage = pageIndex === pages.length - 1;
-        const startIdx = pages.slice(0, pageIndex).reduce((sum, p) => sum + p.length, 0);
-
-        return (
-          <div
-            key={pageIndex}
-            id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-black font-sans mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
-          >
-            <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
-              {settings?.logo_data && (
-                <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[5mm] pb-[5mm] pl-[5mm] pr-0 flex items-center justify-start">
-                  <img src={settings.logo_data} className="block w-full h-full object-contain object-left" alt={settings?.company_name || ""} />
-                </div>
-              )}
-              {settings?.company_name && (
-                <div className="absolute right-0 bottom-0 w-[71.5mm] h-[7.8mm] flex items-center justify-center px-[5mm] text-[8.5pt] font-bold leading-none whitespace-nowrap text-white z-2 tracking-wide uppercase" style={{ backgroundColor: primaryColor }}>
-                  {settings.company_name}
-                </div>
-              )}
-              <div className="absolute left-0 right-0 bottom-0 h-[0.45mm] z-1" style={{ backgroundColor: primaryColor }} />
-            </header>
-
-            <main className="absolute left-0 top-[33.9mm] w-full h-[229.8mm] overflow-hidden bg-white">
-              {settings?.body_pattern_data && (
-                <div className="absolute inset-0 w-full h-full bg-white z-0 overflow-hidden">
-                  <img src={settings.body_pattern_data} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none" />
-                </div>
-              )}
-
-              <div className="relative w-full h-full z-1 px-[8mm] pt-[5mm] pb-[5mm] flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start mb-4 text-xs">
-                    <div className="w-[55%] space-y-1">
-                      <div className="text-gray-500 text-[11px] font-medium uppercase">Émetteur</div>
-                      <div className="font-extrabold text-sm text-black uppercase mb-1">{settings?.company_name || ""}</div>
-                      {settings?.company_address && <div className="text-gray-700 uppercase text-[11px] font-semibold">{settings.company_address}</div>}
-                      <div className="space-y-0.5 pt-1 text-[11px] text-gray-700 uppercase">
-                        {settings?.company_rc && <div><span className="font-bold">RC:</span> {settings.company_rc}</div>}
-                        {settings?.company_nif && <div><span className="font-bold">NIF:</span> {settings.company_nif}</div>}
-                      </div>
-                    </div>
-
-                    <div className="w-[42%] text-xs space-y-1.5 pt-1 text-right">
-                      <div className="text-gray-500 text-[11px] font-medium uppercase mb-1">Destinataire</div>
-                      {!readOnly && clients && clients.length > 0 ? (
-                        <Popover open={openClientCombo} onOpenChange={setOpenClientCombo}>
-                          <PopoverTrigger asChild>
-                            <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-sm font-bold uppercase text-black hover:bg-gray-100 w-full flex justify-end leading-tight mb-1 rounded-none">
-                              {client?.name || "Sélectionner un client..."}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="end">
-                            <Command>
-                              <CommandInput placeholder="Rechercher un client..." />
-                              <CommandList>
-                                <CommandEmpty>Aucun client trouvé.</CommandEmpty>
-                                <CommandGroup>
-                                  {clients.map((c) => (
-                                    <CommandItem key={c.id} value={c.name} onSelect={() => { updateClient(c.id); setOpenClientCombo(false); }}>
-                                      <Check className={cn("mr-2 h-4 w-4", deliveryNote.client_id === c.id ? "opacity-100" : "opacity-0")} />
-                                      {c.name}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        <div className="font-extrabold text-sm text-black uppercase mb-1">{client?.name || "-"}</div>
-                      )}
-                      {client?.address && <div className="text-[11px] text-gray-700 uppercase">{client.address}</div>}
-                      {client?.rc && <div className="text-[11px] text-gray-700"><span className="font-bold">RC:</span> {client.rc}</div>}
-                      {client?.nif && <div className="text-[11px] text-gray-700"><span className="font-bold">NIF:</span> {client.nif}</div>}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="text-xs space-y-1">
-                      <div className="flex items-center gap-1">
-                        <span className="font-bold">Date:</span>
-                        {readOnly ? <span>{deliveryNote.delivery_date}</span> : (
-                          <Input type="date" value={deliveryNote.delivery_date || ""} onChange={(e) => updateDeliveryField('delivery_date', e.target.value)} className="h-5 w-32 border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="font-bold">Numéro:</span>
-                        {readOnly ? <span className="font-bold uppercase">{deliveryNote.delivery_number}</span> : (
-                          <Input value={deliveryNote.delivery_number || ""} onChange={(e) => updateDeliveryField('delivery_number', e.target.value)} className="h-5 w-32 border-none bg-transparent p-0 shadow-none focus-visible:ring-0 font-bold uppercase text-xs" placeholder="N°" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {readOnly ? (
-                        <div className="text-[15px] font-bold uppercase tracking-wide text-gray-800">{deliveryNote.custom_title || "BON DE LIVRAISON"}</div>
-                      ) : (
-                        <Input
-                          value={deliveryNote.custom_title || "BON DE LIVRAISON"}
-                          onChange={(e) => updateDeliveryField('custom_title', e.target.value)}
-                          className="h-auto text-[15px] font-bold uppercase tracking-wide text-gray-800 text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {isFirstPage && (
-                    <div className="grid grid-cols-2 gap-8 mb-4 text-xs">
-                      <div className="space-y-0.5">
-                        <div className="text-gray-500 text-[11px] font-medium uppercase mb-1">Détails Transport</div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold w-16 shrink-0">Chauffeur:</span>
-                          {readOnly ? <span>{deliveryNote.driver_name || "-"}</span> : (
-                            <Input value={deliveryNote.driver_name || ""} onChange={(e) => updateDeliveryField('driver_name', e.target.value)} className="h-5 w-full border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" placeholder="Nom du chauffeur..." />
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold w-16 shrink-0">Camion:</span>
-                          {readOnly ? <span>{deliveryNote.truck_plate || "-"}</span> : (
-                            <Input value={deliveryNote.truck_plate || ""} onChange={(e) => updateDeliveryField('truck_plate', e.target.value)} className="h-5 w-full border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" placeholder="Matricule..." />
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="text-gray-500 text-[11px] font-medium uppercase mb-1">Lieu de Livraison</div>
-                        {readOnly ? <span className="text-xs">{deliveryNote.delivery_location || "-"}</span> : (
-                          <Input value={deliveryNote.delivery_location || ""} onChange={(e) => updateDeliveryField('delivery_location', e.target.value)} className="h-5 w-full border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" placeholder="Lieu de livraison..." />
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mb-6">
-                    <table className="w-full border-collapse border border-black text-xs">
-                      <thead>
-                        <tr style={{ backgroundColor: primaryColor }} className="text-white font-bold border-b border-black">
-                          <th className="border border-black p-2 text-left uppercase" style={{ width: '15%' }}>Code</th>
-                          <th className="border border-black p-2 text-left uppercase">Désignation</th>
-                          <th className="border border-black p-2 text-right uppercase" style={{ width: '12%' }}>Qté</th>
-                          <th className="border border-black p-2 text-right uppercase" style={{ width: '15%' }}>P.U HT</th>
-                          <th className="border border-black p-2 text-center uppercase" style={{ width: '10%' }}>TVA</th>
-                          <th className="border border-black p-2 text-right uppercase" style={{ width: '15%' }}>Total HT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageItems.map((item: any, relIdx: number) => {
-                          const globalIdx = startIdx + relIdx;
-                          const tvaLabel = item.tva_rate === -1 ? "Exo" : (item.tva_rate === null || item.tva_rate === 0) ? "0%" : item.tva_rate === undefined ? "19%" : `${item.tva_rate}%`;
-                          return (
-                            <tr key={globalIdx} className="border-b border-black group relative">
-                              <td className="border border-black p-2 align-top">{item.products?.code || item.product_code || ""}</td>
-                              <td className="border border-black p-2 align-top font-bold uppercase">
-                                {item.product_name || item.products?.name || ""}
-                                {(item.product_description || item.products?.description) && (
-                                  <div className="font-normal text-[10px] normal-case mt-0.5 text-gray-600">{item.product_description || item.products?.description}</div>
-                                )}
-                              </td>
-                              <td className="border border-black p-2 align-top text-right">
-                                {readOnly ? (item.quantity ?? 0).toFixed(3) : (
-                                  <Input type="number" step="0.001" value={item.quantity} onChange={(e) => updateItem(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-auto w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" />
-                                )}
-                              </td>
-                              <td className="border border-black p-2 align-top text-right">
-                                {readOnly ? formatCurrency(item.unit_price) : (
-                                  <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => updateItem(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-auto w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs" />
-                                )}
-                              </td>
-                              <td className="border border-black p-2 align-top text-center text-gray-500 italic">{tvaLabel}</td>
-                              <td className="border border-black p-2 align-top text-right font-bold relative group-hover:pr-8">
-                                {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
-                                {!readOnly && (
-                                  <button className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 p-1" onClick={() => removeItem(globalIdx)} title="Supprimer">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {isLastPage && !readOnly && products && products.length > 0 && (
-                          <tr>
-                            <td colSpan={6} className="border border-black p-0">
-                              <Popover open={openPopoverIndex === -1} onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}>
-                                <PopoverTrigger asChild>
-                                  <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un produit</Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80 p-2">
-                                  <div className="max-h-60 overflow-y-auto space-y-1">
-                                    {products.filter((p) => !items.some((it: any) => String(it.product_id || it.products?.id) === String(p.id))).map((p) => (
-                                      <Button key={p.id} variant="ghost" className="w-full justify-start text-left h-auto py-2" onClick={() => handleAddProduct(p, items.length - 1)}>
-                                        <div className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-gray-500">Réf: {p.code} • {formatCurrency(p.unit_price || 0)}</span></div>
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {isLastPage && (
-                    <>
-                      <div className="flex justify-end mb-4">
-                        <div className="w-[42%] border border-black text-xs">
-                          <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                            <span>Total HT</span><span className="font-mono">{formatCurrency(totals.subtotal)}</span>
-                          </div>
-                          <div className="flex justify-between p-1.5 border-b border-black font-bold">
-                            <span>Total TVA</span><span className="font-mono">{formatCurrency(totals.tva)}</span>
-                          </div>
-                          <div className="flex justify-between p-1.5 font-bold bg-gray-50">
-                            <span>Net à Payer</span><span className="font-mono">{formatCurrency(totals.total)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mb-4">
-                        <div className="text-[11px] text-gray-800">ARRÊTÉ LE PRÉSENT BON DE LIVRAISON À LA SOMME DE :</div>
-                        <div className="mt-1 font-extrabold text-xs text-black uppercase tracking-wide">{numberToWords(totals.total)} Dinars Algériens</div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-8 mb-4 text-xs">
-                        <div>
-                          <div className="font-bold uppercase text-[11px] mb-1">Notes</div>
-                          {readOnly ? (
-                            <p className="text-gray-600 min-h-[36px]">{deliveryNote.notes || "-"}</p>
-                          ) : (
-                            <Textarea value={deliveryNote.notes || ""} onChange={(e) => updateDeliveryField('notes', e.target.value)} placeholder="Notes libres..." className="min-h-[36px] resize-none border border-gray-200 bg-gray-50 p-2 shadow-none focus-visible:ring-1 focus-visible:ring-gray-300 text-xs w-full" />
-                          )}
-                        </div>
-                        <div>
-                          <div className="font-bold uppercase text-[11px] mb-1 text-red-600">Réserves</div>
-                          {readOnly ? (
-                            <p className="text-red-400 italic min-h-[36px]">{deliveryNote.reserves || "-"}</p>
-                          ) : (
-                            <Textarea value={deliveryNote.reserves || ""} onChange={(e) => updateDeliveryField('reserves', e.target.value)} placeholder="Réserves éventuelles..." className="min-h-[36px] resize-none border border-red-100 bg-red-50/30 p-2 shadow-none focus-visible:ring-1 focus-visible:ring-red-200 text-xs text-red-600 italic w-full" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-8">
-                        <div className="border border-gray-200 rounded p-3 h-20 flex flex-col items-center justify-center text-center">
-                          <span className="text-[11px] font-bold uppercase tracking-wide text-black">Réception Client</span>
-                          <span className="text-[9px] text-gray-400 italic mt-1">Signature et Date</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                          {settings?.stamp_data && <img src={settings.stamp_data} alt="Cachet" style={{ maxHeight: 65, maxWidth: 140 }} className="object-contain" />}
-                          <span className="font-bold text-xs underline mt-1">Cachet et Signature</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="text-center font-bold text-xs">{pageIndex + 1}</div>
-              </div>
-            </main>
-
-            <footer className="absolute left-0 bottom-0 w-full h-[33.3mm] bg-white border-t-[0.3mm] border-[#222222] z-10">
-              <div className="absolute left-[5.2mm] right-[4.8mm] top-[3.5mm] bottom-[3.8mm] grid grid-cols-[66mm_69mm_1fr] gap-x-[2mm]">
-                <section className="relative pl-[4.2mm] pt-[1mm]">
-                  <div className="absolute left-0 top-[1mm] w-[0.75mm] h-[16mm]" style={{ backgroundColor: primaryColor }} />
-                  {legalFields.map((f, i) => (
-                    <div key={i} className="grid grid-cols-[28.5mm_3mm_1fr] min-h-[4.25mm] text-[7.1pt] leading-[1.15] whitespace-nowrap">
-                      <span className="font-bold">{f.label}</span>
-                      <span className="font-bold text-center">:</span>
-                      <span>{f.value}</span>
-                    </div>
-                  ))}
-                </section>
-                <section className="pt-[1mm] text-[7.1pt] leading-[1.3]">
-                  {settings?.company_address && <div className="mb-[2.8mm] font-bold">Adresse: {settings.company_address}</div>}
-                  {settings?.company_rib && <div><strong>RIB:</strong> {settings.company_rib}{settings?.company_bank_agency && <><br />{settings.company_bank_agency}</>}</div>}
-                </section>
-                <section className="relative grid grid-cols-[20mm_1fr] gap-x-[2.5mm] pt-[6mm]">
-                  {(settings?.footer_logo_data || settings?.company_name) && (
-                    <div className="absolute top-0 left-0 h-[8mm] w-[43mm] flex items-center">
-                      {settings?.footer_logo_data ? (
-                        <img src={settings.footer_logo_data} alt="Footer Logo" className="h-full w-full object-contain object-left" />
-                      ) : (
-                        <span className="font-extrabold text-[9pt] text-black tracking-tight uppercase">{settings.company_name}</span>
-                      )}
-                    </div>
-                  )}
-                  {settings?.qr_code_data && (
-                    <div className="w-[18mm] h-[18mm] bg-gray-50 flex items-center justify-center overflow-hidden">
-                      <img src={settings.qr_code_data} alt="QR Code" className="w-full h-full object-contain" />
-                    </div>
-                  )}
-                  <div className="pt-[0.1mm] text-[7.1pt] leading-[1.65] whitespace-nowrap">
-                    {settings?.company_email && <div className="font-bold">{settings.company_email}</div>}
-                    {settings?.company_website && <div>{settings.company_website}</div>}
-                    {phones.map((p, i) => <div key={i}>{formatPhone(p)}</div>)}
-                  </div>
-                </section>
-              </div>
-            </footer>
+    <div
+      id="invoice-preview"
+      className="a4 relative bg-white text-black mx-auto shadow-lg print:border-none print:shadow-none print:m-0"
+      style={{ width: '210mm', minHeight: '297mm', paddingTop: '21mm', paddingLeft: '14mm', paddingRight: '14mm', paddingBottom: '15mm', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
+    >
+      {/* HEADER — logo + full supplier details left, document box right */}
+      <div className="flex justify-between items-start border-b-2 pb-2.5 mb-3.5" style={{ borderColor: primaryColor }}>
+        <div className="flex-1 pr-4">
+          {settings?.logo_data && (
+            <img src={settings.logo_data} className="h-10 max-w-[150px] object-contain object-left mb-1.5" alt={settings?.company_name || ""} />
+          )}
+          <div className="font-bold text-[12pt] mb-1">{settings?.company_name}</div>
+          {settings?.company_address && <div className="text-[7.5pt] text-gray-700 mb-0.5">{settings.company_address}</div>}
+          {settings?.company_rc && <div className="text-[7.5pt] text-gray-700 mb-0.5">RC: {settings.company_rc}</div>}
+          {settings?.company_nif && <div className="text-[7.5pt] text-gray-700 mb-0.5">NIF: {settings.company_nif}</div>}
+          {settings?.company_nis && <div className="text-[7.5pt] text-gray-700 mb-0.5">NIS: {settings.company_nis}</div>}
+          {settings?.company_ai && <div className="text-[7.5pt] text-gray-700 mb-0.5">Article d'Imposition: {settings.company_ai}</div>}
+          {phones.map((p, i) => <div key={i} className="text-[7.5pt] text-gray-700 mb-0.5">Tél: {formatPhone(p)}</div>)}
+          {settings?.company_email && <div className="text-[7.5pt] text-gray-700 mb-0.5">{settings.company_email}</div>}
+        </div>
+        <div className="w-[190px] border border-gray-400 rounded p-2 shrink-0">
+          <div className="text-center font-bold text-[13pt] mb-1.5 uppercase" style={{ color: primaryColor, letterSpacing: 1 }}>
+            Bon de Livraison
           </div>
-        );
-      })}
+          <div className="flex items-center mb-1 gap-1">
+            <span className="font-bold text-[7.5pt] w-[85px] shrink-0">N° BL</span>
+            {readOnly ? <span className="text-[7.5pt]">{deliveryNote.delivery_number}</span> : (
+              <Input value={deliveryNote.delivery_number || ""} onChange={(e) => updateDeliveryField('delivery_number', e.target.value)} className="h-5 flex-1 border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[7.5pt]" placeholder="N°" />
+            )}
+          </div>
+          <div className="flex items-center mb-0 gap-1">
+            <span className="font-bold text-[7.5pt] w-[85px] shrink-0">Date</span>
+            {readOnly ? <span className="text-[7.5pt]">{deliveryNote.delivery_date}</span> : (
+              <DatePicker
+                value={deliveryNote.delivery_date}
+                onChange={(v) => updateDeliveryField('delivery_date', v)}
+                showIcon={false}
+                className="h-5 flex-1 border-none bg-transparent p-0 hover:bg-transparent text-[7.5pt]"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* CLIENT BLOCK */}
+      <div className="border border-gray-300 rounded p-2 mb-3">
+        <div className="text-[7pt] font-bold text-gray-500 tracking-wide mb-1 uppercase">Client / Raison Sociale</div>
+        {!readOnly && clients && clients.length > 0 ? (
+          <Popover open={openClientCombo} onOpenChange={setOpenClientCombo}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-[10.5pt] font-bold uppercase text-black hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
+                {client?.name || "Sélectionner un client..."}
+                <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Rechercher un client..." />
+                <CommandList>
+                  <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+                  <CommandGroup>
+                    {clients.map((c) => (
+                      <CommandItem key={c.id} value={c.name} onSelect={() => { updateClient(c.id); setOpenClientCombo(false); }}>
+                        <Check className={cn("mr-2 h-4 w-4", deliveryNote.client_id === c.id ? "opacity-100" : "opacity-0")} />
+                        {c.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <div className="font-bold text-[10.5pt] uppercase mb-1">{client?.name || "-"}</div>
+        )}
+        {(client?.address || client?.city || client?.wilaya) && (
+          <div className="text-[8pt] text-gray-800 mb-0.5">
+            Adresse: {[client?.address, client?.city, client?.wilaya].filter(Boolean).join(', ')}
+          </div>
+        )}
+        {(client?.nif || client?.rc) && (
+          <div className="text-[8pt] text-gray-800 mb-0.5">
+            {[client?.nif && `NIF: ${client.nif}`, client?.rc && `RC: ${client.rc}`].filter(Boolean).join('   /   ')}
+          </div>
+        )}
+        {(client?.contact_person || client?.phone) && (
+          <div className="text-[8pt] text-gray-800">
+            {[client?.contact_person && `Contact: ${client.contact_person}`, client?.phone && `Tél: ${client.phone}`].filter(Boolean).join('   /   ')}
+          </div>
+        )}
+      </div>
+
+      {/* DELIVERY TABLE — identical column set/styling to the invoice table
+          (EditableInvoiceStructure.tsx): border-collapse black borders, p-2
+          cells, text-xs, group hover:bg-gray-50. */}
+      <table className="w-full border-collapse border border-black text-xs mb-3">
+        <thead>
+          <tr style={{ backgroundColor: primaryColor }} className="text-white font-bold border-b border-black">
+            <th className="border border-black p-2 text-center uppercase" style={{ width: '6%' }}>N°</th>
+            <th className="border border-black p-2 text-center uppercase" style={{ width: '12%' }}>Réf</th>
+            <th className="border border-black p-2 text-center uppercase">Désignation</th>
+            <th className="border border-black p-2 text-right uppercase" style={{ width: '10%' }}>Qté</th>
+            <th className="border border-black p-2 text-right uppercase" style={{ width: '14%' }}>P.U HT</th>
+            <th className="border border-black p-2 text-right uppercase" style={{ width: '16%' }}>Total HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item: any, idx: number) => (
+            <tr key={idx} className="border-b border-black group hover:bg-gray-50 relative">
+              <td className="border border-black p-2 align-top">{String(idx + 1).padStart(2, '0')}</td>
+              <td className="border border-black p-2 align-top font-mono">{item.product_code || item.products?.code || ""}</td>
+              <td className="border border-black p-2 align-top font-bold uppercase relative group-hover:pr-8">
+                {item.product_name || item.products?.name || ""}
+                {!readOnly && (
+                  <button className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 p-1" onClick={() => removeItem(idx)} title="Supprimer">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </td>
+              <td className="border border-black p-2 align-top text-right font-mono">
+                {readOnly ? item.quantity : (
+                  <Input type="number" step="1" data-line-index={idx} data-line-field="quantity" value={item.quantity} onChange={(e) => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} className="h-auto w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-mono" />
+                )}
+              </td>
+              <td className="border border-black p-2 align-top text-right font-mono">
+                {readOnly ? formatCurrency(item.unit_price) : (
+                  <Input type="number" step="0.01" value={item.unit_price ?? 0} onChange={(e) => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-auto w-full text-right border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-xs font-mono" />
+                )}
+              </td>
+              <td className="border border-black p-2 align-top text-right font-mono">
+                {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+              </td>
+            </tr>
+          ))}
+          {!readOnly && (
+            <tr className="border border-black">
+              <td colSpan={6} className="p-0">
+                <ProductPickerCombobox
+                  products={products}
+                  excludeProductIds={items.map((it: any) => it.product_id || it.products?.id)}
+                  open={openPopoverIndex === -1}
+                  onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
+                  onSelectProduct={(p) => handleAddProduct(p, items.length - 1)}
+                  onAddCustomItem={(name) => handleAddCustomItem(name, items.length - 1)}
+                  nextIndex={items.length}
+                  formatCurrency={formatCurrency}
+                  trigger={
+                    <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un article</Button>
+                  }
+                />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {/* CALCULATIONS SUMMARY BOX — same box styling as the invoice total
+          (EditableInvoiceStructure.tsx): w-[42%], border-black, final row
+          shaded instead of bordered. */}
+      <div className="flex justify-end mb-3">
+        <div className="w-[42%] border border-black text-xs">
+          <div className="flex justify-between p-1.5 border-b border-black font-bold">
+            <span>Total HT</span>
+            <span className="font-mono">{formatCurrency(totals.subtotal)}</span>
+          </div>
+          <div className="flex justify-between p-1.5 border-b border-black font-bold">
+            <span>TVA (19%)</span>
+            <span className="font-mono">{formatCurrency(totals.tva)}</span>
+          </div>
+          <div className="flex justify-between p-1.5 bg-gray-50 font-bold">
+            <span>Total TTC / Net à Payer</span>
+            <span className="font-mono">{formatCurrency(totals.total)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* RESERVES — kept compact so it doesn't crowd the items/signature areas */}
+      {(deliveryNote.reserves || !readOnly) && (
+        <div className={cn("border rounded px-2 py-1.5 mb-2", deliveryNote.reserves ? "border-red-300 bg-red-50" : "border-gray-200")}>
+          <div className="text-[7pt] font-bold text-red-600 mb-0.5 uppercase">Réserves</div>
+          {readOnly ? (
+            <p className="text-[7.5pt] text-red-700">{deliveryNote.reserves}</p>
+          ) : (
+            <Textarea value={deliveryNote.reserves || ""} onChange={(e) => updateDeliveryField('reserves', e.target.value)} placeholder="Réserves éventuelles (colis endommagé, quantité manquante...)..." className="min-h-[20px] resize-none border-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[7.5pt] text-red-700 w-full" />
+          )}
+        </div>
+      )}
+
+      {/* SIGNATURE / RECEPTION — date and name fields are live inputs now;
+          "Signature et Cachet" stays a blank line, filled by hand once
+          printed (an actual signature can't be typed in). */}
+      <div className="flex gap-3 mt-4">
+        <div className="flex-1 border border-gray-400 rounded p-3">
+          <div className="text-center font-bold text-[8pt] mb-3">Pour l'Entreprise (Visa / Cachet)</div>
+          <div className="mb-3">
+            <div className="text-[7pt] text-gray-500 mb-1">Date d'expédition</div>
+            {readOnly ? (
+              <div className="border-b border-gray-300 h-3.5 text-[7.5pt]">{deliveryNote.supplier_delivered_date || ""}</div>
+            ) : (
+              <DatePicker
+                value={deliveryNote.supplier_delivered_date}
+                onChange={(v) => updateDeliveryField('supplier_delivered_date', v)}
+                showIcon={false}
+                className="h-3.5 w-full border-none border-b border-gray-300 rounded-none bg-transparent p-0 hover:bg-transparent text-[7.5pt]"
+              />
+            )}
+          </div>
+          <div className="mb-2">
+            <div className="text-[7pt] text-gray-500 mb-1">Nom & Signature</div>
+            {readOnly ? (
+              <div className="border-b border-gray-300 h-3.5 text-[7.5pt]">{deliveryNote.deliverer_name || ""}</div>
+            ) : (
+              <Input
+                value={deliveryNote.deliverer_name || ""}
+                onChange={(e) => updateDeliveryField('deliverer_name', e.target.value)}
+                placeholder="Nom du livreur..."
+                className="h-3.5 w-full border-none border-b border-gray-300 rounded-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[7.5pt]"
+              />
+            )}
+          </div>
+          {/* Dedicated area for the company stamp (cachet) + uploaded
+              signature — deliberately separate from the typed name above.
+              Signature in its own upper slot, stamp in its own lower slot,
+              so an opaque stamp background can never cover the signature. */}
+          {/* Bounded to this fixed physical slot on the printed note (unlike
+              the invoice/order Cachet et Signature block, which sizes itself
+              to content) — max-h-full lets a configured size render at its
+              real height and only shrinks if it wouldn't otherwise fit. */}
+          <div className="border-b border-gray-300 h-20 relative flex flex-col items-center justify-center gap-1 py-1">
+            {settings?.signature_data && (
+              <img
+                src={settings.signature_data}
+                alt="Signature"
+                style={{ height: `${settings.signature_size || 44}px` }}
+                className="relative z-10 max-h-11 w-auto max-w-full object-contain"
+              />
+            )}
+            {settings?.stamp_data && (
+              <img
+                src={settings.stamp_data}
+                alt="Cachet"
+                style={{ height: `${settings.stamp_size || 32}px` }}
+                className="max-h-8 w-auto max-w-full object-contain opacity-90"
+              />
+            )}
+          </div>
+        </div>
+        <div className="flex-1 border border-gray-400 rounded p-3">
+          <div className="text-center font-bold text-[8pt] mb-3">Reçu conforme et en bon état (Client)</div>
+          <div className="mb-3">
+            <div className="text-[7pt] text-gray-500 mb-1">Date de réception</div>
+            {readOnly ? (
+              <div className="border-b border-gray-300 h-3.5 text-[7.5pt]">{deliveryNote.client_received_date || ""}</div>
+            ) : (
+              <DatePicker
+                value={deliveryNote.client_received_date}
+                onChange={(v) => updateDeliveryField('client_received_date', v)}
+                showIcon={false}
+                className="h-3.5 w-full border-none border-b border-gray-300 rounded-none bg-transparent p-0 hover:bg-transparent text-[7.5pt]"
+              />
+            )}
+          </div>
+          <div className="mb-3">
+            <div className="text-[7pt] text-gray-500 mb-1">Nom du réceptionnaire</div>
+            {readOnly ? (
+              <div className="border-b border-gray-300 h-3.5 text-[7.5pt]">{deliveryNote.client_signature || ""}</div>
+            ) : (
+              <Input
+                value={deliveryNote.client_signature || ""}
+                onChange={(e) => updateDeliveryField('client_signature', e.target.value)}
+                placeholder="Nom du réceptionnaire..."
+                className="h-3.5 w-full border-none border-b border-gray-300 rounded-none bg-transparent p-0 shadow-none focus-visible:ring-0 text-[7.5pt]"
+              />
+            )}
+          </div>
+          <div>
+            <div className="text-[7pt] text-gray-500 mb-1">Signature et Cachet</div>
+            <div className="border-b border-gray-300 h-20" />
+          </div>
+        </div>
+      </div>
+
+      <div className="text-center text-[6.5pt] text-gray-500 mt-3">
+        Les marchandises voyagent aux risques et périls du destinataire. Toute réserve doit être formulée à la réception.
+      </div>
     </div>
   );
 }

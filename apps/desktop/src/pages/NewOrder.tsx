@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useClients } from "@/hooks/useClients";
+import { useProducts } from "@/hooks/useProducts";
 import { useNavigate } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { format } from "date-fns";
@@ -30,6 +31,7 @@ export default function NewOrderPage() {
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
   const { data: clients } = useClients();
+  const { data: products } = useProducts();
   const { data: nextOrderNumber, isLoading: isLoadingNumber } = useNextOrderNumber();
 
   // Initial state logic
@@ -189,6 +191,7 @@ export default function NewOrderPage() {
                 order={draftOrder}
                 onOrderChange={handleOrderChange}
                 clients={clients}
+                products={products}
               />
             </div>
           </div>

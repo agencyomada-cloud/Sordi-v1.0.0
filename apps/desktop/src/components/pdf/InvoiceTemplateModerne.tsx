@@ -42,6 +42,17 @@ Font.register({
     { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
   ]
 });
+// Fixed monospace face for all numeric/fiscal data — not user-selectable
+// like the four body fonts above, always JetBrains Mono per the
+// Swiss-minimalist numeric-scale spec.
+Font.register({
+  family: 'JetBrains Mono',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
+  ]
+});
 
 interface InvoiceTemplateModerneProps {
   invoice: PDFInvoice;
@@ -79,8 +90,8 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     logoImage: { height: 28, maxWidth: 136, objectFit: 'contain' },
     companyNameWhite: { fontSize: 12, fontFamily, fontWeight: 'bold', color: '#ffffff', letterSpacing: 0.3 },
     headerRight: { alignItems: 'flex-end' },
-    docTitle: { fontSize: 17, fontFamily, fontWeight: 'bold', color: '#ffffff', textTransform: 'uppercase', letterSpacing: 1.2 },
-    docNumber: { fontSize: 8.5, color: 'rgba(255,255,255,0.85)', marginTop: 3 },
+    docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', color: '#ffffff', textTransform: 'uppercase', letterSpacing: -0.3 },
+    docNumber: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: 'rgba(255,255,255,0.75)', marginTop: 5 },
 
     body: { padding: 40, paddingTop: 26 },
 
@@ -89,44 +100,57 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     cardLabel: { fontSize: 7, color: accent, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily, fontWeight: 'bold', marginBottom: 6 },
     clientName: { fontSize: 10.5, fontFamily, fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', marginBottom: 3 },
     plainLine: { fontSize: 8, color: '#4b5563', marginBottom: 1.5, lineHeight: 1.3 },
+    fiscalLine: { fontFamily: 'JetBrains Mono', fontSize: 7.5, color: '#6b7280', marginBottom: 1.5, lineHeight: 1.4 },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
     metaRowLabel: { fontSize: 8, color: '#6b7280' },
-    metaRowValue: { fontSize: 8.5, fontFamily, fontWeight: 'bold', color: '#111827' },
+    metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111827' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 6 },
 
     tableWrap: { borderRadius: 10, overflow: 'hidden', borderWidth: 0.75, borderColor: accentBorder, marginBottom: 18 },
     tableHeaderRow: { flexDirection: 'row', backgroundColor: accentSoft, paddingVertical: 7, paddingHorizontal: 10 },
     tableHeaderCell: { fontSize: 7.5, color: accent, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily, fontWeight: 'bold' },
-    tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center' },
+    tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, alignItems: 'flex-start' },
     tableRowAlt: { backgroundColor: '#fafafa' },
-    colDesignation: { width: '45%' },
-    colPrice: { width: '15%', textAlign: 'right' },
-    colQty: { width: '13%', textAlign: 'right' },
-    colUnit: { width: '12%', textAlign: 'center' },
-    colAmount: { width: '15%', textAlign: 'right' },
+    colDesignation: { width: '40%' },
+    colPrice: { width: '16%', textAlign: 'right' },
+    colQty: { width: '10%', textAlign: 'right' },
+    colUnit: { width: '15%', textAlign: 'center' },
+    colAmount: { width: '19%', textAlign: 'right' },
     itemName: { fontSize: 9, color: '#111827', fontFamily, fontWeight: 'bold' },
-    cellText: { fontSize: 8.5, color: '#374151' },
+    cellText: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#374151' },
+    cellUnit: { fontFamily, fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase' },
 
     totalsContainer: { alignItems: 'flex-end', marginBottom: 22 },
     totalsBox: { width: '46%', backgroundColor: '#f9fafb', borderRadius: 10, padding: 12 },
     totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
     totalsLabel: { fontSize: 8.5, color: '#6b7280' },
-    totalsValue: { fontSize: 8.5, color: '#111827' },
-    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: accent, borderRadius: 7, paddingVertical: 7, paddingHorizontal: 10, marginTop: 6 },
+    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111827' },
+    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: accent, borderRadius: 7, paddingVertical: 7, paddingHorizontal: 10, marginTop: 6 },
     ttcLabel: { fontSize: 9.5, fontFamily, fontWeight: 'bold', color: '#ffffff' },
-    ttcValue: { fontSize: 11, fontFamily, fontWeight: 'bold', color: '#ffffff' },
+    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 'bold', color: '#ffffff' },
 
     wordsBlock: { marginBottom: 22 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
     wordsValue: { fontSize: 8.5, color: '#374151', lineHeight: 1.4, textTransform: 'uppercase' },
 
     signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 30 },
-    paymentBadge: { backgroundColor: accentSoft, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-    paymentText: { fontSize: 8, color: accent, fontFamily, fontWeight: 'bold' },
     signBox: { alignItems: 'center', width: 140 },
-    signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 28, marginBottom: 4 },
+    // The signature is signed directly on top of the stamp, like a real
+    // paper document — both images are absolutely centered in a fixed-size
+    // box instead of stacked in a column.
+    signatureBox: {
+      minWidth: 130,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+      position: 'relative',
+    },
+    signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
+    signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
+    signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
-    stampImage: { maxHeight: 55, maxWidth: 120, objectFit: 'contain', position: 'absolute', top: -8 },
+    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
+    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain' },
 
     footer: { position: 'absolute', left: 40, right: 40, bottom: 26, paddingTop: 10, borderTopWidth: 1.5, borderColor: accent },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -136,7 +160,6 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
     sordiWatermark: { position: 'absolute', left: 40, right: 40, bottom: 6, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
-    qrImage: { width: 34, height: 34, marginTop: 4, borderRadius: 4 },
   });
 
   const legalItems: { label: string; value?: string }[] = [
@@ -173,10 +196,10 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               <Text style={styles.cardLabel}>Destinataire</Text>
               <Text style={styles.clientName}>{data.clientName}</Text>
               {data.clientAddress !== "" && <Text style={styles.plainLine}>{data.clientAddress}</Text>}
-              {data.clientRc !== "" && <Text style={styles.plainLine}>RC {data.clientRc}</Text>}
-              {data.clientNif !== "" && <Text style={styles.plainLine}>NIF {data.clientNif}</Text>}
-              {data.clientAi !== "" && <Text style={styles.plainLine}>AI {data.clientAi}</Text>}
-              {data.clientNis !== "" && <Text style={styles.plainLine}>NIS {data.clientNis}</Text>}
+              {data.clientRc !== "" && <Text style={styles.fiscalLine}>RC {data.clientRc}</Text>}
+              {data.clientNif !== "" && <Text style={styles.fiscalLine}>NIF {data.clientNif}</Text>}
+              {data.clientAi !== "" && <Text style={styles.fiscalLine}>AI {data.clientAi}</Text>}
+              {data.clientNis !== "" && <Text style={styles.fiscalLine}>NIS {data.clientNis}</Text>}
               {data.clientActivite !== "" && <Text style={styles.plainLine}>{data.clientActivite}</Text>}
               {data.clientContact !== "" && <Text style={styles.plainLine}>{data.clientContact}</Text>}
             </View>
@@ -184,7 +207,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             <View style={styles.card}>
               <Text style={styles.cardLabel}>Détails du document</Text>
               <View style={styles.metaRow}>
-                <Text style={styles.metaRowLabel}>Date</Text>
+                <Text style={styles.metaRowLabel}>Date d'émission</Text>
                 <Text style={styles.metaRowValue}>{invoice.invoice_date || "-"}</Text>
               </View>
               <View style={styles.metaRow}>
@@ -193,7 +216,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               </View>
               {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaRowLabel}>Paiement</Text>
+                  <Text style={styles.metaRowLabel}>Mode de paiement</Text>
                   <Text style={styles.metaRowValue}>{invoice.payment_method || "Chèque"}</Text>
                 </View>
               )}
@@ -207,11 +230,11 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
 
           <View style={styles.tableWrap}>
             <View style={styles.tableHeaderRow}>
-              <Text style={[styles.tableHeaderCell, styles.colDesignation]}>Désignation</Text>
-              <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U</Text>
+              <Text style={[styles.tableHeaderCell, styles.colDesignation]}>Désignation / Prestation</Text>
+              <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U (HT)</Text>
               <Text style={[styles.tableHeaderCell, styles.colQty]}>Qté</Text>
-              <Text style={[styles.tableHeaderCell, styles.colUnit]}>U/M</Text>
-              <Text style={[styles.tableHeaderCell, styles.colAmount]}>Montant</Text>
+              <Text style={[styles.tableHeaderCell, styles.colUnit]}>U.M</Text>
+              <Text style={[styles.tableHeaderCell, styles.colAmount]}>Total HT</Text>
             </View>
 
             {data.items.map((item, idx) => {
@@ -226,8 +249,8 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                   <Text style={[styles.itemName, styles.colDesignation]}>{name}</Text>
                   <Text style={[styles.cellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>
                   <Text style={[styles.cellText, styles.colQty]}>{formattedQty}</Text>
-                  <Text style={[styles.cellText, styles.colUnit]}>{unit}</Text>
-                  <Text style={[styles.cellText, styles.colAmount]}>{formatCurrency(itemAmount)}</Text>
+                  <Text style={[styles.cellUnit, styles.colUnit]}>{unit}</Text>
+                  <Text style={[styles.cellText, styles.colAmount, { fontWeight: 'bold', color: '#111827' }]}>{formatCurrency(itemAmount)}</Text>
                 </View>
               );
             })}
@@ -241,13 +264,13 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               </View>
               {flags.showTva && (
                 <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>Total TVA</Text>
+                  <Text style={styles.totalsLabel}>TVA (19%)</Text>
                   <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
                 </View>
               )}
               {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
                 <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>Droit de Timbre</Text>
+                  <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
                   <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
                 </View>
               )}
@@ -261,6 +284,11 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                 <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
                 <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
               </View>
+              {flags.taxExemptionLegend && (
+                <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
+                  {flags.taxExemptionLegend}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -271,16 +299,33 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             </View>
           )}
 
-          <View style={styles.signRow}>
-            {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote ? (
-              <View style={styles.paymentBadge}>
-                <Text style={styles.paymentText}>{invoice.payment_method || "Chèque"}</Text>
-              </View>
-            ) : <View />}
+          {/* Mode de paiement now lives in the "Détails du document" card
+              above alongside Date/Numéro — this row just anchors the
+              signature block to the right. */}
+          <View style={[styles.signRow, { justifyContent: 'flex-end' }]}>
             <View style={styles.signBox}>
-              {settings?.stamp_data && <Image src={settings.stamp_data} style={styles.stampImage} />}
-              <View style={styles.signLine} />
-              <Text style={styles.signLabel}>Cachet et signature</Text>
+              {(settings?.stamp_data || settings?.signature_data) && (
+                <>
+                  <Text style={styles.signLabel}>Cachet et signature</Text>
+                  <View style={styles.signLine} />
+                </>
+              )}
+              <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 28, 220), Math.min(settings?.signature_size || 36, 220), 28) + 20 }]}>
+                {!settings?.stamp_data && !settings?.signature_data ? (
+                  <View style={styles.signatureBoxEmpty}>
+                    <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
+                  </View>
+                ) : (
+                  <>
+                    {settings?.stamp_data && (
+                      <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 28, 220) }]} />
+                    )}
+                    {settings?.signature_data && (
+                      <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 36, 220) }]} />
+                    )}
+                  </>
+                )}
+              </View>
             </View>
           </View>
         </View>
@@ -305,7 +350,6 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               {phones.map((p, i) => (
                 <Text key={i} style={styles.footerContactText}>{formatPhone(p)}</Text>
               ))}
-              {settings?.qr_code_data && <Image src={settings.qr_code_data} style={styles.qrImage} />}
             </View>
           </View>
         </View>

@@ -12,7 +12,16 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
-  ({ className, ...props }, ref) => <thead ref={ref} className={cn("[&_tr]:border-b border-border/50", className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <thead
+      ref={ref}
+      // sticky + backdrop-blur is inert (harmless) unless a caller wraps
+      // Table in its own scrollable max-height container — where it now
+      // stays pinned with a translucent, blurred backdrop over scrolled rows.
+      className={cn("[&_tr]:border-b border-border/40 sticky top-0 z-10 backdrop-blur-sm bg-background/80", className)}
+      {...props}
+    />
+  ),
 );
 TableHeader.displayName = "TableHeader";
 
@@ -30,23 +39,46 @@ const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
 );
 TableFooter.displayName = "TableFooter";
 
-const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
-  ({ className, ...props }, ref) => (
-    <tr
-      ref={ref}
-      className={cn("border-b border-border/30 transition-colors duration-150 data-[state=selected]:bg-muted hover:bg-muted/50", className)}
-      {...props}
-    />
-  ),
-);
+const TableRow = React.forwardRef<
+  HTMLTableRowElement,
+  React.HTMLAttributes<HTMLTableRowElement> & {
+    /** Archived/cancelled/void rows — visually recedes without hiding the
+     *  row or needing every table to hand-roll the same two classes. */
+    dimmed?: boolean;
+  }
+>(({ className, dimmed, ...props }, ref) => (
+  <tr
+    ref={ref}
+    // `group` is inert on its own (just a hover/focus scope marker for
+    // descendants using group-hover:/group-focus-within:) — lets a row's
+    // trailing quick-actions stay hidden until the row is hovered without
+    // every table having to remember to add it.
+    className={cn(
+      "group border-b border-border/30 transition-colors duration-200 data-[state=selected]:bg-muted hover:bg-muted/30",
+      dimmed && "opacity-60 saturate-50",
+      className
+    )}
+    {...props}
+  />
+));
 TableRow.displayName = "TableRow";
 
-const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
-  ({ className, ...props }, ref) => (
+interface NumericCellProps {
+  /** Right-aligns and switches to the tabular/mono figure treatment — the
+   *  one place a column's "this holds numbers" intent is declared, instead
+   *  of every table hand-repeating `text-right font-mono tabular-nums`. */
+  numeric?: boolean;
+}
+
+const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement> & NumericCellProps>(
+  ({ className, numeric, ...props }, ref) => (
     <th
       ref={ref}
       className={cn(
-        "h-14 px-5 text-left align-middle font-medium text-muted-foreground text-xs uppercase tracking-wider [&:has([role=checkbox])]:pr-0",
+        // Compact, high-density row height (was h-14) with a crisp
+        // uppercase micro-label — the Binance/Linear dense-table look.
+        "h-11 px-5 text-left align-middle font-semibold text-muted-foreground text-[10px] uppercase tracking-wider [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right",
         className,
       )}
       {...props}
@@ -55,9 +87,17 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
 );
 TableHead.displayName = "TableHead";
 
-const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
-  ({ className, ...props }, ref) => (
-    <td ref={ref} className={cn("px-5 py-4 align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />
+const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement> & NumericCellProps>(
+  ({ className, numeric, ...props }, ref) => (
+    <td
+      ref={ref}
+      className={cn(
+        "px-5 py-3 align-middle [&:has([role=checkbox])]:pr-0",
+        numeric && "text-right font-mono tabular-nums tracking-tight",
+        className
+      )}
+      {...props}
+    />
   ),
 );
 TableCell.displayName = "TableCell";

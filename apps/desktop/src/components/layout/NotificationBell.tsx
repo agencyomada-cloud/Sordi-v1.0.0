@@ -53,7 +53,7 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
-        <button className="group relative w-10 h-10 rounded-[6px] bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all duration-200 active:scale-[0.96] border border-border/30">
+        <button className="group relative w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all duration-200 active:scale-[0.96] border border-border/30">
           <RiNotification3Line className="w-4 h-4 text-foreground transition-transform duration-200 group-hover:rotate-12 group-hover:scale-110" />
           {unreadCount > 0 && (
             <span className="absolute top-2 right-2 flex h-2 w-2">
@@ -66,7 +66,7 @@ export function NotificationBell() {
       <DropdownMenuContent
         align="end"
         sideOffset={8}
-        className="w-80 sm:w-96 rounded-[8px] border border-border/60 bg-card text-card-foreground shadow-elevated p-0 overflow-hidden z-50 animate-in fade-in-0 zoom-in-95 duration-150"
+        className="w-80 sm:w-96 rounded-2xl border border-border/60 bg-card text-card-foreground shadow-elevated p-0 overflow-hidden z-50 animate-in fade-in-0 zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-3.5 px-4 border-b border-border/40 bg-muted/30">
@@ -108,12 +108,12 @@ export function NotificationBell() {
                   key={log.id}
                   onClick={() => handleSelect(log.entity_type, log.entity_id)}
                   className={cn(
-                    "w-full flex items-start gap-3 p-3 rounded-[6px] text-left transition-colors",
+                    "w-full flex items-start gap-3 p-3 rounded-xl text-left transition-colors",
                     isUnread ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/50"
                   )}
                 >
                   <div className="relative shrink-0 mt-0.5">
-                    <div className="w-8 h-8 rounded-[6px] bg-secondary flex items-center justify-center text-muted-foreground [&_svg]:w-4 [&_svg]:h-4">
+                    <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground [&_svg]:w-4 [&_svg]:h-4">
                       {config.icon}
                     </div>
                     {isUnread && (
@@ -128,7 +128,7 @@ export function NotificationBell() {
                       {log.description}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className={cn("text-[10px] font-medium px-1.5 py-0.2 rounded-[3px]", config.color)}>
+                      <span className={cn("text-[10px] font-medium px-1.5 py-0.2 rounded-full", config.color)}>
                         {config.label}
                       </span>
                       <span className="text-[10px] text-muted-foreground/70">
@@ -150,7 +150,7 @@ export function NotificationBell() {
               setOpen(false);
               navigate("/history");
             }}
-            className="w-full py-1.5 rounded-[4px] text-xs font-medium text-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors flex items-center justify-center gap-1"
+            className="w-full py-1.5 rounded-full text-xs font-medium text-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors flex items-center justify-center gap-1"
           >
             <span>Voir tout l'historique d'activité</span>
             <RiArrowRightSLine className="w-3.5 h-3.5" />

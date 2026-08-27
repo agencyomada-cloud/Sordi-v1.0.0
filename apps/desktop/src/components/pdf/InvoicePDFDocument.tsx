@@ -42,6 +42,18 @@ Font.register({
     { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
   ]
 });
+// Fixed monospace face for all numeric/fiscal data (unit prices, quantities,
+// VAT, dates, invoice IDs, RC/NIF/AI/NIS) — not user-selectable like the
+// four body fonts above, always JetBrains Mono per the Swiss-minimalist
+// numeric-scale spec.
+Font.register({
+  family: 'JetBrains Mono',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
+  ]
+});
 
 export type { PDFInvoiceItem, PDFInvoice, PDFClient, PDFSettings } from './invoicePdfShared';
 
@@ -133,16 +145,6 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    headerBottomLine: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 1.28,
-      backgroundColor: primaryColor,
-      zIndex: 1,
-    },
-
     main: {
       position: 'absolute',
       left: 0,
@@ -166,11 +168,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       marginBottom: 14,
     },
     titleText: {
-      fontSize: 15,
+      fontSize: 13,
       fontFamily, fontWeight: 'bold',
       color: '#1f2937',
       textTransform: 'uppercase',
-      letterSpacing: 1.5,
+      letterSpacing: -0.3,
     },
 
     clientMetaGrid: {
@@ -181,10 +183,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     clientBox: { width: '55%' },
     clientHeaderLabel: {
-      fontSize: 9,
+      fontSize: 7.5,
       fontFamily, fontWeight: 'bold',
-      color: '#6b7280',
+      color: '#9ca3af',
       textTransform: 'uppercase',
+      letterSpacing: 0.8,
       marginBottom: 2,
     },
     clientName: {
@@ -202,106 +205,123 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       marginBottom: 3,
     },
     clientDetailRow: {
-      fontSize: 9,
-      color: '#374151',
+      fontFamily: 'JetBrains Mono',
+      fontSize: 8.5,
+      color: '#6b7280',
       textTransform: 'uppercase',
-      marginBottom: 1,
+      marginBottom: 1.5,
+      lineHeight: 1.4,
     },
-    clientDetailBold: { fontFamily, fontWeight: 'bold' },
+    clientDetailBold: { fontFamily, fontWeight: 'bold', color: '#374151' },
     metaBox: { width: '35%', paddingTop: 2 },
-    metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    metaLabel: { fontFamily, fontWeight: 'bold', fontSize: 9, color: '#000000', marginRight: 6 },
-    metaValue: { fontSize: 9, color: '#000000' },
+    metaRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+      paddingBottom: 2,
+      borderBottomWidth: 0.5,
+      borderBottomColor: '#f3f4f6',
+    },
+    metaLabel: { fontFamily, fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
+    metaValue: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#000000' },
     avoirNotice: {
       marginTop: 4,
       fontSize: 8,
       fontFamily, fontWeight: 'bold',
-      color: '#374151',
+      color: '#6b7280',
       textAlign: 'right',
     },
 
     tableContainer: {
       width: '100%',
-      borderWidth: 1,
-      borderColor: '#9ca3af',
       marginBottom: 16,
     },
     tableHeaderRow: {
       flexDirection: 'row',
-      backgroundColor: primaryColor,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(0,0,0,0.15)',
       borderBottomWidth: 1,
-      borderBottomColor: '#9ca3af',
+      borderBottomColor: 'rgba(0,0,0,0.15)',
       alignItems: 'center',
     },
     tableHeaderCell: {
-      fontFamily, fontWeight: 'bold',
-      fontSize: 9.5,
-      color: '#ffffff',
+      fontFamily,
+      fontSize: 7.5,
+      color: '#9ca3af',
       textTransform: 'uppercase',
+      letterSpacing: 0.5,
       paddingVertical: 6,
-      paddingHorizontal: 6,
-      borderRightWidth: 1,
-      borderRightColor: 'rgba(255,255,255,0.3)',
+      paddingHorizontal: 4,
     },
     tableRow: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
-      borderBottomColor: '#9ca3af',
-      alignItems: 'center',
+      borderBottomWidth: 0.5,
+      borderBottomColor: 'rgba(0,0,0,0.08)',
+      alignItems: 'flex-start',
       minHeight: 22,
     },
-    colDesignation: { width: '45%' },
+    colDesignation: { width: '42%' },
     colPrice: { width: '15%', textAlign: 'right' },
-    colQty: { width: '15%', textAlign: 'right' },
-    colUnit: { width: '10%', textAlign: 'center' },
-    colAmount: { width: '15%', textAlign: 'right', borderRightWidth: 0 },
+    colQty: { width: '9%', textAlign: 'right' },
+    colUnit: { width: '16%', textAlign: 'center' },
+    colAmount: { width: '18%', textAlign: 'right' },
     tableCellText: {
       fontSize: 9,
       color: '#000000',
-      paddingVertical: 5,
-      paddingHorizontal: 6,
-      borderRightWidth: 1,
-      borderRightColor: '#9ca3af',
+      paddingVertical: 6,
+      paddingHorizontal: 4,
     },
 
     totalsRightContainer: { alignItems: 'flex-end', marginBottom: 14 },
-    totalsBox: { width: '42%', borderWidth: 1, borderColor: '#000000' },
+    totalsBox: { width: '42%' },
     totalsRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       paddingVertical: 4,
-      paddingHorizontal: 6,
-      borderBottomWidth: 1,
-      borderBottomColor: '#000000',
     },
-    totalsLabel: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000' },
-    totalsValueText: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
+    totalsLabel: { fontSize: 8, fontFamily, color: '#6b7280' },
+    totalsValueText: { fontFamily: 'JetBrains Mono', fontSize: 8, color: '#000000', textAlign: 'right' },
     ttcRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      backgroundColor: '#f9fafb',
-      paddingVertical: 4,
-      paddingHorizontal: 6,
+      alignItems: 'flex-end',
+      paddingTop: 8,
+      marginTop: 3,
+      borderTopWidth: 1,
+      borderTopColor: '#000000',
     },
-    ttcLabel: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000' },
-    ttcValueText: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
+    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#000000' },
+    ttcValueText: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
 
     bottomBlock: { marginBottom: 12 },
-    wordsTitle: { fontSize: 8, fontFamily, color: '#1f2937', textTransform: 'uppercase', marginBottom: 2 },
+    wordsTitle: { fontSize: 7.5, fontFamily, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
     wordsValue: {
       fontSize: 8.5,
       fontFamily, fontWeight: 'bold',
       color: '#000000',
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      letterSpacing: 0.3,
       lineHeight: 1.3,
       marginBottom: 10,
     },
     signatureRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    paymentMethodText: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000' },
-    signatureBox: { alignItems: 'center', marginRight: 20 },
-    signatureTitle: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
-    stampImage: { maxHeight: 65, maxWidth: 140, objectFit: 'contain', marginTop: 2 },
+    // The signature is signed directly on top of the stamp, like a real
+    // paper document — both images are absolutely centered in a fixed-size
+    // box instead of stacked in a column.
+    signatureBox: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 20,
+      minWidth: 130,
+      paddingHorizontal: 12,
+      position: 'relative',
+    },
+    signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
+    signatureBoxLabel: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
+    signatureBoxPlaceholder: { fontSize: 7, fontFamily, color: '#9ca3af', textTransform: 'uppercase' },
+    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 140, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
+    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 140, objectFit: 'contain' },
 
     footer: {
       position: 'absolute',
@@ -335,11 +355,15 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     ribText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.3 },
 
     contactCol: { flex: 1, flexDirection: 'row', position: 'relative', height: '100%' },
-    contactLeftBox: { width: 56.7, justifyContent: 'flex-end', height: '100%', position: 'relative' },
+    // Sized to the footer logo's own footprint now that the QR box (which
+    // previously drove this width) is gone — the logo is still absolutely
+    // positioned so it renders regardless of this width, but this keeps
+    // contactRightBox's start point clear of the logo instead of a leftover
+    // QR-sized gap.
+    contactLeftBox: { width: 121.9, height: '100%', position: 'relative' },
     footerLogoBox: { position: 'absolute', top: 0, left: 0, height: 22.7, width: 121.9, justifyContent: 'center' },
     footerLogoText: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000', textTransform: 'uppercase' },
     sordiWatermark: { position: 'absolute', bottom: 1, left: 0, right: 0, textAlign: 'center', fontSize: 5.5, color: '#9ca3af' },
-    qrBox: { width: 51, height: 51, alignItems: 'center', justifyContent: 'center', marginTop: 13 },
     contactRightBox: { marginLeft: 7.1, flex: 1, justifyContent: 'flex-end', height: '100%' },
     contactEmailText: { fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000', lineHeight: 1.65 },
     contactDetailText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.65 },
@@ -360,7 +384,6 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               <Text style={styles.companyNameText}>{settings.company_name}</Text>
             </View>
           )}
-          <View style={styles.headerBottomLine} />
         </View>
 
         <View style={styles.main}>
@@ -402,15 +425,21 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
               <View style={styles.metaBox}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Date:</Text>
+                  <Text style={styles.metaLabel}>Date d'émission</Text>
                   <Text style={styles.metaValue}>{invoice.invoice_date || "-"}</Text>
                 </View>
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Numéro:</Text>
-                  <Text style={[styles.metaValue, { fontFamily, fontWeight: 'bold', textTransform: 'uppercase' }]}>
+                  <Text style={styles.metaLabel}>Numéro</Text>
+                  <Text style={[styles.metaValue, { fontWeight: 'bold', textTransform: 'uppercase' }]}>
                     {data.docNumber || "-"}
                   </Text>
                 </View>
+                {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
+                  <View style={[styles.metaRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.metaLabel}>Mode de paiement</Text>
+                    <Text style={[styles.metaValue, { textTransform: 'uppercase' }]}>{invoice.payment_method || "Chèque"}</Text>
+                  </View>
+                )}
                 {data.isCreditNote && (invoice.original_invoice_id || invoice.original_invoice?.invoice_number) && (
                   <Text style={styles.avoirNotice}>
                     Avoir relatif à la facture N° {invoice.original_invoice?.invoice_number || invoice.original_invoice_id}
@@ -421,11 +450,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
             <View style={styles.tableContainer}>
               <View style={styles.tableHeaderRow}>
-                <Text style={[styles.tableHeaderCell, styles.colDesignation, { textAlign: 'center' }]}>Désignation</Text>
-                <Text style={[styles.tableHeaderCell, styles.colPrice, { textAlign: 'right' }]}>P.U</Text>
-                <Text style={[styles.tableHeaderCell, styles.colQty, { textAlign: 'right' }]}>Quantité</Text>
-                <Text style={[styles.tableHeaderCell, styles.colUnit, { textAlign: 'center' }]}>U/M</Text>
-                <Text style={[styles.tableHeaderCell, styles.colAmount, { textAlign: 'right' }]}>Montant</Text>
+                <Text style={[styles.tableHeaderCell, styles.colDesignation, { textAlign: 'left' }]}>Désignation / Prestation</Text>
+                <Text style={[styles.tableHeaderCell, styles.colPrice, { textAlign: 'right' }]}>P.U (HT)</Text>
+                <Text style={[styles.tableHeaderCell, styles.colQty, { textAlign: 'right' }]}>Qté</Text>
+                <Text style={[styles.tableHeaderCell, styles.colUnit, { textAlign: 'center' }]}>U.M</Text>
+                <Text style={[styles.tableHeaderCell, styles.colAmount, { textAlign: 'right' }]}>Total HT</Text>
               </View>
 
               {data.items.map((item, idx) => {
@@ -440,10 +469,10 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                     <View style={[styles.tableCellText, styles.colDesignation]}>
                       <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', textTransform: 'uppercase', color: '#000000' }}>{name}</Text>
                     </View>
-                    <Text style={[styles.tableCellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>
-                    <Text style={[styles.tableCellText, styles.colQty]}>{formattedQty}</Text>
-                    <Text style={[styles.tableCellText, styles.colUnit, { fontFamily, fontWeight: 'bold', textTransform: 'uppercase' }]}>{unit}</Text>
-                    <Text style={[styles.tableCellText, styles.colAmount]}>{formatCurrency(itemAmount)}</Text>
+                    <Text style={[styles.tableCellText, styles.colPrice, { fontFamily: 'JetBrains Mono' }]}>{formatCurrency(item.unit_price)}</Text>
+                    <Text style={[styles.tableCellText, styles.colQty, { fontFamily: 'JetBrains Mono' }]}>{formattedQty}</Text>
+                    <Text style={[styles.tableCellText, styles.colUnit, { color: '#6b7280', fontSize: 8, textTransform: 'uppercase' }]}>{unit}</Text>
+                    <Text style={[styles.tableCellText, styles.colAmount, { fontFamily: 'JetBrains Mono', fontWeight: 'bold' }]}>{formatCurrency(itemAmount)}</Text>
                   </View>
                 );
               })}
@@ -457,13 +486,13 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 </View>
                 {flags.showTva && (
                   <View style={styles.totalsRow}>
-                    <Text style={styles.totalsLabel}>Total TVA</Text>
+                    <Text style={styles.totalsLabel}>TVA (19%)</Text>
                     <Text style={styles.totalsValueText}>{formatCurrency(invoice.tva_amount || 0)}</Text>
                   </View>
                 )}
                 {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
                   <View style={styles.totalsRow}>
-                    <Text style={styles.totalsLabel}>Droit de Timbre</Text>
+                    <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
                     <Text style={styles.totalsValueText}>{formatCurrency(invoice.timbre || 0)}</Text>
                   </View>
                 )}
@@ -478,27 +507,45 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                   <Text style={styles.ttcValueText}>{formatCurrency(invoice.total_ttc || 0)}</Text>
                 </View>
               </View>
+              {flags.taxExemptionLegend && (
+                <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right', maxWidth: 220 }}>
+                  {flags.taxExemptionLegend}
+                </Text>
+              )}
             </View>
 
             <View style={styles.bottomBlock}>
               {flags.showMontantEnLettres && (
                 <>
-                  <Text style={styles.wordsTitle}>ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :</Text>
+                  <Text style={styles.wordsTitle}>Arrêté la présente facture à la somme de</Text>
                   <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
                 </>
               )}
 
-              <View style={styles.signatureRow}>
-                {!flags.showPaymentMethod ? (
-                  <View />
-                ) : !data.isProforma && !data.isCreditNote ? (
-                  <Text style={styles.paymentMethodText}>
-                    Mode de paiement: <Text style={{ fontFamily, textTransform: 'uppercase' }}>{invoice.payment_method || "Chèque"}</Text>
-                  </Text>
-                ) : null}
-                <View style={styles.signatureBox}>
-                  <Text style={styles.signatureTitle}>Cachet et Signature</Text>
-                  {settings?.stamp_data && <Image src={settings.stamp_data} style={styles.stampImage} />}
+              {/* Mode de paiement now lives in the top metadata block
+                  alongside Date/Numéro — this row just anchors the
+                  signature block to the right, same as the DOM versions. */}
+              <View style={[styles.signatureRow, { justifyContent: 'flex-end' }]}>
+                <View>
+                  {(settings?.stamp_data || settings?.signature_data) && (
+                    <Text style={[styles.signatureBoxLabel, { textAlign: 'center' }]}>Cachet et Signature</Text>
+                  )}
+                  <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 32, 220), Math.min(settings?.signature_size || 40, 220), 32) + 24 }]}>
+                    {!settings?.stamp_data && !settings?.signature_data ? (
+                      <View style={styles.signatureBoxEmpty}>
+                        <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
+                      </View>
+                    ) : (
+                      <>
+                        {settings?.stamp_data && (
+                          <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 32, 220) }]} />
+                        )}
+                        {settings?.signature_data && (
+                          <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 40, 220) }]} />
+                        )}
+                      </>
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
@@ -568,11 +615,6 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                     ) : (
                       <Text style={styles.footerLogoText}>{settings?.company_name}</Text>
                     )}
-                  </View>
-                )}
-                {settings?.qr_code_data && (
-                  <View style={styles.qrBox}>
-                    <Image src={settings.qr_code_data} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                   </View>
                 )}
               </View>

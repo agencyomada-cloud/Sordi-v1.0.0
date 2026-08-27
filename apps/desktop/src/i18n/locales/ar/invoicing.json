@@ -1,0 +1,37 @@
+{
+  "documents": {
+    "invoice": "فاتورة",
+    "proforma": "عرض أسعار",
+    "deliveryNote": "وصل تسليم",
+    "creditNote": "فاتورة دائنة",
+    "order": "طلبية",
+    "payment": "دفعة"
+  },
+  "fields": {
+    "documentNumber": "الرقم",
+    "issueDate": "تاريخ الإصدار",
+    "dueDate": "تاريخ الاستحقاق",
+    "client": "العميل",
+    "subtotalHt": "المجموع الفرعي (خارج الرسوم)",
+    "amountHt": "المبلغ الصافي (خارج الرسوم)",
+    "amountTtc": "المبلغ الإجمالي (شامل الرسوم)",
+    "vat": "الرسم على القيمة المضافة",
+    "vatAmount": "مبلغ الرسم على القيمة المضافة",
+    "fiscalStamp": "حق الطابع",
+    "discount": "الحسم",
+    "totalDue": "المبلغ الإجمالي المستحق",
+    "amountPaid": "المبلغ المدفوع",
+    "balanceDue": "الرصيد المتبقي",
+    "paymentMethod": "طريقة الدفع",
+    "reference": "المرجع",
+    "notes": "ملاحظات"
+  },
+  "status": {
+    "draft": "مسودة",
+    "issued": "صادرة",
+    "paid": "مدفوعة",
+    "partial": "مدفوعة جزئياً",
+    "overdue": "متأخرة",
+    "cancelled": "ملغاة"
+  }
+}

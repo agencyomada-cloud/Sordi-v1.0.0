@@ -35,6 +35,8 @@ export interface PDFInvoice {
   id?: string;
   invoice_number: string;
   invoice_date: string;
+  /** "standard" | "exempt" | "ttc_direct" — see InvoiceTaxMode in lib/database.ts. Hides the TVA row and prints the exemption legend when "exempt". */
+  tax_mode?: string;
   month_period?: string;
   due_date?: string;
   subtotal_ht: number;
@@ -94,9 +96,10 @@ export interface PDFSettings {
   company_bank_agency?: string;
   logo_data?: string;
   footer_logo_data?: string;
-  qr_code_data?: string;
   stamp_data?: string;
   stamp_size?: number;
+  signature_data?: string;
+  signature_size?: number;
   primary_color?: string;
   body_pattern_data?: string;
   /** Not a company setting — whether the generating device has an active Sordi license. Drives the "Created by Sordi" watermark. */
@@ -138,6 +141,7 @@ export interface ResolvedInvoiceData {
   isProforma: boolean;
   isDelivery: boolean;
   isOrder: boolean;
+  isTaxExempt: boolean;
   clientName: string;
   clientAddress: string;
   clientRc: string;
@@ -186,6 +190,7 @@ export function resolveInvoiceData(invoice: PDFInvoice): ResolvedInvoiceData {
     isProforma,
     isDelivery,
     isOrder,
+    isTaxExempt: invoice.tax_mode === 'exempt',
     clientName: invoice.clients?.name || invoice.client_name || "",
     clientAddress,
     clientRc,
@@ -207,6 +212,9 @@ export interface DocumentSectionFlags {
   /** "Total TTC"/"Net à déduire" implies tax is baked in — misleading once
    *  the TVA line is hidden, so order/delivery get a plain "Total" label. */
   grandTotalLabel: string;
+  /** Set only when the invoice was created in "exempt" tax mode — the legal
+   *  legend to print in place of the (hidden) TVA breakdown row. */
+  taxExemptionLegend: string | null;
 }
 
 /**
@@ -214,15 +222,21 @@ export interface DocumentSectionFlags {
  * Orders and delivery notes are internal operational documents, not tax
  * instruments — TVA breakdown, droit de timbre, and "montant en lettres"
  * are Algerian invoice-specific legal requirements that don't apply to them.
+ * Separately, an invoice explicitly marked "Hors Taxe / Sans TVA" also
+ * hides the TVA row (Total HT and Total TTC are identical there — nothing
+ * to break down) and prints the exemption legend instead.
  */
-export function getDocumentSectionFlags(data: Pick<ResolvedInvoiceData, 'isDelivery' | 'isOrder' | 'isCreditNote'>): DocumentSectionFlags {
+export function getDocumentSectionFlags(data: Pick<ResolvedInvoiceData, 'isDelivery' | 'isOrder' | 'isCreditNote' | 'isTaxExempt'>): DocumentSectionFlags {
   const isOrderOrDelivery = data.isDelivery || data.isOrder;
   return {
-    showTva: !isOrderOrDelivery,
+    showTva: !isOrderOrDelivery && !data.isTaxExempt,
     showTimbre: !isOrderOrDelivery,
     showMontantEnLettres: !isOrderOrDelivery,
     showPaymentMethod: !isOrderOrDelivery,
     grandTotalLabel: data.isCreditNote ? "Net à déduire" : isOrderOrDelivery ? "Total" : "Total TTC",
+    taxExemptionLegend: (!isOrderOrDelivery && data.isTaxExempt)
+      ? "Régime d'exonération / Facturation sans TVA — Montant Net à Payer HT - TVA non applicable"
+      : null,
   };
 }
 

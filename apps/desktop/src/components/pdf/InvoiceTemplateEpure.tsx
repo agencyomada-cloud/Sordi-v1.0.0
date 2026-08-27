@@ -42,6 +42,17 @@ Font.register({
     { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
   ]
 });
+// Fixed monospace face for all numeric/fiscal data — not user-selectable
+// like the four body fonts above, always JetBrains Mono per the
+// Swiss-minimalist numeric-scale spec.
+Font.register({
+  family: 'JetBrains Mono',
+  fonts: [
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
+    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
+  ]
+});
 
 interface InvoiceTemplateEpureProps {
   invoice: PDFInvoice;
@@ -71,23 +82,22 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
       backgroundColor: '#ffffff',
     },
 
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
     logoImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
     companyName: { fontSize: 12, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#111111' },
     headerRight: { alignItems: 'flex-end' },
-    docTitle: { fontSize: 18, fontFamily, fontWeight: 'bold', letterSpacing: 2, color: '#111111', textTransform: 'uppercase' },
-    docNumber: { fontSize: 9, color: '#6b7280', marginTop: 3 },
-
-    accentRule: { height: 1.5, backgroundColor: accent, marginBottom: 24 },
+    docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', letterSpacing: -0.3, color: '#111111', textTransform: 'uppercase' },
+    docNumber: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#9ca3af', marginTop: 5 },
 
     metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 },
     metaBlock: { width: '46%' },
-    metaLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
+    metaLabel: { fontFamily, fontWeight: 'bold', fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
     clientName: { fontSize: 11, fontFamily, fontWeight: 'bold', color: '#111111', textTransform: 'uppercase', marginBottom: 2 },
     plainLine: { fontSize: 8.5, color: '#374151', marginBottom: 1.5, lineHeight: 1.3 },
+    fiscalLine: { fontFamily: 'JetBrains Mono', fontSize: 8, color: '#6b7280', marginBottom: 1.5, lineHeight: 1.4 },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
     metaRowLabel: { fontSize: 8.5, color: '#6b7280' },
-    metaRowValue: { fontSize: 8.5, fontFamily, fontWeight: 'bold', color: '#111111' },
+    metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111111' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 4, textAlign: 'right' },
 
     table: { marginBottom: 22 },
@@ -95,27 +105,28 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
       flexDirection: 'row',
       borderTopWidth: 1,
       borderBottomWidth: 1,
-      borderColor: '#111111',
+      borderColor: 'rgba(0,0,0,0.15)',
       paddingVertical: 6,
     },
-    tableHeaderCell: { fontSize: 7.5, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 },
-    tableRow: { flexDirection: 'row', borderBottomWidth: 0.75, borderColor: '#e5e7eb', paddingVertical: 8, alignItems: 'center' },
-    colDesignation: { width: '46%' },
+    tableHeaderCell: { fontFamily, fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6 },
+    tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', paddingVertical: 8, alignItems: 'flex-start' },
+    colDesignation: { width: '42%' },
     colPrice: { width: '15%', textAlign: 'right' },
-    colQty: { width: '13%', textAlign: 'right' },
-    colUnit: { width: '11%', textAlign: 'center' },
-    colAmount: { width: '15%', textAlign: 'right' },
+    colQty: { width: '9%', textAlign: 'right' },
+    colUnit: { width: '16%', textAlign: 'center' },
+    colAmount: { width: '18%', textAlign: 'right' },
     itemName: { fontSize: 9, color: '#111111' },
-    cellText: { fontSize: 9, color: '#111111' },
+    cellText: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#111111' },
+    cellUnit: { fontFamily, fontSize: 8, color: '#9ca3af', textTransform: 'uppercase' },
 
     totalsContainer: { alignItems: 'flex-end', marginBottom: 24 },
     totalsBox: { width: '46%' },
     totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
     totalsLabel: { fontSize: 8.5, color: '#6b7280' },
-    totalsValue: { fontSize: 8.5, color: '#111111' },
-    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderColor: '#111111' },
+    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111111' },
+    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderColor: '#111111' },
     ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#111111' },
-    ttcValue: { fontSize: 12, fontFamily, fontWeight: 'bold', color: accent },
+    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: accent },
 
     wordsBlock: { marginBottom: 26 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 },
@@ -124,9 +135,22 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 },
     paymentText: { fontSize: 8.5, color: '#374151' },
     signBox: { alignItems: 'center', width: 140 },
-    signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 30, marginBottom: 4 },
+    // The signature is signed directly on top of the stamp, like a real
+    // paper document — both images are absolutely centered in a fixed-size
+    // box instead of stacked in a column.
+    signatureBox: {
+      minWidth: 130,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+      position: 'relative',
+    },
+    signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
+    signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
+    signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-    stampImage: { maxHeight: 55, maxWidth: 120, objectFit: 'contain', position: 'absolute', top: -10 },
+    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
+    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain' },
 
     footer: { position: 'absolute', left: 42, right: 42, bottom: 32, paddingTop: 10, borderTopWidth: 0.75, borderColor: '#e5e7eb' },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -135,8 +159,8 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     footerItemStrong: { fontFamily, fontWeight: 'bold', color: '#374151' },
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
+
     sordiWatermark: { position: 'absolute', left: 42, right: 42, bottom: 8, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
-    qrImage: { width: 34, height: 34, marginTop: 4 },
   });
 
   const legalItems: { label: string; value?: string }[] = [
@@ -164,17 +188,16 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
             <Text style={styles.docNumber}>N° {data.docNumber} · {invoice.invoice_date || "-"}</Text>
           </View>
         </View>
-        <View style={styles.accentRule} />
 
         <View style={styles.metaGrid}>
           <View style={styles.metaBlock}>
             <Text style={styles.metaLabel}>Destinataire</Text>
             <Text style={styles.clientName}>{data.clientName}</Text>
             {data.clientAddress !== "" && <Text style={styles.plainLine}>{data.clientAddress}</Text>}
-            {data.clientRc !== "" && <Text style={styles.plainLine}>RC {data.clientRc}</Text>}
-            {data.clientNif !== "" && <Text style={styles.plainLine}>NIF {data.clientNif}</Text>}
-            {data.clientAi !== "" && <Text style={styles.plainLine}>AI {data.clientAi}</Text>}
-            {data.clientNis !== "" && <Text style={styles.plainLine}>NIS {data.clientNis}</Text>}
+            {data.clientRc !== "" && <Text style={styles.fiscalLine}>RC {data.clientRc}</Text>}
+            {data.clientNif !== "" && <Text style={styles.fiscalLine}>NIF {data.clientNif}</Text>}
+            {data.clientAi !== "" && <Text style={styles.fiscalLine}>AI {data.clientAi}</Text>}
+            {data.clientNis !== "" && <Text style={styles.fiscalLine}>NIS {data.clientNis}</Text>}
             {data.clientActivite !== "" && <Text style={styles.plainLine}>{data.clientActivite}</Text>}
             {data.clientContact !== "" && <Text style={styles.plainLine}>{data.clientContact}</Text>}
           </View>
@@ -182,7 +205,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
           <View style={styles.metaBlock}>
             <Text style={styles.metaLabel}>Détails</Text>
             <View style={styles.metaRow}>
-              <Text style={styles.metaRowLabel}>Date</Text>
+              <Text style={styles.metaRowLabel}>Date d'émission</Text>
               <Text style={styles.metaRowValue}>{invoice.invoice_date || "-"}</Text>
             </View>
             <View style={styles.metaRow}>
@@ -191,7 +214,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
             </View>
             {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
               <View style={styles.metaRow}>
-                <Text style={styles.metaRowLabel}>Paiement</Text>
+                <Text style={styles.metaRowLabel}>Mode de paiement</Text>
                 <Text style={styles.metaRowValue}>{invoice.payment_method || "Chèque"}</Text>
               </View>
             )}
@@ -205,11 +228,11 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
 
         <View style={styles.table}>
           <View style={styles.tableHeaderRow}>
-            <Text style={[styles.tableHeaderCell, styles.colDesignation]}>Désignation</Text>
-            <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U</Text>
+            <Text style={[styles.tableHeaderCell, styles.colDesignation]}>Désignation / Prestation</Text>
+            <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U (HT)</Text>
             <Text style={[styles.tableHeaderCell, styles.colQty]}>Qté</Text>
-            <Text style={[styles.tableHeaderCell, styles.colUnit]}>U/M</Text>
-            <Text style={[styles.tableHeaderCell, styles.colAmount]}>Montant</Text>
+            <Text style={[styles.tableHeaderCell, styles.colUnit]}>U.M</Text>
+            <Text style={[styles.tableHeaderCell, styles.colAmount]}>Total HT</Text>
           </View>
 
           {data.items.map((item, idx) => {
@@ -224,8 +247,8 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
                 <Text style={[styles.itemName, styles.colDesignation]}>{name}</Text>
                 <Text style={[styles.cellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>
                 <Text style={[styles.cellText, styles.colQty]}>{formattedQty}</Text>
-                <Text style={[styles.cellText, styles.colUnit]}>{unit}</Text>
-                <Text style={[styles.cellText, styles.colAmount]}>{formatCurrency(itemAmount)}</Text>
+                <Text style={[styles.cellUnit, styles.colUnit]}>{unit}</Text>
+                <Text style={[styles.cellText, styles.colAmount, { fontWeight: 'bold' }]}>{formatCurrency(itemAmount)}</Text>
               </View>
             );
           })}
@@ -239,13 +262,13 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
             </View>
             {flags.showTva && (
               <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>Total TVA</Text>
+                <Text style={styles.totalsLabel}>TVA (19%)</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
               </View>
             )}
             {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
               <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>Droit de Timbre</Text>
+                <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
                 <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
               </View>
             )}
@@ -259,6 +282,11 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
               <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
             </View>
+            {flags.taxExemptionLegend && (
+              <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
+                {flags.taxExemptionLegend}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -272,9 +300,28 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
         <View style={styles.signRow}>
           <Text style={styles.paymentText} />
           <View style={styles.signBox}>
-            {settings?.stamp_data && <Image src={settings.stamp_data} style={styles.stampImage} />}
-            <View style={styles.signLine} />
-            <Text style={styles.signLabel}>Cachet et signature</Text>
+            {(settings?.stamp_data || settings?.signature_data) && (
+              <>
+                <Text style={styles.signLabel}>Cachet et signature</Text>
+                <View style={styles.signLine} />
+              </>
+            )}
+            <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 28, 220), Math.min(settings?.signature_size || 36, 220), 28) + 20 }]}>
+              {!settings?.stamp_data && !settings?.signature_data ? (
+                <View style={styles.signatureBoxEmpty}>
+                  <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
+                </View>
+              ) : (
+                <>
+                  {settings?.stamp_data && (
+                    <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 28, 220) }]} />
+                  )}
+                  {settings?.signature_data && (
+                    <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 36, 220) }]} />
+                  )}
+                </>
+              )}
+            </View>
           </View>
         </View>
 
@@ -298,7 +345,6 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               {phones.map((p, i) => (
                 <Text key={i} style={styles.footerContactText}>{formatPhone(p)}</Text>
               ))}
-              {settings?.qr_code_data && <Image src={settings.qr_code_data} style={styles.qrImage} />}
             </View>
           </View>
         </View>

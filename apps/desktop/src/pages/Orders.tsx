@@ -4,31 +4,52 @@ import {
   RiAddLine as Plus,
   RiDeleteBinLine as Trash2,
   RiEyeLine as Eye,
-  RiFileList3Line as ClipboardList
+  RiEditLine as Edit,
+  RiDownloadLine as Download,
+  RiMailSendLine as MailIcon,
+  RiMoreFill as MoreHorizontal,
+  RiCheckLine as Check,
+  RiFolderZipLine as FolderZip,
+  RiLoader4Line as Loader2,
 } from "@remixicon/react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Button, Badge, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
-import { useOrders, useDeleteOrder } from "@/hooks/useOrders";
-import { generateOrderPDF } from "@/lib/pdfGenerator";
+import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, StatusBadge, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
+import { RiFileCopyLine as Copy } from "@remixicon/react";
+import { useOrders, useDeleteOrder, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { generateOrderPDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import type { DraftOrderInput } from "@/lib/emailDrafter";
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" }> = {
-  draft: { label: "Brouillon", variant: "secondary" },
+const STATUS_CONFIG: Record<string, { label: string; variant: "neutral" | "success" | "warning" | "error" }> = {
+  draft: { label: "Brouillon", variant: "neutral" },
   confirmed: { label: "Confirmée", variant: "success" },
-  delivered: { label: "Livrée", variant: "outline" },
-  cancelled: { label: "Annulée", variant: "destructive" },
+  delivered: { label: "Livrée", variant: "neutral" },
+  cancelled: { label: "Annulée", variant: "error" },
 };
+
+// Falls back instead of crashing the page for any status value this map
+// doesn't cover (legacy data, a future status added elsewhere).
+const FALLBACK_ORDER_STATUS = { label: "Statut inconnu", variant: "neutral" as const };
+const getOrderStatusConfig = (status: string | null | undefined) =>
+  STATUS_CONFIG[status || "draft"] || FALLBACK_ORDER_STATUS;
 
 export default function OrdersPage() {
   const navigate = useNavigate();
   const { data: orders, isLoading } = useOrders();
   const deleteOrder = useDeleteOrder();
+  const updateOrderStatus = useUpdateOrderStatus();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
   const filteredOrders = orders?.filter(order => {
     const q = searchQuery.toLowerCase().trim();
@@ -62,53 +83,158 @@ export default function OrdersPage() {
 
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
+  const [emailTarget, setEmailTarget] = useState<any | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+
+  // Shared by the single-row download and the bulk zip export.
+  const buildOrderForPDF = async (orderId: string) => {
+    const fullOrder = await db.orders.getById(orderId);
+    if (!fullOrder) throw new Error("Impossible de récupérer les détails de la commande");
+
+    const items = await db.orders.getItems(orderId);
+    const client = fullOrder.client_id ? await db.clients.getById(fullOrder.client_id) : null;
+
+    return {
+      ...fullOrder,
+      order_items: items.map(item => ({
+        ...item,
+        products: item.products ? {
+          code: item.products.code,
+          name: item.products.name,
+        } : undefined
+      })),
+      clients: client ? {
+        name: client.name,
+        address: client.address,
+        city: client.city,
+        wilaya: client.wilaya,
+        phone: client.phone,
+        email: client.email,
+        nif: client.nif,
+        nis: client.nis,
+        rc: client.rc,
+        ai: client.ai,
+      } : undefined
+    };
+  };
 
   const handleDownloadPDF = async (orderId: string) => {
+    try {
+      const orderForPDF = await buildOrderForPDF(orderId);
+      await generateOrderPDF(orderForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la génération du PDF");
+    }
+  };
+
+  const handleOpenEmailModal = async (orderId: string) => {
     try {
       const fullOrder = await db.orders.getById(orderId);
       if (!fullOrder) {
         toast.error("Impossible de récupérer les détails de la commande");
         return;
       }
-
       const items = await db.orders.getItems(orderId);
+      const client = fullOrder.client_id ? await db.clients.getById(fullOrder.client_id) : null;
 
-      if (!fullOrder.client_id) {
-        toast.error("Cette commande n'a pas de client associé");
+      setEmailTarget({
+        ...fullOrder,
+        order_items: items,
+        clients: client ? { name: client.name, email: client.email } : undefined,
+      });
+      setEmailModalOpen(true);
+    } catch (error) {
+      console.error("Failed to load order for email:", error);
+      toast.error("Impossible de préparer l'email pour cette commande");
+    }
+  };
+
+  const toggleAll = () => {
+    if (selectedOrders.length === filteredOrders?.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders?.map((o) => o.id) || []);
+    }
+  };
+
+  const toggleOrder = (id: string) => {
+    setSelectedOrders((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const clearSelection = () => setSelectedOrders([]);
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast.success("ID copié dans le presse-papiers");
+  };
+
+  const handleBulkMarkConfirmed = async () => {
+    setIsBulkConfirming(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedOrders.map((id) => updateOrderStatus.mutateAsync({ id, status: "confirmed" }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} commande${results.length > 1 ? "s" : ""} confirmée${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} commande(s) sur ${results.length} n'ont pas pu être mises à jour`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkConfirming(false);
+    }
+  };
+
+  const handleBulkDownloadZip = async () => {
+    setIsBulkDownloading(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedOrders.map(async (id) => {
+          const orderForPDF = await buildOrderForPDF(id);
+          const blob = await generateInvoicePDFBlob(orderForPDF, settings, licenseStatus?.state === "active");
+          return { blob, fileName: `BonCommande-${orderForPDF.order_number || id}.pdf` };
+        })
+      );
+      const files = results.filter((r): r is PromiseFulfilledResult<{ blob: Blob; fileName: string }> => r.status === "fulfilled").map((r) => r.value);
+      const failed = results.length - files.length;
+
+      if (files.length === 0) {
+        toast.error("Aucun PDF n'a pu être généré");
         return;
       }
 
-      const client = await db.clients.getById(fullOrder.client_id);
-
-      const orderForPDF = {
-        ...fullOrder,
-        order_items: items.map(item => ({
-          ...item,
-          products: item.products ? {
-            code: item.products.code,
-            name: item.products.name,
-          } : undefined
-        })),
-        clients: client ? {
-          name: client.name,
-          address: client.address,
-          city: client.city,
-          wilaya: client.wilaya,
-          phone: client.phone,
-          email: client.email,
-          nif: client.nif,
-          nis: client.nis,
-          rc: client.rc,
-          ai: client.ai,
-        } : undefined
-      };
-
-      await generateOrderPDF(orderForPDF, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
+      await downloadBlobsAsZip(files, `Commandes-${new Date().toISOString().split("T")[0]}.zip`);
+      toast.success(
+        failed === 0
+          ? `${files.length} commande${files.length > 1 ? "s" : ""} téléchargée${files.length > 1 ? "s" : ""} (ZIP)`
+          : `${files.length} commande(s) téléchargées, ${failed} en échec`
+      );
+      clearSelection();
     } catch (error) {
-      console.error("PDF generation error:", error);
-      toast.error("Erreur lors de la génération du PDF");
+      console.error("Bulk PDF download error:", error);
+      toast.error("Erreur lors du téléchargement groupé");
+    } finally {
+      setIsBulkDownloading(false);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    const results = await Promise.allSettled(selectedOrders.map((id) => deleteOrder.mutateAsync(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === 0) {
+      toast.success(`${results.length} commande${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
+    } else {
+      toast.error(`${failed} commande(s) sur ${results.length} n'ont pas pu être supprimées`);
+    }
+    clearSelection();
   };
 
   return (
@@ -117,26 +243,15 @@ export default function OrdersPage() {
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Bons de Commande</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos bons de commande clients</p>
+              <h1 className="text-3xl text-foreground tracking-tight">Bons de Commande</h1>
+              <p className="text-muted-foreground mt-1">
+                Gérez vos bons de commande clients · {orders?.length || 0} commande{(orders?.length || 0) > 1 ? "s" : ""}
+              </p>
             </div>
             <Button onClick={() => navigate("/orders/new")}>
               <Plus className="w-4 h-4 mr-2" />
               Nouveau BC
             </Button>
-          </div>
-
-          {/* Stats */}
-          <div className="mb-6">
-            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 w-fit max-w-full">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-                <ClipboardList className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{orders?.length || 0}</p>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">Commandes</p>
-              </div>
-            </div>
           </div>
 
           {/* Search */}
@@ -149,34 +264,76 @@ export default function OrdersPage() {
             />
           </div>
 
-          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden">
+          {/* Bulk action bar */}
+          <BulkActionBar count={selectedOrders.length} onClear={clearSelection}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs"
+              onClick={handleBulkMarkConfirmed}
+              disabled={isBulkConfirming}
+            >
+              {isBulkConfirming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Marquer comme confirmées
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs"
+              onClick={handleBulkDownloadZip}
+              disabled={isBulkDownloading}
+            >
+              {isBulkDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderZip className="w-3.5 h-3.5" />}
+              Télécharger en lot
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs text-destructive hover:text-destructive"
+              onClick={() => setBulkDeleteDialogOpen(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer la sélection
+            </Button>
+          </BulkActionBar>
+
+          <div>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="[&:has([role=checkbox])]:pl-5">
+                    <Checkbox
+                      checked={selectedOrders.length === filteredOrders?.length && filteredOrders?.length > 0}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
                   <TableHead>N° Commande</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead className="hidden md:table-cell">Date</TableHead>
                   <TableHead className="hidden lg:table-cell">Livraison prévue</TableHead>
-                  <TableHead className="text-right">Montant TTC</TableHead>
+                  <TableHead numeric>Montant TTC</TableHead>
                   <TableHead className="hidden sm:table-cell">Statut</TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead className="w-14"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableLoading columns={7} rows={5} />
+                  <TableLoading columns={8} rows={5} />
                 ) : !filteredOrders || filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <EmptyState
-                        type="default"
+                        type="orders"
                         title="Aucun bon de commande"
-                        description={searchQuery ? "Essayez de modifier votre recherche" : "Créez votre premier bon de commande"}
+                        description={searchQuery ? "Essayez une autre recherche" : "Créez votre premier bon de commande"}
                         action={searchQuery ? {
                           label: "Effacer la recherche",
                           onClick: () => setSearchQuery(""),
                         } : {
-                          label: "Créer une commande",
+                          label: "Créer",
                           onClick: () => navigate("/orders/new"),
                         }}
                       />
@@ -184,15 +341,29 @@ export default function OrdersPage() {
                   </TableRow>
                 ) : (
                   filteredOrders.map((order) => {
-                    const statusConfig = STATUS_CONFIG[order.status || "draft"];
+                    const statusConfig = getOrderStatusConfig(order.status);
                     return (
                       <TableRow
                         key={order.id}
                         className="cursor-pointer"
+                        dimmed={order.status === "cancelled"}
                         onClick={() => navigate(`/orders/${order.id}`)}
                       >
-                        <TableCell className="font-medium">{order.order_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.clients?.name || "-"}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedOrders.includes(order.id)}
+                            onCheckedChange={() => toggleOrder(order.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium font-mono tabular-nums tracking-tight">{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[220px]">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate">{order.clients?.name || "-"}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{order.clients?.name || "-"}</TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground">
                           {format(new Date(order.order_date), "dd MMM yyyy", { locale: fr })}
                         </TableCell>
@@ -201,35 +372,61 @@ export default function OrdersPage() {
                             ? format(new Date(order.delivery_date), "dd MMM yyyy", { locale: fr })
                             : "-"}
                         </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
+                        <TableCell numeric className="font-medium">
                           {formatCurrency(order.total_ttc || 0)}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+                          <StatusBadge tone={statusConfig.variant}>{statusConfig.label}</StatusBadge>
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => navigate(`/orders/${order.id}`)}
-                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
-                              title="Voir"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDownloadPDF(order.id)}
-                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
-                              title="Télécharger PDF"
-                            >
-                              <ClipboardList className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteId(order.id)}
-                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </button>
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => { e.stopPropagation(); handleCopyId(order.id); }}
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Copier l'ID</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order.id); }}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Télécharger PDF</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => navigate(`/orders/${order.id}`)}>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  Voir détails
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/orders/${order.id}/edit`)}>
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleOpenEmailModal(order.id)}>
+                                  <MailIcon className="w-4 h-4 mr-2" />
+                                  Envoyer par email
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setDeleteId(order.id)} className="text-destructive focus:text-destructive">
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Supprimer
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -258,6 +455,53 @@ export default function OrdersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer {selectedOrders.length} commande{selectedOrders.length > 1 ? "s" : ""} ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible et supprimera définitivement {selectedOrders.length > 1 ? "ces commandes" : "cette commande"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {emailTarget && (
+        <SendDocumentEmailModal
+          open={emailModalOpen}
+          onOpenChange={(next) => {
+            setEmailModalOpen(next);
+            if (!next) setEmailTarget(null);
+          }}
+          recipientEmail={emailTarget.clients?.email || emailTarget.supplier_email}
+          fileName={`BonCommande-${emailTarget.order_number || "000"}.pdf`}
+          draftInput={{
+            docType: "order",
+            documentNumber: emailTarget.order_number,
+            clientName: emailTarget.clients?.name || emailTarget.supplier_name || "",
+            documentDate: emailTarget.order_date,
+            deliveryDate: emailTarget.delivery_date,
+            totalTTC: emailTarget.total_ttc,
+            senderCompany: settings?.company_name || "Sordi",
+            items: (emailTarget.order_items || []).map((item: any) => ({
+              name: item.product_name || item.products?.name || "Article",
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+            })),
+          } satisfies DraftOrderInput}
+          getPdfBase64={async () => {
+            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.state === "active");
+            return blobToBase64(blob);
+          }}
+        />
+      )}
     </>
   );
 }

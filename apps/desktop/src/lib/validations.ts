@@ -41,7 +41,10 @@ export const clientSchema = z.object({
 
 // Invoice schema
 export const invoiceItemSchema = z.object({
-  product_id: z.string().uuid({ message: "Produit invalide" }),
+  // Absent for a custom/one-off line item that has no catalog product.
+  product_id: z.string().uuid({ message: "Produit invalide" }).optional(),
+  product_name: z.string().trim().max(255).optional(),
+  product_code: z.string().trim().max(50).optional(),
   quantity: z.coerce.number().positive({ message: "La quantité doit être positive" }),
   unit_price: z.coerce.number().positive({ message: "Le prix doit être positif" }),
   tva_rate: z.coerce.number().optional().nullable(),
@@ -68,6 +71,12 @@ export const createInvoiceSchema = z.object({
   payment_method: z.string().optional().or(z.literal('')),
   status: z.string().optional().or(z.literal('')),
   amount_paid: z.coerce.number().min(0).optional(),
+  tax_mode: z.enum(['standard', 'exempt', 'ttc_direct']).optional(),
+  // Nullable (not just optional/'') — the invoice form sends an explicit
+  // null to unlink a previously-assigned project, which .optional() alone
+  // would treat as "field absent" and silently drop, same class of bug as
+  // company_id/tax_mode being stripped before this schema included them.
+  project_id: z.string().uuid({ message: "Projet invalide" }).nullable().optional(),
   items: z.array(invoiceItemSchema).min(1, { message: "Au moins un article est requis" }),
 });
 
@@ -81,6 +90,7 @@ export const paymentSchema = z.object({
   bank_name: z.string().max(100).optional().or(z.literal('')),
   value_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
   notes: z.string().trim().max(1000).optional().or(z.literal('')),
+  employee_id: z.string().uuid().optional().or(z.literal('')),
 });
 
 // Expense schema
@@ -92,12 +102,59 @@ export const expenseSchema = z.object({
   payment_method: z.string().max(50).optional().or(z.literal('')),
   reference: z.string().max(100).optional().or(z.literal('')),
   notes: z.string().trim().max(1000).optional().or(z.literal('')),
+  // Absent for a charge with no associated project.
+  project_id: z.string().uuid({ message: "Projet invalide" }).optional().or(z.literal('')),
+  // Absent for a charge with no associated supplier.
+  supplier_id: z.string().uuid({ message: "Fournisseur invalide" }).optional().or(z.literal('')),
+  is_recurring: z.boolean().optional(),
+  recurrence_interval: z.string().max(50).optional().or(z.literal('')),
+});
+
+// Supplier schema
+export const supplierSchema = z.object({
+  name: z.string().trim().min(1, { message: "Le nom est requis" }).max(255),
+  category: z.string().trim().max(255).nullable().optional().or(z.literal('')),
+  phone: z.string().trim().max(50).nullable().optional().or(z.literal('')),
+  email: z.string().trim().email({ message: "Email invalide" }).nullable().optional().or(z.literal('')),
+  address: z.string().trim().max(500).nullable().optional().or(z.literal('')),
+  city: z.string().trim().max(100).nullable().optional().or(z.literal('')),
+  rc: z.string().trim().max(50).nullable().optional().or(z.literal('')),
+  nif: z.string().trim().max(50).nullable().optional().or(z.literal('')),
+  nis: z.string().trim().max(50).nullable().optional().or(z.literal('')),
+  solde_du: z.coerce.number().optional(),
+  notes: z.string().trim().max(1000).nullable().optional().or(z.literal('')),
+});
+
+// Partner schema
+export const partnerSchema = z.object({
+  name: z.string().trim().min(1, { message: "Le nom est requis" }).max(255),
+  email: z.string().trim().email({ message: "Email invalide" }).max(255).optional().or(z.literal('')),
+  phone: z.string().trim().max(50).optional().or(z.literal('')),
+  role: z.string().trim().max(100).optional().or(z.literal('')),
+  equity_percentage: z.coerce.number()
+    .min(0, { message: "Le pourcentage ne peut pas être négatif" })
+    .max(100, { message: "Le pourcentage ne peut pas dépasser 100%" }),
+  is_active: z.boolean().optional(),
+});
+
+// Partner withdrawal schema
+export const partnerWithdrawalSchema = z.object({
+  partner_id: z.string().uuid({ message: "Associé invalide" }),
+  withdrawal_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Format de date invalide" }),
+  amount: z.coerce.number().positive({ message: "Le montant doit être positif" }),
+  payment_method: z.string().max(50).optional().or(z.literal('')),
+  notes: z.string().trim().max(1000).optional().or(z.literal('')),
 });
 
 // Delivery note schema
 export const deliveryNoteItemSchema = z.object({
-  product_id: z.string().uuid({ message: "Produit invalide" }),
+  // Absent for a custom/one-off line item that has no catalog product.
+  product_id: z.string().uuid({ message: "Produit invalide" }).optional(),
+  product_name: z.string().trim().max(255).optional(),
+  product_code: z.string().trim().max(50).optional(),
   quantity: z.coerce.number().min(0, { message: "La quantité ne peut pas être négative" }),
+  unit_price: z.coerce.number().min(0).optional(),
+  tva_rate: z.coerce.number().optional(),
 });
 
 export const createDeliveryNoteSchema = z.object({
@@ -115,6 +172,10 @@ export const createDeliveryNoteSchema = z.object({
   reserves: z.string().trim().max(1000).optional().or(z.literal('')),
   custom_title: z.string().optional().or(z.literal('')),
   delivery_number: z.string().optional().or(z.literal('')),
+  supplier_delivered_date: z.string().optional().or(z.literal('')),
+  client_received_date: z.string().optional().or(z.literal('')),
+  // "Nom du réceptionnaire" — a plain text field despite the column name.
+  client_signature: z.string().trim().max(200).optional().or(z.literal('')),
   items: z.array(deliveryNoteItemSchema).min(1, { message: "Au moins un article est requis" }),
 });
 

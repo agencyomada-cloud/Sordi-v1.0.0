@@ -67,6 +67,23 @@ export function useEditableDeliveryLogic(deliveryNote: any, onDeliveryChange: (d
     setOpenPopoverIndex(null);
   };
 
+  const handleAddCustomItem = (name: string, index: number) => {
+    const newItems = [...items];
+    const newItem = {
+      product_name: name,
+      quantity: 1,
+      unit_price: 0,
+      tva_rate: 19,
+    };
+    if (index >= 0) {
+      newItems.splice(index + 1, 0, newItem);
+    } else {
+      newItems.push(newItem);
+    }
+    updateDeliveryField('items', newItems);
+    setOpenPopoverIndex(null);
+  };
+
   // clients prop when editing, embedded deliveryNote.clients when read-only.
   const client = clients?.find((c) => c.id === deliveryNote.client_id) || deliveryNote.clients;
   const pages = chunkItems(items);
@@ -102,6 +119,7 @@ export function useEditableDeliveryLogic(deliveryNote: any, onDeliveryChange: (d
     updateItem,
     removeItem,
     handleAddProduct,
+    handleAddCustomItem,
   };
 }
 

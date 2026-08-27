@@ -93,13 +93,18 @@ const sanitizeCssValue = (value: string): string | null => {
 
 /**
  * Sanitizes a CSS key to prevent injection.
- * Only allows alphanumeric characters and hyphens.
+ * Only allows alphanumeric characters, hyphens, and underscores — all valid,
+ * harmless CSS custom-property name characters. (Underscores were rejected
+ * here previously, which silently dropped the --color-* variable for any
+ * ChartConfig key like "en_retard" or "task_count" — the chart's fill then
+ * pointed at an undefined var() with no fallback, and SVG's default fill is
+ * black, which is why those series rendered solid black instead of themed.)
  */
 const sanitizeCssKey = (key: string): string | null => {
   if (!key || typeof key !== 'string') return null;
-  
+
   // Only allow valid CSS custom property name characters
-  if (/^[a-zA-Z0-9-]+$/.test(key)) {
+  if (/^[a-zA-Z0-9_-]+$/.test(key)) {
     return key;
   }
   
@@ -247,7 +252,7 @@ const ChartTooltipContent = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
+          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-popover/90 backdrop-blur-md px-2.5 py-1.5 text-xs shadow-xl",
           className,
         )}
       >
@@ -275,7 +280,7 @@ const ChartTooltipContent = React.forwardRef<
                     ) : (
                       !hideIndicator && (
                         <div
-                          className={cn("shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]", {
+                          className={cn("shrink-0 rounded-sm border-[--color-border] bg-[--color-bg]", {
                             "h-2.5 w-2.5": indicator === "dot",
                             "w-1": indicator === "line",
                             "w-0 border-[1.5px] border-dashed bg-transparent": indicator === "dashed",
@@ -352,7 +357,7 @@ const ChartLegendContent = React.forwardRef<
               <itemConfig.icon />
             ) : (
               <div
-                className="h-2 w-2 shrink-0 rounded-[2px]"
+                className="h-2 w-2 shrink-0 rounded-sm"
                 style={{
                   backgroundColor: item.color,
                 }}

@@ -5,6 +5,7 @@
  * into disagreeing about a project's status. omada-agency branch only.
  */
 import type { ProjectStats } from "./database";
+import type { StatusBadgeTone } from "@sordi/ui";
 
 export const SERVICE_CATEGORIES = [
   {
@@ -45,16 +46,16 @@ export type ProjectStatusKey = "termine" | "nouveau" | "en_retard" | "depassemen
 export interface ProjectStatus {
   key: ProjectStatusKey;
   label: string;
-  colorClass: string;
+  tone: StatusBadgeTone;
 }
 
-const STATUS_STYLES: Record<ProjectStatusKey, { label: string; colorClass: string }> = {
-  termine: { label: "Terminé", colorClass: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" },
-  nouveau: { label: "Nouveau", colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
-  en_retard: { label: "En retard", colorClass: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
-  depassement_budgetaire: { label: "Dépassement budgétaire", colorClass: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
-  a_risque: { label: "À risque", colorClass: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400" },
-  en_cours: { label: "En cours", colorClass: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400" },
+const STATUS_STYLES: Record<ProjectStatusKey, { label: string; tone: StatusBadgeTone }> = {
+  termine: { label: "Terminé", tone: "success" },
+  nouveau: { label: "Nouveau", tone: "neutral" },
+  en_retard: { label: "En retard", tone: "error" },
+  depassement_budgetaire: { label: "Dépassement budgétaire", tone: "error" },
+  a_risque: { label: "À risque", tone: "warning" },
+  en_cours: { label: "En cours", tone: "neutral" },
 };
 
 /** progress = fraction of tasks approved. undefined when there are no tasks yet. */

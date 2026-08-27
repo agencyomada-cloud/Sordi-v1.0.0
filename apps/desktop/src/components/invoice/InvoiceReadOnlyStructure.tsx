@@ -45,7 +45,6 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                 </div>
               )}
 
-              <div className="absolute left-0 right-0 bottom-0 h-[0.45mm] z-1" style={{ backgroundColor: primaryColor }} />
             </header>
 
             <main className="absolute left-0 top-[33.9mm] w-full h-[229.8mm] overflow-hidden bg-white">
@@ -58,35 +57,47 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
               <div className="relative w-full h-full z-1 px-[4mm] pt-[5mm] pb-[2mm] flex flex-col justify-between">
                 <div>
                   <div className="text-center mb-4">
-                    <h1 className="text-xl font-extrabold uppercase text-gray-800 tracking-wider">{data.docTitle}</h1>
+                    <h1 className="text-lg font-semibold tracking-[-0.02em] uppercase text-gray-800">{data.docTitle}</h1>
                   </div>
 
                   <div className="flex justify-between items-start mb-6 text-xs">
                     <div className="w-[55%] space-y-1">
-                      <div className="text-gray-500 text-[11px] font-medium uppercase">Destinataire</div>
+                      <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Destinataire</div>
                       <div className="font-extrabold text-sm text-black uppercase">{data.clientName}</div>
                       {data.clientAddress && <div className="text-gray-700 uppercase text-[11px] font-semibold">{data.clientAddress}</div>}
-                      <div className="space-y-0.5 pt-1 text-[11px] text-gray-700 uppercase">
-                        {data.clientRc && <div><span className="font-bold">RC:</span> {data.clientRc}</div>}
-                        {data.clientNif && <div><span className="font-bold">NIF:</span> {data.clientNif}</div>}
-                        {data.clientAi && <div><span className="font-bold">AI:</span> {data.clientAi}</div>}
-                        {data.clientNis && <div><span className="font-bold">NIS:</span> {data.clientNis}</div>}
-                        {data.clientActivite && <div><span className="font-bold">Activité:</span> {data.clientActivite}</div>}
-                        {data.clientContact && <div><span className="font-bold">Contact:</span> {data.clientContact}</div>}
+                      <div className="space-y-0.5 pt-1 text-[11px] font-mono text-gray-500 leading-relaxed uppercase">
+                        {data.clientRc && <div><span className="font-semibold text-gray-700">RC:</span> {data.clientRc}</div>}
+                        {data.clientNif && <div><span className="font-semibold text-gray-700">NIF:</span> {data.clientNif}</div>}
+                        {data.clientAi && <div><span className="font-semibold text-gray-700">AI:</span> {data.clientAi}</div>}
+                        {data.clientNis && <div><span className="font-semibold text-gray-700">NIS:</span> {data.clientNis}</div>}
+                        {data.clientActivite && <div><span className="font-semibold text-gray-700">Activité:</span> {data.clientActivite}</div>}
+                        {data.clientContact && <div><span className="font-semibold text-gray-700">Contact:</span> {data.clientContact}</div>}
                       </div>
                     </div>
 
-                    <div className="w-[35%] text-xs pt-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-black">Date:</span>
-                        <span>{invoice.invoice_date || "-"}</span>
+                    <div className="w-[35%] text-xs space-y-1.5 pt-1">
+                      <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                        <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Numéro</span>
+                        <span className="font-mono tabular-nums tracking-tight font-semibold uppercase text-black">{invoice.invoice_number || "-"}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-black">Numéro:</span>
-                        <span className="font-bold text-black uppercase">{invoice.invoice_number || "-"}</span>
+                      <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                        <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Date d'émission</span>
+                        <span className="font-mono tabular-nums tracking-tight text-black">{invoice.invoice_date || "-"}</span>
                       </div>
+                      {!data.isProforma && !data.isCreditNote && (
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                          <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Échéance</span>
+                          <span className="font-mono tabular-nums tracking-tight text-black">{invoice.due_date || "-"}</span>
+                        </div>
+                      )}
+                      {!data.isProforma && !data.isCreditNote && (
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
+                          <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Mode de paiement</span>
+                          <span className="font-mono tracking-tight uppercase text-black">{invoice.payment_method || "Chèque"}</span>
+                        </div>
+                      )}
                       {data.isCreditNote && (invoice.original_invoice_id || invoice.original_invoice?.invoice_number) && (
-                        <div className="mt-2 text-xs font-bold text-gray-700 text-right">
+                        <div className="mt-2 text-xs font-semibold text-gray-500 text-right">
                           Avoir relatif à la facture N° {invoice.original_invoice?.invoice_number || invoice.original_invoice_id}
                         </div>
                       )}
@@ -94,14 +105,14 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                   </div>
 
                   <div className="mb-6">
-                    <table className="w-full border-collapse border border-gray-300 text-xs">
+                    <table className="w-full border-collapse text-xs table-fixed">
                       <thead>
-                        <tr style={{ backgroundColor: primaryColor }} className="text-white font-bold border-b border-gray-300">
-                          <th className="border border-gray-300 p-2 text-center w-[45%] uppercase">Désignation</th>
-                          <th className="border border-gray-300 p-2 text-right uppercase">P.U</th>
-                          <th className="border border-gray-300 p-2 text-right uppercase">Quantité</th>
-                          <th className="border border-gray-300 p-2 text-center uppercase">U/M</th>
-                          <th className="border border-gray-300 p-2 text-right uppercase">Montant</th>
+                        <tr className="border-y border-gray-300">
+                          <th className="py-2 text-left w-[42%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Désignation / Prestation</th>
+                          <th className="py-2 text-right w-[15%] text-[11px] font-medium tracking-wider uppercase text-gray-400">P.U (HT)</th>
+                          <th className="py-2 text-right w-[7%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Qté</th>
+                          <th className="py-2 text-center w-[16%] text-[11px] font-medium tracking-wider uppercase text-gray-400">U.M</th>
+                          <th className="py-2 text-right w-[20%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Total HT</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -111,12 +122,12 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                           const formattedQty = Number.isInteger(quantityVal) ? quantityVal.toString() : quantityVal.toFixed(2);
 
                           return (
-                            <tr key={index} className="border-b border-gray-300">
-                              <td className="border border-gray-300 p-2 font-bold uppercase">{item.product_name || item.products?.name || ""}</td>
-                              <td className="border border-gray-300 p-2 text-right font-mono">{formatCurrency(item.unit_price)}</td>
-                              <td className="border border-gray-300 p-2 text-right font-mono">{formattedQty}</td>
-                              <td className="border border-gray-300 p-2 text-center uppercase font-semibold">{unit}</td>
-                              <td className="border border-gray-300 p-2 text-right font-mono">{formatCurrency((item.quantity || 0) * (item.unit_price || 0))}</td>
+                            <tr key={index} className="border-b border-gray-200">
+                              <td className="py-2.5 font-semibold uppercase align-top">{item.product_name || item.products?.name || ""}</td>
+                              <td className="py-2.5 text-right align-top font-mono tabular-nums tracking-tight whitespace-nowrap min-w-[130px]">{formatCurrency(item.unit_price)}</td>
+                              <td className="py-2.5 text-right align-top font-mono tabular-nums tracking-tight whitespace-nowrap">{formattedQty}</td>
+                              <td className="py-2.5 text-center align-top uppercase text-gray-500 text-[10px] leading-tight break-words">{unit}</td>
+                              <td className="py-2.5 text-right align-top font-mono tabular-nums tracking-tight font-semibold whitespace-nowrap min-w-[130px]">{formatCurrency((item.quantity || 0) * (item.unit_price || 0))}</td>
                             </tr>
                           );
                         })}
@@ -127,51 +138,82 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                   {isLastPage && (
                     <>
                       <div className="flex justify-end mb-4">
-                        <div className="w-[42%] border border-gray-300 text-xs">
-                          <div className="flex justify-between p-1.5 border-b border-gray-300 font-bold">
-                            <span>Total HT</span>
-                            <span className="font-mono">{formatCurrency(invoice.subtotal_ht || 0)}</span>
+                        <div className="w-[42%] text-xs">
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-gray-500">Total HT</span>
+                            <span className="font-mono tabular-nums tracking-tight">{formatCurrency(invoice.subtotal_ht || 0)}</span>
                           </div>
-                          <div className="flex justify-between p-1.5 border-b border-gray-300 font-bold">
-                            <span>Total TVA</span>
-                            <span className="font-mono">{formatCurrency(invoice.tva_amount || 0)}</span>
-                          </div>
+                          {invoice.tax_mode !== 'exempt' && (
+                            <div className="flex justify-between py-1.5">
+                              <span className="text-gray-500">TVA (19%)</span>
+                              <span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(invoice.tva_amount || 0)}</span>
+                            </div>
+                          )}
                           {(invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
-                            <div className="flex justify-between p-1.5 border-b border-gray-300 font-bold">
-                              <span>Droit de Timbre</span>
-                              <span className="font-mono">{formatCurrency(invoice.timbre || 0)}</span>
+                            <div className="flex justify-between py-1.5">
+                              <span className="text-gray-500">Timbre Fiscal</span>
+                              <span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(invoice.timbre || 0)}</span>
                             </div>
                           )}
                           {(invoice.discount > 0 || invoice.discount_value > 0) && (
-                            <div className="flex justify-between p-1.5 border-b border-gray-300 text-red-700 font-bold">
+                            <div className="flex justify-between py-1.5 text-red-700">
                               <span>Remise</span>
-                              <span className="font-mono">-{formatCurrency(invoice.discount || invoice.discount_value)}</span>
+                              <span className="font-mono tabular-nums tracking-tight">-{formatCurrency(invoice.discount || invoice.discount_value)}</span>
                             </div>
                           )}
-                          <div className="flex justify-between p-1.5 font-bold bg-gray-50">
-                            <span>{data.isCreditNote ? "Net à déduire" : "Total TTC"}</span>
-                            <span className="font-mono">{formatCurrency(invoice.total_ttc || 0)}</span>
+                          <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-300">
+                            <span className="text-sm font-semibold text-black">{data.isCreditNote ? "Net à déduire" : "Total TTC"}</span>
+                            <span className="text-base font-bold font-mono tabular-nums tracking-tight text-black">{formatCurrency(invoice.total_ttc || 0)}</span>
                           </div>
+                          {invoice.tax_mode === 'exempt' && (
+                            <div className="text-right text-[9px] text-gray-500 mt-1">
+                              Régime d'exonération / Facturation sans TVA — Montant Net à Payer HT - TVA non applicable
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <div className="mb-4">
-                        <div className="mb-3 text-[11px] text-gray-800">
-                          ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE :
-                          <div className="mt-1 font-extrabold text-xs text-black uppercase tracking-wide">{data.wordsFrench}</div>
+                        <div className="mb-3">
+                          <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Arrêté la présente facture à la somme de</div>
+                          <div className="mt-1 font-semibold text-xs text-black uppercase tracking-tight">{data.wordsFrench}</div>
                         </div>
 
-                        <div className="flex justify-between items-start">
-                          {!data.isProforma && !data.isCreditNote && (
-                            <div className="text-xs text-black font-bold">
-                              Mode de paiement: <span className="font-normal uppercase">{invoice.payment_method || "Chèque"}</span>
-                            </div>
-                          )}
-                          <div className="mr-8 font-bold text-xs underline flex flex-col items-center">
-                            Cachet et Signature
-                            {settings?.stamp_data && (
-                              <img src={settings.stamp_data} alt="Cachet" style={{ height: settings.stamp_size ? `${settings.stamp_size}px` : "70px", marginTop: '4px' }} className="object-contain" />
+                        <div className="flex justify-end items-start">
+                          <div className="mr-8 flex flex-col items-center gap-1">
+                            {/* Signature is signed directly on top of the
+                                stamp, like a real paper document — an
+                                absolute overlay, not a stacked column. */}
+                            {(settings?.stamp_data || settings?.signature_data) && (
+                              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cachet et Signature</div>
                             )}
+                            <div
+                              className="min-w-44 relative flex items-center justify-center border-none px-4 py-3"
+                              style={{ height: `${Math.max(settings?.stamp_size || 64, settings?.signature_size || 64, 64) + 40}px` }}
+                            >
+                              {!settings?.stamp_data && !settings?.signature_data ? (
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
+                              ) : (
+                                <>
+                                  {settings?.stamp_data && (
+                                    <img
+                                      src={settings.stamp_data}
+                                      alt="Cachet"
+                                      style={{ height: `${settings.stamp_size || 64}px` }}
+                                      className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
+                                    />
+                                  )}
+                                  {settings?.signature_data && (
+                                    <img
+                                      src={settings.signature_data}
+                                      alt="Signature"
+                                      style={{ height: `${settings.signature_size || 64}px` }}
+                                      className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -219,13 +261,7 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                     </div>
                   )}
 
-                  <div className="absolute bottom-0 left-0 w-full grid grid-cols-[20mm_1fr] gap-x-[2.5mm]">
-                    {settings?.qr_code_data && (
-                      <div className="w-[18mm] h-[18mm] flex items-center justify-center overflow-hidden">
-                        <img src={settings.qr_code_data} alt="QR Code" className="w-full h-full object-contain" />
-                      </div>
-                    )}
-
+                  <div className="absolute bottom-0 left-0 w-full">
                     <div className="pt-[0.1mm] text-[7.1pt] leading-[1.65] whitespace-nowrap flex flex-col justify-end">
                       {settings?.company_email && <div className="font-bold">{settings.company_email}</div>}
                       {settings?.company_website && <div>{settings.company_website}</div>}

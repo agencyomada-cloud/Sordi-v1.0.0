@@ -8,18 +8,24 @@ import { mockStore } from "./mockStore";
 
 const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
+/**
+ * The mock/demo fallback exists for exactly one situation: the app isn't
+ * running inside Tauri at all (a plain browser preview, where no real
+ * `invoke()` exists to call). It must NOT also apply when a real Tauri
+ * command genuinely fails — a validation error, a foreign-key constraint,
+ * a bug — because that turns a real, actionable error into a silent fake
+ * success: the UI shows "created"/"deleted"/"saved" while nothing actually
+ * happened to the real database. That exact confusion is what caused
+ * invoices, settings saves, and client deletes to all appear broken in the
+ * same way — the real error was there the whole time, just never shown.
+ * A failure inside the real Tauri app must always surface as a real error.
+ */
 async function safeInvoke<T>(cmd: string, args?: Record<string, any>, fallbackFn?: () => T | Promise<T>): Promise<T> {
   if (!isTauri) {
     if (fallbackFn) return fallbackFn();
     throw new Error(`Command ${cmd} not available in web mode`);
   }
-  try {
-    return await invoke<T>(cmd, args);
-  } catch (err) {
-    console.warn(`Tauri invoke "${cmd}" failed, using fallback:`, err);
-    if (fallbackFn) return fallbackFn();
-    throw err;
-  }
+  return await invoke<T>(cmd, args);
 }
 
 
@@ -64,6 +70,14 @@ export interface DashboardStats {
   growth: number;
   invoice_count: number;
   is_month_view: boolean;
+  /** True operating profitability (HT basis) — distinct from `yearly`, which
+   *  stays cash-basis/TTC and keeps feeding the existing chart unchanged. */
+  revenue_ht: number;
+  expense_count: number;
+  net_profit_ht: number;
+  margin_percentage_ht: number;
+  /** Period-scoped unpaid balance on invoices issued in this period. */
+  outstanding_receivables: number;
 }
 
 export interface SalesCumulativeStats {
@@ -125,10 +139,61 @@ export interface GlobalSearchResults {
   invoices: InvoiceSearchHit[];
 }
 
+// ============= COMPANIES (Multi-workspace) =============
+
+export interface Company {
+  id: string;
+  name: string;
+  logo_base64: string | null;
+  activity: string | null;
+  rc: string | null;
+  nif: string | null;
+  nis: string | null;
+  article_imposition: string | null;
+  address: string | null;
+  phone: string | null;
+  /** JSON-encoded array of additional phone numbers. */
+  phones: string | null;
+  email: string | null;
+  website: string | null;
+  capital: string | null;
+  rib: string | null;
+  bank_agency: string | null;
+  /** JSON-encoded array of free-form extra info lines. */
+  extra_info: string | null;
+  cnas_adherent: string | null;
+  currency: string;
+  invoice_prefix: string;
+  created_at: string;
+}
+
+export interface CreateCompanyData {
+  name: string;
+  logo_base64?: string | null;
+  activity?: string | null;
+  rc?: string | null;
+  nif?: string | null;
+  nis?: string | null;
+  article_imposition?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  phones?: string | null;
+  email?: string | null;
+  website?: string | null;
+  capital?: string | null;
+  rib?: string | null;
+  bank_agency?: string | null;
+  extra_info?: string | null;
+  cnas_adherent?: string | null;
+  currency?: string;
+  invoice_prefix?: string;
+}
+
 // ============= CLIENTS =============
 
 export interface Client {
   id: string;
+  company_id: string | null;
   code: string | null;
   name: string;
   contact_person: string | null;
@@ -155,6 +220,7 @@ export interface Client {
 }
 
 export interface CreateClientData {
+  company_id: string;
   name: string;
   code?: string;
   contact_person?: string;
@@ -177,9 +243,53 @@ export interface CreateClientData {
   advance_payment?: number;
 }
 
+// ============= SUPPLIERS (Fournisseurs) =============
+
+export interface Supplier {
+  id: string;
+  company_id: string | null;
+  name: string;
+  category: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  rc: string | null;
+  nif: string | null;
+  nis: string | null;
+  /** Manually tracked unpaid balance — distinct from the live-computed
+   *  "Total Achats" (see SupplierPurchaseTotal / get_supplier_purchase_totals). */
+  solde_du: number | null;
+  notes: string | null;
+  is_active: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSupplierData {
+  company_id: string;
+  name: string;
+  category?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  rc?: string;
+  nif?: string;
+  nis?: string;
+  solde_du?: number;
+  notes?: string;
+}
+
+export interface SupplierPurchaseTotal {
+  supplier_id: string;
+  total_achats: number;
+}
+
 // Type definitions for other entities
 export interface Product {
   id: string;
+  company_id: string | null;
   code: string;
   name: string;
   description: string | null;
@@ -201,6 +311,7 @@ export interface ProductInfo {
 }
 
 export interface CreateProductData {
+  company_id: string;
   code: string;
   name: string;
   description?: string;
@@ -213,8 +324,19 @@ export interface CreateProductData {
 
 // ============= INVOICES =============
 
+/**
+ * "standard" — each line keeps its own catalog TVA rate (default 19%).
+ * "exempt" — every line's tva_rate is forced to 0 ("Hors Taxe / Sans TVA").
+ * "ttc_direct" — unit prices are entered as TTC and back-computed to HT
+ * before being stored; invoice_items still hold HT unit_price like every
+ * other mode, so recalculate_invoice_totals (Rust) never needs to know
+ * which mode produced them.
+ */
+export type InvoiceTaxMode = "standard" | "exempt" | "ttc_direct";
+
 export interface Invoice {
   id: string;
+  company_id: string | null;
   invoice_number: string;
   client_id: string;
   invoice_date: string;
@@ -242,6 +364,8 @@ export interface Invoice {
   payment_method?: string | null;
   /** omada-agency branch only — which project (if any) this invoice's revenue counts toward. */
   project_id?: string | null;
+  /** Defaults to "standard" on the Rust side for any row created before this column existed. */
+  tax_mode?: InvoiceTaxMode;
   created_at: string;
   updated_at: string;
 }
@@ -254,6 +378,7 @@ export interface InvoiceWithClient extends Invoice {
 }
 
 export interface CreateInvoiceData {
+  company_id: string;
   client_id: string;
   invoice_date: string;
   due_date?: string;
@@ -273,13 +398,27 @@ export interface CreateInvoiceData {
   payment_method?: string;
   status?: string;
   amount_paid?: number;
-  items: { product_id: string; quantity: number; unit_price: number; tva_rate?: number | null; timbre_exempt?: boolean }[];
+  tax_mode?: InvoiceTaxMode;
+  /** omada-agency branch only — which project (if any) this invoice's revenue counts toward. */
+  project_id?: string | null;
+  items: {
+    product_id?: string;
+    /** Only meaningful when product_id is absent — a custom/one-off item. */
+    product_name?: string;
+    product_code?: string;
+    product_description?: string;
+    quantity: number;
+    unit_price: number;
+    tva_rate?: number | null;
+    timbre_exempt?: boolean;
+  }[];
 }
 
 // ============= PAYMENTS =============
 
 export interface Payment {
   id: string;
+  company_id: string | null;
   invoice_id: string;
   payment_date: string;
   amount: number;
@@ -289,9 +428,12 @@ export interface Payment {
   value_date: string | null;
   notes: string | null;
   created_at: string;
+  /** "Encaissé par" — nullable, most existing rows predate this field. References employees.id. */
+  employee_id: string | null;
 }
 
 export interface CreatePaymentData {
+  company_id: string;
   invoice_id: string;
   payment_date: string;
   amount: number;
@@ -300,6 +442,17 @@ export interface CreatePaymentData {
   bank_name?: string;
   value_date?: string;
   notes?: string;
+  employee_id?: string;
+}
+
+/** A proof-of-payment scan (receipt, bank slip, cheque copy) attached to one payment. */
+export interface PaymentAttachment {
+  id: string;
+  payment_id: string;
+  file_name: string;
+  /** Relative to app_data_dir, e.g. "payment_attachments/<payment_id>/<file>". */
+  file_path: string;
+  created_at: string;
 }
 
 export interface ClientAdvance {
@@ -341,6 +494,7 @@ export interface UpdateClientAdvanceData {
 
 export interface Order {
   id: string;
+  company_id: string | null;
   order_number: string;
   client_id: string;
   supplier_name: string | null;
@@ -368,6 +522,7 @@ export interface Order {
 }
 
 export interface CreateOrderData {
+  company_id: string;
   client_id?: string | null;
   supplier_name?: string | null;
   supplier_address?: string | null;
@@ -397,6 +552,7 @@ export interface CreateOrderData {
 
 export interface DeliveryNote {
   id: string;
+  company_id: string | null;
   delivery_number: string;
   client_id: string;
   delivery_date: string;
@@ -416,11 +572,17 @@ export interface DeliveryNote {
   notes: string | null;
   reserves: string | null;
   custom_title?: string | null;
+  /** Digital delivery-tracking status — see set_delivery_status. */
+  status: DeliveryNoteStatus;
+  signed_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
+export type DeliveryNoteStatus = "draft" | "printed" | "signed";
+
 export interface CreateDeliveryNoteData {
+  company_id: string;
   client_id: string;
   delivery_date: string;
   order_id?: string;
@@ -435,13 +597,26 @@ export interface CreateDeliveryNoteData {
   reserves?: string;
   custom_title?: string;
   delivery_number?: string;
-  items: { product_id: string; quantity: number }[];
+  supplier_delivered_date?: string;
+  client_received_date?: string;
+  /** "Nom du réceptionnaire" — a plain text field despite the column name. */
+  client_signature?: string;
+  items: {
+    product_id?: string;
+    /** Only meaningful when product_id is absent — a custom/one-off item. */
+    product_name?: string;
+    product_code?: string;
+    quantity: number;
+    unit_price?: number;
+    tva_rate?: number;
+  }[];
 }
 
 // ============= EXPENSES =============
 
 export interface Expense {
   id: string;
+  company_id: string | null;
   expense_date: string;
   category: string;
   description: string | null;
@@ -450,11 +625,20 @@ export interface Expense {
   reference: string | null;
   notes: string | null;
   month_period: string | null;
+  project_id?: string | null;
+  /** Denormalized by the backend — the linked project's name, if any. */
+  project_name?: string | null;
+  supplier_id?: string | null;
+  /** Denormalized by the backend — the linked supplier's name, if any. */
+  supplier_name?: string | null;
+  is_recurring?: boolean | null;
+  recurrence_interval?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateExpenseData {
+  company_id: string;
   expense_date: string;
   category: string;
   description?: string;
@@ -462,6 +646,10 @@ export interface CreateExpenseData {
   payment_method?: string;
   reference?: string;
   notes?: string;
+  project_id?: string;
+  supplier_id?: string;
+  is_recurring?: boolean;
+  recurrence_interval?: string;
 }
 
 
@@ -490,6 +678,7 @@ export interface CreateProductionLogData {
 
 export interface Employee {
   id: string;
+  company_id: string | null;
   name: string;
   role: string | null;
   email: string | null;
@@ -509,6 +698,7 @@ export interface Employee {
 }
 
 export interface CreateEmployeeData {
+  company_id: string;
   name: string;
   role?: string;
   email?: string;
@@ -535,6 +725,7 @@ export interface EmployeeTaskWorkload {
   employee_id: string;
   employee_name: string;
   task_count: number;
+  photo_path: string | null;
 }
 
 // ============= HR / PAYROLL (omada-agency branch only) =============
@@ -612,6 +803,18 @@ export interface PayrollDashboardStats {
   pending_payroll_count: number;
 }
 
+export interface UpdatePayrollRunData {
+  id: string;
+  base_salary: number;
+  working_days_in_month: number;
+  absence_days: number;
+  daily_rate: number;
+  absence_deduction: number;
+  primes: number;
+  avance_deduction: number;
+  net_a_payer: number;
+}
+
 // ============= CLIENT DRAFT PRODUCTS =============
 
 export interface ClientDraftProduct {
@@ -643,6 +846,7 @@ export type FreelancePaymentStatus = "non_paye" | "paye";
 
 export interface Project {
   id: string;
+  company_id: string | null;
   client_id: string;
   name: string;
   service_categories: string[];
@@ -660,6 +864,7 @@ export interface Project {
 }
 
 export interface CreateProjectData {
+  company_id: string;
   client_id: string;
   name: string;
   service_categories: string[];
@@ -692,6 +897,190 @@ export interface ProjectStats {
   tasks_approved_count: number;
   start_date: string | null;
   deadline: string | null;
+}
+
+/** Real net profitability (HT revenue minus direct costs) — distinct from
+ *  ProjectStats above, which tracks planned-budget consumption on a TTC
+ *  basis. See get_project_profitability. */
+export interface ProjectProfitability {
+  project_id: string;
+  revenue_ht: number;
+  /** SUM(payments.amount) across every invoice linked to this project. */
+  total_collected: number;
+  direct_expenses: number;
+  net_margin: number;
+  margin_percentage: number;
+}
+
+// ============= CONTRACTS (bespoke multi-service client contracts) =============
+
+/** Keys into CONTRACT_SERVICE_CATALOG (see lib/contractServices.ts). */
+export type ContractServiceKey =
+  | "branding"
+  | "web_vitrine"
+  | "ecommerce"
+  | "marketing"
+  | "media_shooting"
+  | "video_ads";
+
+/** Keys into CONTRACT_PAYMENT_SPLITS (see lib/contractServices.ts). */
+export type ContractPaymentSplit = "50_50" | "100" | "30_40_30";
+
+export interface ContractInvoiceRef {
+  id: string;
+  invoice_number: string;
+  amount_ttc: number;
+  /** Which payment milestone this line covers — "acompte", "tranche_2", or "solde". */
+  role: "acompte" | "tranche_2" | "solde";
+}
+
+export interface Contract {
+  id: string;
+  company_id: string;
+  /** Optional — a contract can stand alone without a linked project. */
+  project_id: string | null;
+  client_id: string;
+  contract_ref: string;
+  selected_services: ContractServiceKey[];
+  payment_split: ContractPaymentSplit;
+  total_amount_ht: number;
+  tva_rate: number;
+  tva_amount: number;
+  total_amount_ttc: number;
+  invoices: ContractInvoiceRef[];
+  created_at: string;
+}
+
+export interface CreateContractData {
+  company_id: string;
+  project_id?: string | null;
+  client_id: string;
+  selected_services: ContractServiceKey[];
+  payment_split: ContractPaymentSplit;
+  total_amount_ht: number;
+  tva_rate: number;
+  tva_amount: number;
+  total_amount_ttc: number;
+  invoices: ContractInvoiceRef[];
+}
+
+// ============= PARTNERS & EQUITY DISTRIBUTION =============
+
+export interface Partner {
+  id: string;
+  company_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+  equity_percentage: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePartnerData {
+  company_id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  equity_percentage: number;
+}
+
+export interface UpdatePartnerData {
+  name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  equity_percentage: number;
+  is_active: boolean;
+}
+
+/** A partner plus its computed distribution breakdown for a given period —
+ *  what db.partners.getAll returns. total_withdrawn/remaining_balance are
+ *  all-time, not period-scoped (see get_partners). */
+export interface PartnerFinancials {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+  equity_percentage: number;
+  is_active: boolean;
+  allocated_profit: number;
+  total_withdrawn: number;
+  remaining_balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerWithdrawal {
+  id: string;
+  partner_id: string;
+  withdrawal_date: string;
+  amount: number;
+  payment_method: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreateWithdrawalData {
+  partner_id: string;
+  withdrawal_date: string;
+  amount: number;
+  payment_method?: string;
+  notes?: string;
+}
+
+/** One row of the "Rapport Mensuel d'Activité & Clôture" partner
+ *  distribution table — strictly month-scoped, unlike PartnerFinancials'
+ *  all-time withdrawal figures. See get_monthly_partners_report. */
+export interface MonthlyReportPartnerRow {
+  id: string;
+  name: string;
+  role: string | null;
+  equity_percentage: number;
+  quote_part_benefice: number;
+  prelevements_du_mois: number;
+  solde_net_a_verser: number;
+}
+
+/** A project whose deadline falls within the report month, with its
+ *  all-time margin (there is no per-month project profitability in the
+ *  schema — see MonthlyBusinessReport.projets_clotures doc on the Rust side). */
+export interface MonthlyReportProjectRow {
+  id: string;
+  name: string;
+  client_name: string;
+  deadline: string;
+  revenue_ht: number;
+  net_margin: number;
+  margin_percentage: number;
+}
+
+export interface MonthlyBusinessReport {
+  month: string;
+  year: number;
+  month_num: number;
+  /** Derived running cash total, not a real bank balance — see the Rust
+   *  doc comment on MonthlyBusinessReport::solde_initial. Always label this
+   *  as calculated in any UI/PDF that shows it. */
+  solde_initial: number;
+  recettes_ht: number;
+  recettes_encaissees: number;
+  charges_operationnelles: number;
+  masse_salariale: number;
+  solde_final: number;
+  benefice_net: number;
+  partners: MonthlyReportPartnerRow[];
+  total_prelevements_mois: number;
+  employes_actifs_count: number;
+  total_jours_travailles: number;
+  masse_salariale_payee: number;
+  masse_salariale_en_attente: number;
+  projets_clotures: MonthlyReportProjectRow[];
+  generated_at: string;
 }
 
 export type ProjectTaskStatus = "à_faire" | "en_cours" | "en_revision_interne" | "envoye_client" | "approuve";
@@ -775,8 +1164,8 @@ export const db = {
   },
   // Global search (Phase 1: clients + invoices — see search_global in commands.rs)
   search: {
-    global: (query: string): Promise<GlobalSearchResults> =>
-      safeInvoke("search_global", { query }, () => ({ clients: [], invoices: [] })),
+    global: (company_id: string, query: string): Promise<GlobalSearchResults> =>
+      safeInvoke("search_global", { companyId: company_id, query }, () => ({ clients: [], invoices: [] })),
   },
   // History
   history: {
@@ -789,19 +1178,45 @@ export const db = {
     // mode) must reach the UI as-is, not be replaced by a silent no-op.
     clear: (): Promise<void> => safeInvoke("clear_activity_logs"),
   },
+  system: {
+    // No fallback on purpose — same reasoning as history.clear, this is
+    // destructive and license-gated, a real rejection must reach the UI as-is.
+    resetToFactoryState: (company_id: string): Promise<void> =>
+      safeInvoke("reset_company_to_factory_state", { companyId: company_id }),
+  },
+  // Companies (multi-workspace) — no mock fallback beyond an empty/default
+  // list, since web-preview mode has no concept of switching workspaces.
+  companies: {
+    getAll: (): Promise<Company[]> => safeInvoke("get_companies", undefined, () => mockStore.getCompanies()),
+    getById: (id: string): Promise<Company | null> => safeInvoke("get_company", { id }, () => mockStore.getCompany(id)),
+    create: (data: CreateCompanyData): Promise<Company> => safeInvoke("create_company", { data }, () => mockStore.createCompany(data)),
+    update: (id: string, data: CreateCompanyData): Promise<Company> => safeInvoke("update_company", { id, data }, () => mockStore.updateCompany(id, data)),
+  },
+
   // Clients
   clients: {
-    getAll: (): Promise<Client[]> => safeInvoke("get_clients", undefined, () => mockStore.getClients()),
+    getAll: (company_id: string): Promise<Client[]> => safeInvoke("get_clients", { companyId: company_id }, () => mockStore.getClients()),
     getById: (id: string): Promise<Client | null> => safeInvoke("get_client", { id }, () => mockStore.getClient(id)),
     create: (data: CreateClientData): Promise<Client> => safeInvoke("create_client", { data }, () => mockStore.createClient(data)),
-    update: (id: string, data: CreateClientData): Promise<Client> => safeInvoke("update_client", { id, data }, () => mockStore.updateClient(id, data)),
+    update: (id: string, data: Omit<CreateClientData, "company_id">): Promise<Client> => safeInvoke("update_client", { id, data }, () => mockStore.updateClient(id, data as CreateClientData)),
     delete: (id: string): Promise<void> => safeInvoke("delete_client", { id }, () => mockStore.deleteClient(id)),
     getProducts: (client_id: string, productId?: string, month?: string, year?: number): Promise<any[]> =>
       safeInvoke("get_client_products", { clientId: client_id, productId, month, year }, () => mockStore.getClientProductCumulatives(year, month ? [month] : undefined)),
     // client_id omitted -> stats for every client in one call (clients list badge).
     // client_id set -> just that client (client detail "Aperçu" section).
-    getOverviewStats: (client_id?: string): Promise<ClientOverviewStats[]> =>
-      safeInvoke("get_client_overview_stats", { clientId: client_id }, () => []),
+    getOverviewStats: (company_id: string, client_id?: string): Promise<ClientOverviewStats[]> =>
+      safeInvoke("get_client_overview_stats", { companyId: company_id, clientId: client_id }, () => []),
+  },
+
+  // Suppliers (Fournisseurs)
+  suppliers: {
+    getAll: (company_id: string): Promise<Supplier[]> => safeInvoke("get_suppliers", { companyId: company_id }, () => mockStore.getSuppliers()),
+    getById: (id: string): Promise<Supplier | null> => safeInvoke("get_supplier", { id }, () => mockStore.getSupplier(id)),
+    create: (data: CreateSupplierData): Promise<Supplier> => safeInvoke("create_supplier", { data }, () => mockStore.createSupplier(data)),
+    update: (id: string, data: Omit<CreateSupplierData, "company_id">): Promise<Supplier> => safeInvoke("update_supplier", { id, data }, () => mockStore.updateSupplier(id, data as CreateSupplierData)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_supplier", { id }, () => mockStore.deleteSupplier(id)),
+    getPurchaseTotals: (company_id: string): Promise<SupplierPurchaseTotal[]> =>
+      safeInvoke("get_supplier_purchase_totals", { companyId: company_id }, () => mockStore.getSupplierPurchaseTotals()),
   },
 
   // Client Draft Products
@@ -832,27 +1247,27 @@ export const db = {
 
   // Products
   products: {
-    getAll: (): Promise<Product[]> => safeInvoke("get_products", undefined, () => mockStore.getProducts()),
+    getAll: (company_id: string): Promise<Product[]> => safeInvoke("get_products", { companyId: company_id }, () => mockStore.getProducts()),
     create: (data: CreateProductData): Promise<Product> => safeInvoke("create_product", { data }, () => mockStore.createProduct(data)),
-    updatePrice: (id: string, unit_price: number): Promise<Product> => safeInvoke("update_product_price", { id, unit_price }, () => mockStore.updateProduct(id, { code: "", name: "", unit_price })),
-    update: (id: string, data: CreateProductData): Promise<Product> => safeInvoke("update_product", { id, data }, () => mockStore.updateProduct(id, data)),
+    updatePrice: (id: string, unit_price: number): Promise<Product> => safeInvoke("update_product_price", { id, unit_price }, () => mockStore.updateProduct(id, { code: "", name: "", unit_price } as CreateProductData)),
+    update: (id: string, data: Omit<CreateProductData, "company_id">): Promise<Product> => safeInvoke("update_product", { id, data }, () => mockStore.updateProduct(id, data as CreateProductData)),
     delete: (id: string): Promise<void> => safeInvoke("delete_product", { id }, () => mockStore.deleteProduct(id)),
-    getSalesStats: (year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_product_sales_stats", { year, months }, () => mockStore.getDashboardStats(year, months).product_stats),
+    getSalesStats: (company_id: string, year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_product_sales_stats", { companyId: company_id, year, months }, () => mockStore.getDashboardStats(year, months).product_stats),
   },
 
   // Invoices
   invoices: {
-    getAll: async (status?: string, invoiceType?: string) => {
-      return safeInvoke<Invoice[]>("get_invoices", { status, invoiceType }, () => mockStore.getInvoices(status, invoiceType));
+    getAll: async (company_id: string, status?: string, invoiceType?: string) => {
+      return safeInvoke<Invoice[]>("get_invoices", { companyId: company_id, status, invoiceType }, () => mockStore.getInvoices(status, invoiceType));
     },
-    getAllWithClients: async (status?: string, invoiceType?: string) => {
-      return safeInvoke<InvoiceWithClient[]>("get_invoices_with_clients", { status, invoiceType }, () => mockStore.getInvoicesWithClients(status, invoiceType));
+    getAllWithClients: async (company_id: string, status?: string, invoiceType?: string) => {
+      return safeInvoke<InvoiceWithClient[]>("get_invoices_with_clients", { companyId: company_id, status, invoiceType }, () => mockStore.getInvoicesWithClients(status, invoiceType));
     },
     getById: async (id: string) => safeInvoke<Invoice | null>("get_invoice", { id }, () => mockStore.getInvoice(id)),
     getItems: (invoice_id: string): Promise<any[]> => safeInvoke("get_invoice_items", { invoiceId: invoice_id }, () => mockStore.getInvoiceItems(invoice_id)),
     getNextNumber: (): Promise<string> => safeInvoke("get_next_invoice_number", undefined, () => mockStore.getNextInvoiceNumber()),
     create: (data: CreateInvoiceData): Promise<Invoice> => safeInvoke("create_invoice", { data }, () => mockStore.createInvoice(data)),
-    update: (id: string, data: CreateInvoiceData): Promise<Invoice> => safeInvoke("update_invoice", { id, data }, () => mockStore.updateInvoice(id, data)),
+    update: (id: string, data: Omit<CreateInvoiceData, "company_id">): Promise<Invoice> => safeInvoke("update_invoice", { id, data }, () => mockStore.updateInvoice(id, data as CreateInvoiceData)),
     updateStatus: (id: string, status: string) => safeInvoke("update_invoice_status", { id, status }, () => mockStore.updateInvoiceStatus(id, status)),
     updateHeader: (id: string, invoiceNumber: string, customTitle: string | null) =>
       safeInvoke("update_invoice_header", { id, invoiceNumber, customTitle }, () => {}),
@@ -862,44 +1277,59 @@ export const db = {
 
   // Payments
   payments: {
-    getAll: (invoice_id?: string): Promise<Payment[]> => safeInvoke("get_payments", { invoice_id }, () => mockStore.getPayments(invoice_id)),
+    getAll: (company_id: string, invoice_id?: string): Promise<Payment[]> => safeInvoke("get_payments", { companyId: company_id, invoice_id }, () => mockStore.getPayments(invoice_id)),
     create: (data: CreatePaymentData): Promise<Payment> => safeInvoke("create_payment", { data }, () => mockStore.createPayment(data)),
-    update: (id: string, data: CreatePaymentData): Promise<Payment> => safeInvoke("update_payment", { id, data }, () => mockStore.createPayment(data)),
-    delete: (id: string): Promise<void> => safeInvoke("delete_payment", { id }, () => {}),
+    update: (id: string, data: Omit<CreatePaymentData, "company_id">): Promise<Payment> => safeInvoke("update_payment", { id, data }, () => mockStore.createPayment(data as CreatePaymentData)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_payment", { id }, () => mockStore.deletePayment(id)),
+  },
+
+  // Payment attachments (proof of payment — receipt, bank slip, cheque
+  // copy). Files are copied to app_data_dir, same convention as employee
+  // documents — no mock fallback, same as those, since web preview has no
+  // filesystem to copy into.
+  paymentAttachments: {
+    getAll: (payment_id: string): Promise<PaymentAttachment[]> =>
+      safeInvoke("get_payment_attachments", { paymentId: payment_id }, () => []),
+    add: (payment_id: string, source_path: string, file_name: string): Promise<PaymentAttachment> =>
+      safeInvoke("add_payment_attachment", { paymentId: payment_id, sourcePath: source_path, fileName: file_name }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_payment_attachment", { id }),
   },
 
   // Orders
   orders: {
-    getAll: (): Promise<Order[]> => safeInvoke("get_orders", undefined, () => mockStore.getOrders()),
+    getAll: (company_id: string): Promise<Order[]> => safeInvoke("get_orders", { companyId: company_id }, () => mockStore.getOrders()),
     getById: (id: string): Promise<Order | null> => safeInvoke("get_order", { id }, () => mockStore.getOrder(id)),
     getItems: (order_id: string): Promise<any[]> => safeInvoke("get_order_items", { orderId: order_id }, () => []),
     create: (data: CreateOrderData): Promise<Order> => safeInvoke("create_order", { data }, () => mockStore.createOrder(data)),
-    update: (id: string, data: CreateOrderData): Promise<Order> => safeInvoke("update_order", { id, data }, () => mockStore.updateOrder(id, data)),
+    update: (id: string, data: Omit<CreateOrderData, "company_id">): Promise<Order> => safeInvoke("update_order", { id, data }, () => mockStore.updateOrder(id, data as CreateOrderData)),
     updateStatus: (id: string, status: string): Promise<Order> => safeInvoke("update_order_status", { id, status }, () => ({} as any)),
     delete: (id: string): Promise<void> => safeInvoke("delete_order", { id }, () => {}),
   },
 
   // Delivery Notes
   deliveryNotes: {
-    getAll: (client_id?: string, is_invoiced?: boolean): Promise<DeliveryNote[]> => safeInvoke("get_delivery_notes", { client_id, is_invoiced }, () => mockStore.getDeliveryNotes(client_id)),
+    getAll: (company_id: string, client_id?: string, is_invoiced?: boolean): Promise<DeliveryNote[]> => safeInvoke("get_delivery_notes", { companyId: company_id, client_id, is_invoiced }, () => mockStore.getDeliveryNotes(client_id)),
     getById: (id: string): Promise<DeliveryNote | null> => safeInvoke("get_delivery_note", { id }, () => mockStore.getDeliveryNote(id)),
     getItems: (deliveryNoteId: string): Promise<any[]> => safeInvoke("get_delivery_note_items", { deliveryNoteId }, () => []),
     create: (data: CreateDeliveryNoteData): Promise<DeliveryNote> => safeInvoke("create_delivery_note", { data }, () => mockStore.createDeliveryNote(data)),
-    update: (id: string, data: CreateDeliveryNoteData): Promise<DeliveryNote> => safeInvoke("update_delivery_note", { id, data }, () => mockStore.updateDeliveryNote(id, data)),
+    update: (id: string, data: Omit<CreateDeliveryNoteData, "company_id">): Promise<DeliveryNote> => safeInvoke("update_delivery_note", { id, data }, () => mockStore.updateDeliveryNote(id, data as CreateDeliveryNoteData)),
+    updateStatus: (id: string, status: DeliveryNoteStatus): Promise<DeliveryNote> => safeInvoke("set_delivery_status", { id, status }, () => ({} as any)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_delivery_note", { id }, () => {}),
   },
 
   // Expenses
   expenses: {
-    getAll: (month_period?: string): Promise<Expense[]> => safeInvoke("get_expenses", { month_period }, () => mockStore.getExpenses(month_period)),
+    getAll: (company_id: string, month_period?: string, project_id?: string): Promise<Expense[]> =>
+      safeInvoke("get_expenses", { companyId: company_id, month_period, project_id }, () => mockStore.getExpenses(month_period, project_id)),
     create: (data: CreateExpenseData): Promise<Expense> => safeInvoke("create_expense", { data }, () => mockStore.createExpense(data)),
     delete: (id: string): Promise<void> => safeInvoke("delete_expense", { id }, () => mockStore.deleteExpense(id)),
   },
 
   // Dashboard
   dashboard: {
-    getStats: (year?: number, months?: string[]): Promise<DashboardStats> => safeInvoke("get_dashboard_stats", { year, months }, () => mockStore.getDashboardStats(year, months)),
-    getClientProductCumulatives: (year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_client_product_cumulatives", { year, months }, () => mockStore.getClientProductCumulatives(year, months)),
-    getClientCumulatives: (year?: number, months?: string[]): Promise<ClientCumulativeRecord[]> => safeInvoke("get_client_cumulatives", { year, months }, () => mockStore.getClientCumulatives(year, months)),
+    getStats: (company_id: string, year?: number, months?: string[]): Promise<DashboardStats> => safeInvoke("get_dashboard_stats", { companyId: company_id, year, months }, () => mockStore.getDashboardStats(year, months)),
+    getClientProductCumulatives: (company_id: string, year?: number, months?: string[]): Promise<any[]> => safeInvoke("get_client_product_cumulatives", { companyId: company_id, year, months }, () => mockStore.getClientProductCumulatives(year, months)),
+    getClientCumulatives: (company_id: string, year?: number, months?: string[]): Promise<ClientCumulativeRecord[]> => safeInvoke("get_client_cumulatives", { companyId: company_id, year, months }, () => mockStore.getClientCumulatives(year, months)),
   },
 
   // Production Logs
@@ -912,9 +1342,9 @@ export const db = {
 
   // Employees
   employees: {
-    getAll: (): Promise<Employee[]> => safeInvoke("get_employees", undefined, () => mockStore.getEmployees()),
+    getAll: (company_id: string): Promise<Employee[]> => safeInvoke("get_employees", { companyId: company_id }, () => mockStore.getEmployees()),
     create: (data: CreateEmployeeData): Promise<Employee> => safeInvoke("create_employee", { data }, () => mockStore.createEmployee(data)),
-    update: (id: string, data: CreateEmployeeData): Promise<Employee> => safeInvoke("update_employee", { id, data }, () => ({} as any)),
+    update: (id: string, data: Omit<CreateEmployeeData, "company_id">): Promise<Employee> => safeInvoke("update_employee", { id, data }, () => ({} as any)),
     delete: (id: string): Promise<void> => safeInvoke("delete_employee", { id }, () => {}),
     setPhoto: (employee_id: string, source_path: string): Promise<Employee> =>
       safeInvoke("set_employee_photo", { employeeId: employee_id, sourcePath: source_path }),
@@ -929,13 +1359,13 @@ export const db = {
     delete: (id: string): Promise<void> => safeInvoke("delete_employee_document", { id }),
   },
   employeeTaskWorkload: {
-    getAll: (): Promise<EmployeeTaskWorkload[]> => safeInvoke("get_employee_task_workload", undefined, () => []),
+    getAll: (company_id: string): Promise<EmployeeTaskWorkload[]> => safeInvoke("get_employee_task_workload", { companyId: company_id }, () => []),
   },
 
   // HR / Payroll (omada-agency branch only)
   attendance: {
-    import: (rows: PunchImportRow[]): Promise<PunchImportSummary> => safeInvoke("import_punch_records", { rows }),
-    getUnmappedCodes: (): Promise<UnmappedDeviceCode[]> => safeInvoke("get_unmapped_device_codes", undefined, () => []),
+    import: (company_id: string, rows: PunchImportRow[]): Promise<PunchImportSummary> => safeInvoke("import_punch_records", { companyId: company_id, rows }),
+    getUnmappedCodes: (month?: string): Promise<UnmappedDeviceCode[]> => safeInvoke("get_unmapped_device_codes", { month }, () => []),
   },
   employeeAdvances: {
     getAll: (employee_id: string): Promise<EmployeeAdvance[]> => safeInvoke("get_employee_advances", { employeeId: employee_id }, () => []),
@@ -953,20 +1383,22 @@ export const db = {
       safeInvoke("get_payroll_runs", { employeeId: employee_id, month, paid }, () => []),
     setPaid: (id: string, paid: boolean, paid_date: string | null): Promise<PayrollRun> =>
       safeInvoke("update_payroll_paid", { id, paid, paidDate: paid_date }),
-    getDashboardStats: (month: string): Promise<PayrollDashboardStats> =>
-      safeInvoke("get_payroll_dashboard_stats", { month }, () => ({ month, total_payroll_cost: 0, flagged_employee_count: 0, pending_payroll_count: 0 })),
+    update: (data: UpdatePayrollRunData): Promise<PayrollRun> => safeInvoke("update_payroll_run", { data }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_payroll_run", { id }),
+    getDashboardStats: (company_id: string, month: string): Promise<PayrollDashboardStats> =>
+      safeInvoke("get_payroll_dashboard_stats", { companyId: company_id, month }, () => ({ month, total_payroll_cost: 0, flagged_employee_count: 0, pending_payroll_count: 0 })),
   },
 
   // Projects (omada-agency branch only)
   projects: {
-    getAll: (): Promise<Project[]> => safeInvoke("get_projects", undefined, () => []),
-    getById: (id: string): Promise<Project | null> => safeInvoke("get_project", { id }, () => null),
+    getAll: (company_id: string): Promise<Project[]> => safeInvoke("get_projects", { companyId: company_id }, () => mockStore.getProjects()),
+    getById: (id: string): Promise<Project | null> => safeInvoke("get_project", { id }, () => mockStore.getProject(id)),
     create: (data: CreateProjectData): Promise<Project> => safeInvoke("create_project", { data }),
-    update: (id: string, data: CreateProjectData): Promise<Project> => safeInvoke("update_project", { id, data }),
+    update: (id: string, data: Omit<CreateProjectData, "company_id">): Promise<Project> => safeInvoke("update_project", { id, data }),
     delete: (id: string): Promise<void> => safeInvoke("delete_project", { id }),
     setFreelancerPaymentStatus: (project_id: string, statut_paiement: FreelancePaymentStatus, date_paiement: string | null): Promise<Project> =>
       safeInvoke("update_freelancer_payment_status", { projectId: project_id, statutPaiement: statut_paiement, datePaiement: date_paiement }),
-    getFreelancePayments: (): Promise<FreelancePayment[]> => safeInvoke("get_freelance_payments", undefined, () => []),
+    getFreelancePayments: (company_id: string): Promise<FreelancePayment[]> => safeInvoke("get_freelance_payments", { companyId: company_id }, () => []),
     assignFreelancePayment: (
       project_id: string,
       freelancer_id: string,
@@ -983,9 +1415,35 @@ export const db = {
       }),
     // project_id omitted -> stats for every project (list page). Set -> just
     // that project (detail page overview), same split as clients' overview stats.
-    getStats: (project_id?: string): Promise<ProjectStats[]> => safeInvoke("get_project_stats", { projectId: project_id }, () => []),
+    getStats: (company_id: string, project_id?: string): Promise<ProjectStats[]> => safeInvoke("get_project_stats", { companyId: company_id, projectId: project_id }, () => mockStore.getProjectStats(project_id)),
+    getProfitability: (project_id: string): Promise<ProjectProfitability> =>
+      safeInvoke("get_project_profitability", { projectId: project_id }, () => mockStore.getProjectProfitability(project_id)),
     assignInvoice: (invoice_id: string, project_id: string | null): Promise<void> =>
       safeInvoke("assign_invoice_to_project", { invoiceId: invoice_id, projectId: project_id }),
+  },
+
+  contracts: {
+    getAll: (company_id: string): Promise<Contract[]> =>
+      safeInvoke("get_all_contracts", { companyId: company_id }, () => []),
+    getForProject: (project_id: string): Promise<Contract[]> =>
+      safeInvoke("get_project_contracts", { projectId: project_id }, () => []),
+    create: (data: CreateContractData): Promise<Contract> => safeInvoke("create_contract", { data }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_contract", { id }),
+  },
+
+  partners: {
+    getAll: (company_id: string, year?: number, months?: string[]): Promise<PartnerFinancials[]> =>
+      safeInvoke("get_partners", { companyId: company_id, year, months }, () => mockStore.getPartners(year, months)),
+    create: (data: CreatePartnerData): Promise<Partner> => safeInvoke("create_partner", { data }, () => mockStore.createPartner(data)),
+    update: (id: string, data: UpdatePartnerData): Promise<Partner> => safeInvoke("update_partner", { id, data }, () => mockStore.updatePartner(id, data)),
+    delete: (id: string): Promise<void> => safeInvoke("delete_partner", { id }, () => mockStore.deletePartner(id)),
+    getWithdrawals: (partner_id: string): Promise<PartnerWithdrawal[]> =>
+      safeInvoke("get_partner_withdrawals", { partnerId: partner_id }, () => mockStore.getPartnerWithdrawals(partner_id)),
+    recordWithdrawal: (data: CreateWithdrawalData): Promise<PartnerWithdrawal> =>
+      safeInvoke("record_partner_withdrawal", { data }, () => mockStore.recordPartnerWithdrawal(data)),
+    deleteWithdrawal: (id: string): Promise<void> => safeInvoke("delete_partner_withdrawal", { id }, () => mockStore.deletePartnerWithdrawal(id)),
+    getMonthlyReport: (company_id: string, year: number, month: number): Promise<MonthlyBusinessReport> =>
+      safeInvoke("get_monthly_partners_report", { companyId: company_id, year, month }, () => mockStore.getMonthlyPartnersReport(year, month)),
   },
 
   // Project tasks
@@ -1010,6 +1468,12 @@ export const db = {
     get: (): Promise<Record<string, string>> => safeInvoke("get_settings", undefined, () => mockStore.getSettings()),
     update: (key: string, value: string): Promise<void> => safeInvoke("update_setting", { key, value }, () => mockStore.updateSetting(key, value)),
     updateAll: (settings: Record<string, string>): Promise<void> => safeInvoke("update_settings", { settings }, () => mockStore.updateSettings(settings)),
+  },
+
+  // PDF backup (omada-agency branch only)
+  pdfBackup: {
+    save: (rootDir: string, clientName: string, docNumber: string, pdfBytes: Uint8Array): Promise<void> =>
+      safeInvoke("save_pdf_backup", { rootDir, clientName, docNumber, pdfBytes: Array.from(pdfBytes) }, () => undefined),
   },
 };
 

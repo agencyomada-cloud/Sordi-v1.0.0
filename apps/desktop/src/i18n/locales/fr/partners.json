@@ -1,0 +1,21 @@
+{
+  "title": "Associés & Répartition des Bénéfices",
+  "partner": "Associé",
+  "role": {
+    "managingPartner": "Gérant associé",
+    "nonManagingPartner": "Associé non gérant"
+  },
+  "equityShare": "Part de capital",
+  "equityDistribution": "Répartition des parts",
+  "withdrawals": "Prélèvements",
+  "recordWithdrawal": "Enregistrer un prélèvement",
+  "withdrawalHistory": "Historique des retraits",
+  "netProfitPeriod": "Bénéfice net de la période",
+  "totalDistributed": "Total distribué / prélevé",
+  "remainingBalance": "Solde restant à distribuer",
+  "allocatedProfit": "Part théorique",
+  "currentBalance": "Solde actuel",
+  "creditor": "Créditeur",
+  "debtor": "Débiteur",
+  "settled": "Soldé"
+}

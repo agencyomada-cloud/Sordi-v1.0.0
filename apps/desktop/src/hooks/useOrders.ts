@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { mapErrorToUserMessage } from "@/lib/errorMapper";
 import { logError } from "@/lib/errorLogger";
 import { db, type Order as DbOrder, type CreateOrderData as DbCreateOrderData } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export interface Order extends DbOrder {
   clients?: {
@@ -63,10 +64,11 @@ export interface CreateOrderData {
 }
 
 export function useOrders() {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["orders"],
+    queryKey: ["orders", activeCompanyId],
     queryFn: async () => {
-      const orders = await db.orders.getAll();
+      const orders = await db.orders.getAll(activeCompanyId);
 
       // Fetch clients separately (only for orders that have a client_id)
       const clientIds = [...new Set(orders.map((o) => o.client_id).filter((id): id is string => !!id))];
@@ -81,6 +83,7 @@ export function useOrders() {
         } : undefined,
       })) as Order[];
     },
+    enabled: isReady,
   });
 }
 
@@ -136,10 +139,11 @@ export function useOrderItems(orderId: string | undefined) {
 
 export function useCreateOrder() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (data: CreateOrderData) => {
-      return await db.orders.create(data as DbCreateOrderData);
+      return await db.orders.create({ ...data, company_id: activeCompanyId } as DbCreateOrderData);
     },
     onSuccess: (order) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -154,8 +158,9 @@ export function useCreateOrder() {
 
       toast.success("Bon de commande créé avec succès");
     },
-    onError: (error) => {
-      toast.error(mapErrorToUserMessage(error));
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || mapErrorToUserMessage(error));
       logError("Create order error", error);
     },
   });
@@ -181,8 +186,15 @@ export function useUpdateOrder() {
 
       toast.success("Bon de commande modifié avec succès");
     },
-    onError: (error) => {
-      toast.error(mapErrorToUserMessage(error));
+    onError: (error: unknown) => {
+      // mapErrorToUserMessage's patterns are leftover Postgres/Supabase
+      // phrasing ("duplicate key", "violates foreign key") — they never
+      // match the real, specific messages Tauri commands return (e.g. "Ce
+      // numéro de commande est déjà utilisé..."), so it silently discarded
+      // them in favor of a generic fallback. Surface the real message
+      // first, same pattern as useDeleteClient/useDeleteInvoice.
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || mapErrorToUserMessage(error));
       logError("Update order error", error);
     },
   });
@@ -235,8 +247,9 @@ export function useDeleteOrder() {
 
       toast.success("Commande supprimée avec succès");
     },
-    onError: (error) => {
-      toast.error("Erreur lors de la suppression");
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la suppression de la commande");
       logError("Delete order error", error);
     },
   });

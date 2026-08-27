@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
-import { Button, Input, Label, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import { Button, Label, Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useInvoices, useInvoice, useCreateInvoice } from "@/hooks/useInvoices";
@@ -388,11 +389,7 @@ export default function NewCreditNotePage() {
 
                 <div>
                   <Label className="mb-2 block">Date de l'avoir</Label>
-                  <Input
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                  />
+                  <DatePicker value={invoiceDate} onChange={setInvoiceDate} />
                 </div>
 
                 <div>
@@ -416,7 +413,7 @@ export default function NewCreditNotePage() {
             {/* Full Width Preview */}
             <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '600px' }}>
               <div className="flex justify-center">
-                <div className="shadow-2xl transition-all duration-300 transform hover:scale-[1.01]">
+                <div className="transition-all duration-300 transform hover:scale-[1.01]">
                   <EditableInvoicePreview
                     invoice={draftInvoice}
                     onInvoiceChange={handleDraftInvoiceChange}

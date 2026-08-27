@@ -1,12 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { db, type Project, type CreateProjectData, type ProjectStats, type FreelancePaymentStatus } from "@/lib/database";
+import { db, type Project, type CreateProjectData, type ProjectStats, type ProjectProfitability, type FreelancePaymentStatus } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 export type { CreateProjectData };
 
 export function useProjects() {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["projects"],
-    queryFn: () => db.projects.getAll(),
+    queryKey: ["projects", activeCompanyId],
+    queryFn: () => db.projects.getAll(activeCompanyId),
+    enabled: isReady,
   });
 }
 
@@ -21,9 +24,22 @@ export function useProject(id: string | undefined) {
 // project_id omitted -> stats for every project in one call (list page badges).
 // project_id set -> just that project (detail page overview).
 export function useProjectStats(project_id?: string) {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["projects", "stats", project_id ?? "all"],
-    queryFn: () => db.projects.getStats(project_id),
+    queryKey: ["projects", "stats", activeCompanyId, project_id ?? "all"],
+    queryFn: () => db.projects.getStats(activeCompanyId, project_id),
+    enabled: isReady,
+  });
+}
+
+// Real net profitability (HT revenue minus direct costs) — separate from
+// useProjectStats above, which tracks planned-budget consumption on a TTC
+// basis. See get_project_profitability.
+export function useProjectProfitability(project_id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", "profitability", project_id],
+    queryFn: () => db.projects.getProfitability(project_id!),
+    enabled: !!project_id,
   });
 }
 
@@ -35,8 +51,9 @@ export function useProjectStatsMap() {
 
 export function useCreateProject() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
   return useMutation({
-    mutationFn: (data: CreateProjectData) => db.projects.create(data),
+    mutationFn: (data: Omit<CreateProjectData, "company_id">) => db.projects.create({ ...data, company_id: activeCompanyId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Projet créé avec succès");
@@ -51,7 +68,7 @@ export function useCreateProject() {
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: CreateProjectData }) => db.projects.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Omit<CreateProjectData, "company_id"> }) => db.projects.update(id, data),
     onSuccess: (_result, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
@@ -87,7 +104,10 @@ export function useAssignInvoiceToProject() {
     onSuccess: (_result, { invoiceId }) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["invoices", invoiceId] });
-      queryClient.invalidateQueries({ queryKey: ["projects", "stats"] });
+      // Broadened from just ["projects", "stats"] — assigning/unassigning
+      // an invoice also moves the real profitability numbers
+      // (["projects", "profitability", ...]), which weren't refreshing.
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Facture liée au projet");
     },
     onError: (error: unknown) => {
@@ -145,8 +165,10 @@ export function useAssignFreelancePayment() {
 }
 
 export function useFreelancePayments() {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["freelance-payments"],
-    queryFn: () => db.projects.getFreelancePayments(),
+    queryKey: ["freelance-payments", activeCompanyId],
+    queryFn: () => db.projects.getFreelancePayments(activeCompanyId),
+    enabled: isReady,
   });
 }

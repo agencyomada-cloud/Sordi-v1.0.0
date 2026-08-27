@@ -3,7 +3,8 @@ import React, { useMemo, useState } from "react";
 import { useSettings } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { db, ClientCumulativeRecord } from "@/lib/database";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput } from "@sordi/ui";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
 import {
     RiDownloadLine as Download,
     RiDownloadLine as FileDown,
@@ -28,11 +29,13 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
     months,
 }) => {
     const { data: settings } = useSettings();
+    const { activeCompanyId, isReady } = useWorkspace();
     const [searchQuery, setSearchQuery] = useState("");
     const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "total_ttc", direction: "desc" });
     const { data, isLoading } = useQuery({
-        queryKey: ["client-cumulatives", year, months],
-        queryFn: () => db.dashboard.getClientCumulatives(year, months),
+        queryKey: ["client-cumulatives", activeCompanyId, year, months],
+        queryFn: () => db.dashboard.getClientCumulatives(activeCompanyId, year, months),
+        enabled: isReady,
     });
 
     const formatCurrency = (amount: number) => {
@@ -115,9 +118,9 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
 
     const SortHeader = ({ label, sortKey, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "center" | "right" }) => (
         <TableHead
+            numeric={align === "right"}
             className={cn(
                 "cursor-pointer select-none hover:text-foreground transition-colors",
-                align === "right" && "text-right",
                 align === "center" && "text-center"
             )}
             onClick={() => toggleSort(sortKey)}
@@ -140,9 +143,32 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
     if (isLoading) {
         return (
             <Card>
-                <CardContent className="h-64 flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">Calcul des rapports clients...</p>
+                <CardHeader className="flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between gap-4">
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-5 w-48" />
+                            <Skeleton className="h-3 w-40" />
+                        </div>
+                        <div className="flex gap-2">
+                            <Skeleton className="h-9 w-16 rounded-md" />
+                            <Skeleton className="h-9 w-16 rounded-md" />
+                        </div>
+                    </div>
+                    <Skeleton className="h-10 w-full sm:w-72 rounded-md" />
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table className="w-full text-sm">
+                        <TableHeader>
+                            <TableRow>
+                                {Array.from({ length: 7 }).map((_, i) => (
+                                    <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
+                                ))}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableLoading columns={7} rows={6} numericColumns={[1, 2, 3, 4, 5, 6]} />
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         );
@@ -189,7 +215,7 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
                                 <SortHeader label="Total HT" sortKey="total_ht" align="right" />
                                 <SortHeader label="Total TVA" sortKey="total_tva" align="right" />
                                 <SortHeader label="Timbre" sortKey="total_timbre" align="right" />
-                                <TableHead className="text-right text-primary">
+                                <TableHead numeric className="text-primary">
                                     <span
                                         className="inline-flex items-center gap-1 flex-row-reverse cursor-pointer select-none"
                                         onClick={() => toggleSort("total_ttc")}
@@ -207,20 +233,25 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
                         <TableBody>
                             {rows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
-                                        {searchQuery ? "Aucun résultat pour cette recherche" : "Aucune vente sur cette période"}
+                                    <TableCell colSpan={7}>
+                                        <EmptyState
+                                            type="default"
+                                            title="Aucune vente"
+                                            description={searchQuery ? "Essayez une autre recherche" : "Aucune vente enregistrée sur cette période"}
+                                            action={searchQuery ? { label: "Effacer la recherche", onClick: () => setSearchQuery("") } : undefined}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 rows.map((record) => (
                                     <TableRow key={record.client_name}>
                                         <TableCell className="font-medium">{record.client_name}</TableCell>
-                                        <TableCell className="text-center text-muted-foreground tabular-nums">{record.invoice_count}</TableCell>
-                                        <TableCell className="text-center tabular-nums">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{formatCurrency(record.total_ht)}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{formatCurrency(record.total_tva)}</TableCell>
-                                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatCurrency(record.total_timbre)}</TableCell>
-                                        <TableCell className="text-right tabular-nums font-semibold text-primary">{formatCurrency(record.total_ttc)}</TableCell>
+                                        <TableCell className="text-center text-muted-foreground font-mono tabular-nums tracking-tight">{record.invoice_count}</TableCell>
+                                        <TableCell className="text-center font-mono tabular-nums tracking-tight">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
+                                        <TableCell numeric>{formatCurrency(record.total_ht)}</TableCell>
+                                        <TableCell numeric>{formatCurrency(record.total_tva)}</TableCell>
+                                        <TableCell numeric className="text-muted-foreground">{formatCurrency(record.total_timbre)}</TableCell>
+                                        <TableCell numeric className="font-semibold text-primary">{formatCurrency(record.total_ttc)}</TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -231,12 +262,12 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
                                     <TableCell className="uppercase tracking-wide text-xs text-primary">
                                         Total {searchQuery ? "(filtré)" : "Général"}
                                     </TableCell>
-                                    <TableCell className="text-center text-primary tabular-nums">{totals.invoices}</TableCell>
-                                    <TableCell className="text-center text-primary tabular-nums">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
-                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.ht)}</TableCell>
-                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.tva)}</TableCell>
-                                    <TableCell className="text-right tabular-nums text-primary">{formatCurrency(totals.timbre)}</TableCell>
-                                    <TableCell className="text-right tabular-nums text-primary text-base">{formatCurrency(totals.ttc)}</TableCell>
+                                    <TableCell className="text-center text-primary font-mono tabular-nums tracking-tight">{totals.invoices}</TableCell>
+                                    <TableCell className="text-center text-primary font-mono tabular-nums tracking-tight">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatCurrency(totals.ht)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatCurrency(totals.tva)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatCurrency(totals.timbre)}</TableCell>
+                                    <TableCell numeric className="text-primary text-base">{formatCurrency(totals.ttc)}</TableCell>
                                 </TableRow>
                             </tfoot>
                         )}

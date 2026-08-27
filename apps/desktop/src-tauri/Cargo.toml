@@ -1,6 +1,6 @@
 [package]
 name = "sordi"
-version = "1.0.1"
+version = "1.0.3"
 description = "Sordi"
 authors = ["you"]
 license = ""
@@ -47,6 +47,9 @@ sha2 = "0.10"
 # avoids an OpenSSL system dependency for a desktop app that gets built on
 # multiple platforms.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Document email dispatch (send_email_with_pdf) — rustls-tls again to match
+# reqwest's choice above rather than pulling in a native OpenSSL dependency.
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
 
 [dev-dependencies]
 # "test" feature gates the tauri::test module (mock_builder, MockRuntime,

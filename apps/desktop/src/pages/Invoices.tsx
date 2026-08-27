@@ -1,26 +1,34 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { 
+import {
   RiAddLine as Plus,
-  RiMoreFill as MoreHorizontal, 
-  RiEyeLine as Eye, 
-  RiBankCardLine as CreditCard, 
-  RiDownloadLine as FileDown, 
-  RiSubtractLine as MinusCircle, 
-  RiDeleteBinLine as Trash2, 
-  RiFileTextLine as FileText, 
-  RiArrowLeftRightLine as ArrowRightLeft, 
-  RiEditLine as Edit 
+  RiMoreFill as MoreHorizontal,
+  RiEyeLine as Eye,
+  RiBankCardLine as CreditCard,
+  RiDownloadLine as FileDown,
+  RiSubtractLine as MinusCircle,
+  RiDeleteBinLine as Trash2,
+  RiArrowLeftRightLine as ArrowRightLeft,
+  RiEditLine as Edit,
+  RiMailSendLine as MailIcon,
+  RiCheckLine as Check,
+  RiFolderZipLine as FolderZip,
+  RiLoader4Line as Loader2,
+  RiFileCopyLine as Copy,
 } from "@remixicon/react";
-import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
+import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, statusBadgeVariants, StatusDot, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
-import { generateInvoicePDF } from "@/lib/pdfGenerator";
+import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
+import { getInvoiceStatusConfig } from "@/lib/invoiceStatus";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
 import { useLicenseStatus } from "@/hooks/useLicense";
 import { InvoicePreview } from "@/components/invoice/InvoicePreview";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import type { DraftInvoiceInput } from "@/lib/emailDrafter";
 
 const tabs = [
   { label: "Toutes", status: undefined, type: undefined },
@@ -31,23 +39,6 @@ const tabs = [
   { label: "Impayées", status: "issued" as InvoiceStatus, type: undefined },
 ];
 
-const statusStyles: Record<string, string> = {
-  paid: "bg-status-paid-bg text-status-paid",
-  partial: "bg-status-pending-bg text-status-pending",
-  unpaid: "bg-status-unpaid-bg text-status-unpaid",
-  draft: "bg-status-draft-bg text-status-draft",
-  overdue: "bg-status-unpaid-bg text-status-unpaid",
-  issued: "bg-status-pending-bg text-status-pending",
-};
-
-const statusLabels: Record<string, string> = {
-  paid: "Payée",
-  partial: "Partielle",
-  unpaid: "Impayée",
-  draft: "Brouillon",
-  overdue: "En retard",
-  issued: "Émise",
-};
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
@@ -75,6 +66,11 @@ export default function InvoicesPage() {
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [pdfInvoice, setPdfInvoice] = useState<any>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
+  const [emailTarget, setEmailTarget] = useState<any | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkMarkingPaid, setIsBulkMarkingPaid] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
   const handleTabChange = (index: number) => {
     setActiveTab(index);
@@ -101,10 +97,14 @@ export default function InvoicesPage() {
 
   const handleDelete = async () => {
     if (invoiceToDelete) {
+      // useDeleteInvoice's own onSuccess/onError already shows the correct
+      // toast based on the real result — an unconditional toast.success
+      // here fired even when the delete failed (e.g. blocked by a
+      // dependent payment/delivery note), showing a fake "supprimée" toast
+      // right alongside the real error toast.
       deleteInvoice.mutate(invoiceToDelete);
       setDeleteDialogOpen(false);
       setInvoiceToDelete(null);
-      toast.success("Facture supprimée");
     }
   };
 
@@ -157,83 +157,166 @@ export default function InvoicesPage() {
     });
   };
 
+  // Shared by the single-row download and the bulk zip export — fetches an
+  // invoice's items/client and reshapes them into what the PDF generator
+  // expects. Throws (with a French message) on any missing piece so callers
+  // can decide how to report a failure (single toast vs. a batch summary).
+  const buildInvoiceForPDF = async (invoiceId: string) => {
+    const fullInvoice = await db.invoices.getById(invoiceId);
+    if (!fullInvoice) throw new Error("Impossible de récupérer les détails de la facture");
+
+    const items = await db.invoices.getItems(invoiceId);
+
+    if (!fullInvoice.client_id) throw new Error("Cette facture n'a pas de client associé");
+
+    const client = await db.clients.getById(fullInvoice.client_id);
+    if (!client) throw new Error("Impossible de récupérer les détails du client");
+
+    return {
+      ...fullInvoice,
+      invoice_items: items.map(item => ({
+        ...item,
+        products: item.products ? {
+          code: item.products.code,
+          name: item.products.name,
+          description: item.products.description,
+          unit: item.products.unit,
+        } : undefined
+      })),
+      clients: {
+        name: client.name,
+        address: client.address,
+        city: client.city,
+        wilaya: client.wilaya,
+        phone: client.phone,
+        email: client.email,
+        nif: client.nif,
+        nis: client.nis,
+        rc: client.rc,
+        ai: client.ai,
+      }
+    };
+  };
+
   const handleDownloadPDF = async (invoiceId: string, invoiceSummary: any) => {
+    const loadingId = toast.loading("Génération du PDF...");
     try {
-      // Fetch full invoice details to get items
+      const invoiceForPDF = await buildInvoiceForPDF(invoiceId);
+      setPdfInvoice(invoiceForPDF);
+
+      // Wait for the off-screen preview to render before rasterizing it
+      await new Promise((r) => setTimeout(r, 500));
+
+      await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          id: loadingId,
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast.error(error instanceof Error ? error.message : "Erreur inattendue", { id: loadingId });
+    } finally {
+      setPdfInvoice(null);
+    }
+  };
+
+  const handleOpenEmailModal = async (invoiceId: string) => {
+    try {
       const fullInvoice = await db.invoices.getById(invoiceId);
       if (!fullInvoice) {
         toast.error("Impossible de récupérer les détails de la facture");
         return;
       }
-
-      // Fetch invoice items
       const items = await db.invoices.getItems(invoiceId);
+      const client = fullInvoice.client_id ? await db.clients.getById(fullInvoice.client_id) : null;
 
-      if (!fullInvoice.client_id) {
-        toast.error("Cette facture n'a pas de client associé");
-        return;
-      }
-
-      // Fetch client details
-      const client = await db.clients.getById(fullInvoice.client_id);
-
-      if (!client) {
-        toast.error("Impossible de récupérer les détails du client");
-        return;
-      }
-
-      // Construct complete invoice object for PDF generator
-      const invoiceForPDF = {
+      setEmailTarget({
         ...fullInvoice,
-        invoice_items: items.map(item => ({
-          ...item,
-          products: item.products ? {
-            code: item.products.code,
-            name: item.products.name,
-            description: item.products.description,
-            unit: item.products.unit,
-          } : undefined
-        })),
-        clients: {
+        invoice_items: items,
+        clients: client ? {
           name: client.name,
-          address: client.address,
-          city: client.city,
-          wilaya: client.wilaya,
-          phone: client.phone,
           email: client.email,
-          nif: client.nif,
-          nis: client.nis,
-          rc: client.rc,
-          ai: client.ai,
-        }
-      };
-
-      setPdfInvoice(invoiceForPDF);
-
-      const promise = new Promise<string>(async (resolve, reject) => {
-        // Wait for render
-        await new Promise(r => setTimeout(r, 500));
-        try {
-          // Pass download=true by default
-          const res = await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
-          resolve(res);
-        } catch (e) {
-          reject(e);
-        } finally {
-          setPdfInvoice(null);
-        }
+        } : undefined,
       });
-
-      toast.promise(promise, {
-        loading: "Génération du PDF...",
-        success: "PDF téléchargé",
-        error: "Erreur lors de la génération du PDF",
-      });
+      setEmailModalOpen(true);
     } catch (error) {
-      console.error("PDF generation error:", error);
-      toast.error("Erreur inattendue");
+      console.error("Failed to load invoice for email:", error);
+      toast.error("Impossible de préparer l'email pour cette facture");
     }
+  };
+
+  const clearSelection = () => setSelectedInvoices([]);
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast.success("ID copié dans le presse-papiers");
+  };
+
+  const handleBulkMarkPaid = async () => {
+    setIsBulkMarkingPaid(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedInvoices.map((id) => updateStatus.mutateAsync({ id, status: "paid" }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} facture${results.length > 1 ? "s" : ""} marquée${results.length > 1 ? "s" : ""} payée${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} facture(s) sur ${results.length} n'ont pas pu être mises à jour`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkMarkingPaid(false);
+    }
+  };
+
+  const handleBulkDownloadZip = async () => {
+    setIsBulkDownloading(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedInvoices.map(async (id) => {
+          const invoiceForPDF = await buildInvoiceForPDF(id);
+          const blob = await generateInvoicePDFBlob(invoiceForPDF, settings, licenseStatus?.state === "active");
+          const isCreditNote = invoiceForPDF.invoice_type === "credit_note";
+          const fileName = `${isCreditNote ? "Avoir" : "Facture"}-${invoiceForPDF.invoice_number || id}.pdf`;
+          return { blob, fileName };
+        })
+      );
+      const files = results.filter((r): r is PromiseFulfilledResult<{ blob: Blob; fileName: string }> => r.status === "fulfilled").map((r) => r.value);
+      const failed = results.length - files.length;
+
+      if (files.length === 0) {
+        toast.error("Aucun PDF n'a pu être généré");
+        return;
+      }
+
+      await downloadBlobsAsZip(files, `Factures-${new Date().toISOString().split("T")[0]}.zip`);
+      toast.success(
+        failed === 0
+          ? `${files.length} facture${files.length > 1 ? "s" : ""} téléchargée${files.length > 1 ? "s" : ""} (ZIP)`
+          : `${files.length} facture(s) téléchargées, ${failed} en échec`
+      );
+      clearSelection();
+    } catch (error) {
+      console.error("Bulk PDF download error:", error);
+      toast.error("Erreur lors du téléchargement groupé");
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const results = await Promise.allSettled(selectedInvoices.map((id) => deleteInvoice.mutateAsync(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === 0) {
+      toast.success(`${results.length} facture${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
+    } else {
+      toast.error(`${failed} facture(s) sur ${results.length} n'ont pas pu être supprimées`);
+    }
+    clearSelection();
   };
 
   return (
@@ -248,7 +331,7 @@ export default function InvoicesPage() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Factures</h1>
+              <h1 className="text-3xl text-foreground tracking-tight">Factures</h1>
               <p className="text-muted-foreground mt-1">Gérez vos factures et avoirs</p>
             </div>
 
@@ -268,72 +351,104 @@ export default function InvoicesPage() {
             </div>
           </div>
 
-          {/* Stats row */}
-          <div className="flex gap-4 mb-6 overflow-x-auto pb-2 animate-fade-in-up animation-delay-100">
-            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 min-w-fit card-hover">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{invoices?.length || 0}</p>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">Total factures</p>
-              </div>
+          {/* Tabs and Search — rest directly on the page canvas, no card
+              wrapper; a single hairline divider closes off the filter row
+              instead of a full bordered/shadowed box. */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/40 animate-fade-in-up animation-delay-100">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {tabs.map((tab, index) => (
+                <Button
+                  key={tab.label}
+                  variant={activeTab === index ? "default" : "outline"}
+                  onClick={() => handleTabChange(index)}
+                  className={cn(
+                    "rounded-full px-4 border-0",
+                    activeTab === index
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+              <span className="text-xs text-muted-foreground font-mono tabular-nums ps-2 shrink-0 whitespace-nowrap">
+                {invoices?.length || 0} facture{(invoices?.length || 0) > 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div className="flex gap-3 w-full md:w-auto">
+              <Select
+                value={`${sortConfig.key}-${sortConfig.direction}`}
+                onValueChange={(val) => {
+                  const [key, direction] = val.split('-');
+                  setSortConfig({ key, direction: direction as 'asc' | 'desc' });
+                }}
+              >
+                <SelectTrigger className="w-[180px] h-11 bg-secondary/30 border-border/50 rounded-xl">
+                  <SelectValue placeholder="Trier par..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date-desc">Date (Plus récent)</SelectItem>
+                  <SelectItem value="date-asc">Date (Plus ancien)</SelectItem>
+                  <SelectItem value="number-asc">N° Facture (Croissant)</SelectItem>
+                  <SelectItem value="number-desc">N° Facture (Décroissant)</SelectItem>
+                  <SelectItem value="client-asc">Client (A-Z)</SelectItem>
+                  <SelectItem value="client-desc">Client (Z-A)</SelectItem>
+                  <SelectItem value="amount-desc">Montant (Plus grand)</SelectItem>
+                  <SelectItem value="amount-asc">Montant (Plus petit)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                containerClassName="flex-1 md:w-72"
+              />
             </div>
           </div>
 
-          <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden animate-fade-in-up animation-delay-200">
-            {/* Tabs and Search */}
-            <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/30">
-              <div className="flex items-center gap-2 overflow-x-auto">
-                {tabs.map((tab, index) => (
-                  <Button
-                    key={tab.label}
-                    variant={activeTab === index ? "default" : "outline"}
-                    onClick={() => handleTabChange(index)}
-                    className={cn(
-                      "rounded-full px-4 border-0",
-                      activeTab === index
-                        ? "bg-primary text-primary-foreground shadow-md"
-                        : "bg-background text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    {tab.label}
-                  </Button>
-                ))}
-              </div>
+          {/* Bulk action bar */}
+          <div className="pt-4">
+            <BulkActionBar count={selectedInvoices.length} onClear={clearSelection}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs"
+                onClick={handleBulkMarkPaid}
+                disabled={isBulkMarkingPaid}
+              >
+                {isBulkMarkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Marquer comme payées
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs"
+                onClick={handleBulkDownloadZip}
+                disabled={isBulkDownloading}
+              >
+                {isBulkDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderZip className="w-3.5 h-3.5" />}
+                Télécharger en lot
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs text-destructive hover:text-destructive"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer la sélection
+              </Button>
+            </BulkActionBar>
+          </div>
 
-              <div className="flex gap-3 w-full md:w-auto">
-                <Select
-                  value={`${sortConfig.key}-${sortConfig.direction}`}
-                  onValueChange={(val) => {
-                    const [key, direction] = val.split('-');
-                    setSortConfig({ key, direction: direction as 'asc' | 'desc' });
-                  }}
-                >
-                  <SelectTrigger className="w-[180px] h-11 bg-secondary/30 border-border/50 rounded-xl">
-                    <SelectValue placeholder="Trier par..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="date-desc">Date (Plus récent)</SelectItem>
-                    <SelectItem value="date-asc">Date (Plus ancien)</SelectItem>
-                    <SelectItem value="number-asc">N° Facture (Croissant)</SelectItem>
-                    <SelectItem value="number-desc">N° Facture (Décroissant)</SelectItem>
-                    <SelectItem value="client-asc">Client (A-Z)</SelectItem>
-                    <SelectItem value="client-desc">Client (Z-A)</SelectItem>
-                    <SelectItem value="amount-desc">Montant (Plus grand)</SelectItem>
-                    <SelectItem value="amount-asc">Montant (Plus petit)</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <SearchInput
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  containerClassName="flex-1 md:w-72"
-                />
-              </div>
-            </div>
-
-            {/* Table */}
+          {/* Table — borderless outer surface, resting directly on the page
+              canvas (was a bg-card/border/shadow-card box around the whole
+              block); only the row dividers now separate content. */}
+          <div className="animate-fade-in-up animation-delay-200">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -346,7 +461,7 @@ export default function InvoicesPage() {
                   <TableHead>N°</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead className="hidden md:table-cell">Date</TableHead>
-                  <TableHead>Montant</TableHead>
+                  <TableHead numeric>Montant</TableHead>
                   <TableHead className="hidden sm:table-cell">Statut</TableHead>
                   <TableHead className="w-14"></TableHead>
                 </TableRow>
@@ -375,10 +490,13 @@ export default function InvoicesPage() {
                   filteredInvoices?.map((invoice) => {
                     const isCreditNote = invoice.invoice_type === "credit_note";
                     const isProforma = invoice.invoice_type === "proforma";
+                    const statusConfig = getInvoiceStatusConfig(invoice.status);
+                    const isCancelled = invoice.status === "cancelled";
                     return (
                       <TableRow
                         key={invoice.id}
                         className="cursor-pointer"
+                        dimmed={isCancelled}
                         onClick={() => navigate(`/invoices/${invoice.id}`)}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
@@ -389,7 +507,7 @@ export default function InvoicesPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{invoice.invoice_number}</span>
+                            <span className="font-mono font-medium tabular-nums tracking-tight">{invoice.invoice_number}</span>
                             {isCreditNote && (
                               <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">Avoir</span>
                             )}
@@ -398,16 +516,18 @@ export default function InvoicesPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {invoice.clients?.name}
+                        <TableCell className="text-muted-foreground max-w-[220px]">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate">{invoice.clients?.name}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{invoice.clients?.name}</TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell className="text-muted-foreground hidden md:table-cell">
                           {formatDate(invoice.invoice_date)}
                         </TableCell>
-                        <TableCell className={cn(
-                          "font-medium tabular-nums",
-                          isCreditNote ? "text-destructive" : ""
-                        )}>
+                        <TableCell numeric className={cn(isCreditNote && "text-destructive")}>
                           {isCreditNote ? "-" : ""}{formatCurrency(invoice.total_ttc)}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -416,15 +536,16 @@ export default function InvoicesPage() {
                               <DropdownMenuTrigger asChild>
                                 <button
                                   className={cn(
-                                    "inline-flex px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:opacity-80 transition-opacity",
-                                    statusStyles[invoice.status || "draft"]
+                                    statusBadgeVariants(),
+                                    "cursor-pointer hover:opacity-80 transition-opacity"
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
                                   }}
                                 >
-                                  {statusLabels[invoice.status || "draft"]}
+                                  <StatusDot tone={statusConfig.variant} />
+                                  {statusConfig.label}
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="center">
@@ -445,20 +566,40 @@ export default function InvoicesPage() {
                           </div>
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownloadPDF(invoice.id, invoice);
-                              }}
-                              title="Télécharger PDF"
-                            >
-                              <FileDown className="w-4 h-4" />
-                            </button>
+                          {/* Hidden until the row is hovered/focused — Linear-style
+                              contextual actions instead of permanently-visible icon clutter. */}
+                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopyId(invoice.id);
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Copier l'ID</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadPDF(invoice.id, invoice);
+                                  }}
+                                >
+                                  <FileDown className="w-4 h-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Télécharger PDF</TooltipContent>
+                            </Tooltip>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
+                                <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
                                   <MoreHorizontal className="w-4 h-4" />
                                 </button>
                               </DropdownMenuTrigger>
@@ -466,6 +607,10 @@ export default function InvoicesPage() {
                                 <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
                                   <Eye className="mr-2 h-4 w-4" />
                                   Voir détails
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleOpenEmailModal(invoice.id)}>
+                                  <MailIcon className="mr-2 h-4 w-4" />
+                                  Envoyer par email
                                 </DropdownMenuItem>
                                 {invoice.status !== "paid" && (
                                   <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
@@ -532,6 +677,56 @@ export default function InvoicesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer {selectedInvoices.length} facture{selectedInvoices.length > 1 ? "s" : ""} ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible et supprimera définitivement {selectedInvoices.length > 1 ? "ces factures" : "cette facture"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {emailTarget && (
+        <SendDocumentEmailModal
+          open={emailModalOpen}
+          onOpenChange={(next) => {
+            setEmailModalOpen(next);
+            if (!next) setEmailTarget(null);
+          }}
+          recipientEmail={emailTarget.clients?.email}
+          fileName={`${emailTarget.invoice_type === "credit_note" ? "Avoir" : "Facture"}-${emailTarget.invoice_number || "000"}.pdf`}
+          draftInput={{
+            docType: "invoice",
+            isCreditNote: emailTarget.invoice_type === "credit_note",
+            documentNumber: emailTarget.invoice_number,
+            clientName: emailTarget.clients?.name || "",
+            documentDate: emailTarget.invoice_date,
+            dueDate: emailTarget.due_date,
+            totalTTC: emailTarget.total_ttc,
+            bankRib: settings?.company_rib || null,
+            bankAgency: settings?.company_bank_agency || null,
+            senderCompany: settings?.company_name || "Sordi",
+            items: (emailTarget.invoice_items || []).map((item: any) => ({
+              name: item.product_name || item.products?.name || item.name || "Article",
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+            })),
+          } satisfies DraftInvoiceInput}
+          getPdfBase64={async () => {
+            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.state === "active");
+            return blobToBase64(blob);
+          }}
+        />
+      )}
     </>
   );
 }

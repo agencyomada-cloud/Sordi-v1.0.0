@@ -60,11 +60,11 @@ export default function SalesAnalysisPage() {
               </div>
             </div>
 
-            <div className="flex bg-muted/40 p-1 rounded-[6px] border border-border/40 w-fit">
+            <div className="flex bg-muted/40 p-1 rounded-full border border-border/40 w-fit">
               <button
                 onClick={() => setView('pivot')}
                 className={cn(
-                  "px-4 py-1.5 text-xs font-medium rounded-[4px] transition-all",
+                  "px-4 py-1.5 text-xs font-medium rounded-full transition-all",
                   view === 'pivot' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -73,7 +73,7 @@ export default function SalesAnalysisPage() {
               <button
                 onClick={() => setView('client')}
                 className={cn(
-                  "px-4 py-1.5 text-xs font-medium rounded-[4px] transition-all",
+                  "px-4 py-1.5 text-xs font-medium rounded-full transition-all",
                   view === 'client' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >

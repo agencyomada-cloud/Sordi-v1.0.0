@@ -77,11 +77,30 @@ export function useEditableOrderLogic(order: any, onOrderChange: (order: any) =>
     onOrderChange({ ...order, items: updatedItems, subtotal_ht: totals.subtotal, tva_amount: totals.tvaAmount, total_ttc: totals.total });
   };
 
-  const addItem = () => {
-    const newItem = { id: crypto.randomUUID(), product_code: "", product_name: "", quantity: 1, unit_price: 0 };
-    const updatedItems = [...items, newItem];
+  const handleAddProduct = (product: any, index: number) => {
+    const newItem = {
+      id: crypto.randomUUID(),
+      product_id: product.id,
+      product_code: product.code || "",
+      product_name: product.name,
+      quantity: 1,
+      unit_price: product.unit_price || 0,
+      tva_rate: product.tva_rate !== undefined ? product.tva_rate : 19,
+    };
+    const updatedItems = [...items];
+    updatedItems.splice(index + 1, 0, newItem);
     const totals = recalculateTotals(updatedItems);
     onOrderChange({ ...order, items: updatedItems, subtotal_ht: totals.subtotal, tva_amount: totals.tvaAmount, total_ttc: totals.total });
+    setOpenPopoverIndex(null);
+  };
+
+  const handleAddCustomItem = (name: string, index: number) => {
+    const newItem = { id: crypto.randomUUID(), product_code: "", product_name: name, quantity: 1, unit_price: 0, tva_rate: 19 };
+    const updatedItems = [...items];
+    updatedItems.splice(index + 1, 0, newItem);
+    const totals = recalculateTotals(updatedItems);
+    onOrderChange({ ...order, items: updatedItems, subtotal_ht: totals.subtotal, tva_amount: totals.tvaAmount, total_ttc: totals.total });
+    setOpenPopoverIndex(null);
   };
 
   const pages = chunkItems(items);
@@ -98,7 +117,8 @@ export function useEditableOrderLogic(order: any, onOrderChange: (order: any) =>
     updateClient,
     updateItem,
     removeItem,
-    addItem,
+    handleAddProduct,
+    handleAddCustomItem,
   };
 }
 

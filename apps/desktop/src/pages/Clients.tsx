@@ -9,8 +9,11 @@ import {
   RiDownloadLine as Download,
   RiUploadLine as Upload,
   RiGroupLine as Users,
+  RiUserAddLine as UserAddIcon,
+  RiMapPinLine as MapPinIcon,
 } from "@remixicon/react";
-import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState } from "@sordi/ui";
+import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
+import { MetricStrip } from "@/components/ui/metric-strip";
 import { useClients, useCreateClient, useDeleteClient, useClientOverviewStatsMap, type CreateClientData } from "@/hooks/useClients";
 import { exportToCSV, parseCSV, validateClientImport } from "@/lib/csvUtils";
 import { computeClientStatus } from "@/lib/clientOverview";
@@ -29,6 +32,13 @@ export default function ClientsPage() {
   const { data: overviewStatsByClientId } = useClientOverviewStatsMap();
   const createClient = useCreateClient();
   const deleteClient = useDeleteClient();
+
+  const newThisMonth = (clients ?? []).filter((c) => {
+    const created = new Date(c.created_at);
+    const now = new Date();
+    return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth();
+  }).length;
+  const wilayasCovered = new Set((clients ?? []).map((c) => c.wilaya).filter(Boolean)).size;
 
   const filteredClients = clients?.filter(client => {
     if (!searchQuery.trim()) return true;
@@ -145,7 +155,7 @@ export default function ClientsPage() {
       let successCount = 0;
       for (const clientData of valid) {
         try {
-          const clientToCreate: CreateClientData = {
+          const clientToCreate: Omit<CreateClientData, "company_id"> = {
             name: clientData.name || "",
             code: clientData.code || "",
             phone: clientData.phone || "",
@@ -216,7 +226,7 @@ export default function ClientsPage() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isImporting}
-                className="w-10 h-10 rounded-[6px] bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
+                className="w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
                 title="Importer des clients"
               >
                 <Upload className="w-4 h-4 text-muted-foreground" />
@@ -225,7 +235,7 @@ export default function ClientsPage() {
               <button
                 onClick={handleExport}
                 disabled={!clients || clients.length === 0}
-                className="w-10 h-10 rounded-[6px] bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
+                className="w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
                 title="Exporter les clients"
               >
                 <Download className="w-4 h-4 text-muted-foreground" />
@@ -238,17 +248,16 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          {/* Stats card */}
+          {/* Metric strip — shared KPI ribbon component (same shape as the
+              Dashboard's Tier 2), replacing the old single floating stat box. */}
           <div className="mb-6 animate-fade-in-up animation-delay-100">
-            <div className="bg-card rounded-[6px] p-6 shadow-card border border-border/30 flex items-center gap-5 w-fit card-hover">
-              <div className="w-14 h-14 bg-primary rounded-[6px] flex items-center justify-center">
-                <Users className="w-7 h-7 text-primary-foreground" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-foreground tracking-tight tabular-nums">{clients?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Clients enregistrés</p>
-              </div>
-            </div>
+            <MetricStrip
+              cells={[
+                { key: "total", label: "Total Clients", value: String(clients?.length || 0), numericValue: clients?.length || 0, format: (v) => String(Math.round(v)), icon: Users },
+                { key: "new", label: "Nouveaux ce mois", value: String(newThisMonth), numericValue: newThisMonth, format: (v) => String(Math.round(v)), icon: UserAddIcon },
+                { key: "wilayas", label: "Wilayas couvertes", value: String(wilayasCovered), numericValue: wilayasCovered, format: (v) => String(Math.round(v)), icon: MapPinIcon },
+              ]}
+            />
           </div>
 
           {/* Search */}
@@ -261,8 +270,10 @@ export default function ClientsPage() {
             />
           </div>
 
-          {/* Table */}
-          <div className="bg-card rounded-[6px] border border-border/30 shadow-card overflow-hidden animate-fade-in-up animation-delay-200">
+          {/* Table — borderless outer surface, resting directly on the page
+              canvas (was a bg-card/border/shadow-card box), matching the
+              Invoices.tsx table pattern. */}
+          <div className="animate-fade-in-up animation-delay-200">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -299,10 +310,18 @@ export default function ClientsPage() {
                     <TableRow
                       key={client.id}
                       className="cursor-pointer"
+                      dimmed={client.is_active === false}
                       onClick={() => navigate(`/clients/${client.id}`)}
                     >
-                      <TableCell className="text-muted-foreground font-mono">{client.code || "-"}</TableCell>
-                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell className="text-muted-foreground font-mono tabular-nums tracking-tight">{client.code || "-"}</TableCell>
+                      <TableCell className="font-medium max-w-[240px]">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="block truncate">{client.name}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{client.name}</TooltipContent>
+                        </Tooltip>
+                      </TableCell>
                       <TableCell className="text-muted-foreground hidden md:table-cell">{client.phone || "-"}</TableCell>
                       <TableCell className="text-muted-foreground hidden lg:table-cell">{client.wilaya || "-"}</TableCell>
                       <TableCell>
@@ -314,7 +333,7 @@ export default function ClientsPage() {
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
+                            <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
                               <MoreHorizontal className="w-4 h-4" />
                             </button>
                           </DropdownMenuTrigger>

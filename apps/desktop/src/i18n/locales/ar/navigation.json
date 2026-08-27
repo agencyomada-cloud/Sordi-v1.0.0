@@ -1,0 +1,44 @@
+{
+  "dashboard": "لوحة التحكم",
+  "groups": {
+    "overview": "نظرة عامة",
+    "sales": "المبيعات والعملاء",
+    "purchasing": "المشتريات والمصاريف",
+    "operations": "الإدارة والعمليات",
+    "system": "النظام",
+    "pilotage": "القيادة والموارد البشرية"
+  },
+  "links": {
+    "invoicing": "الفوترة",
+    "quotes": "عروض الأسعار",
+    "payments": "المدفوعات",
+    "orders": "الطلبات",
+    "deliveries": "التسليمات",
+    "contracts": "العقود",
+    "clients": "العملاء",
+    "suppliers": "الموردون",
+    "projects": "المشاريع",
+    "products": "المنتجات",
+    "catalogue": "الكتالوج والخدمات",
+    "expenses": "المصاريف والنفقات",
+    "analytics": "التحليلات والتقارير",
+    "history": "سجل النشاط",
+    "employees": "الموظفون والعقود",
+    "payroll": "الفريق والرواتب",
+    "partners": "الشركاء وحصص الأرباح",
+    "integrations": "التكاملات والنسخ الاحتياطي",
+    "settings": "إعدادات الشركة"
+  },
+  "search": {
+    "placeholder": "بحث…",
+    "shortcutHint": "بحث (⌘K)",
+    "commandPlaceholder": "البحث عن صفحة، عميل، أو فاتورة…",
+    "noResults": "لا توجد نتائج لـ «{{query}}»",
+    "continueTyping": "تابع الكتابة للبحث…",
+    "pages": "الصفحات",
+    "clients": "العملاء",
+    "invoices": "الفواتير"
+  },
+  "collapseMenu": "طي القائمة",
+  "expandMenu": "توسيع القائمة"
+}

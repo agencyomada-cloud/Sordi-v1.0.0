@@ -10,28 +10,40 @@ export const compressImage = (dataUrl: string, maxWidth: number = 500): Promise<
     const img = new Image();
     img.src = dataUrl;
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      let width = img.width;
-      let height = img.height;
+      // A same-size fallback for any failure past this point (oversized
+      // canvas, decode edge case, etc.) — without this, a thrown error
+      // inside onload leaves the promise unresolved forever and the
+      // upload silently does nothing, since there's no catch around the
+      // synchronous work below.
+      try {
+        const canvas = document.createElement("canvas");
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
 
-      // Calculate new dimensions
-      if (width > maxWidth) {
-        height = (height * maxWidth) / width;
-        width = maxWidth;
-      }
+        if (!width || !height) {
+          resolve(dataUrl);
+          return;
+        }
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
+        // Calculate new dimensions
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
 
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, width, height);
-        // Use JPEG for better compression if it's not a PNG with transparency
-        // But for logos, transparency is important. Let's stick to PNG or monitor size.
-        // Actually, if we resize, the size drops significantly even with PNG.
-        // Let's use PNG to preserve transparency which is crucial for logos/stamps.
-        resolve(canvas.toDataURL("image/png", 0.8));
-      } else {
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
+        const ctx = canvas.getContext("2d");
+
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          // Use PNG to preserve transparency, which matters for logos/stamps.
+          resolve(canvas.toDataURL("image/png"));
+        } else {
+          resolve(dataUrl);
+        }
+      } catch (err) {
+        console.warn("compressImage: falling back to original file", err);
         resolve(dataUrl);
       }
     };

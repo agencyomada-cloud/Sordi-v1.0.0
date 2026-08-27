@@ -1,0 +1,21 @@
+{
+  "title": "الشركاء وتوزيع الأرباح",
+  "partner": "شريك",
+  "role": {
+    "managingPartner": "الشريك المسير",
+    "nonManagingPartner": "شريك غير مسير"
+  },
+  "equityShare": "حصة رأس المال",
+  "equityDistribution": "توزيع الحصص",
+  "withdrawals": "سحوبات وتوزيعات الأرباح",
+  "recordWithdrawal": "تسجيل سحب",
+  "withdrawalHistory": "سجل السحوبات",
+  "netProfitPeriod": "الربح الصافي للفترة",
+  "totalDistributed": "إجمالي الموزع / المسحوب",
+  "remainingBalance": "الرصيد المتبقي للتوزيع",
+  "allocatedProfit": "الحصة النظرية",
+  "currentBalance": "الرصيد الحالي",
+  "creditor": "دائن",
+  "debtor": "مدين",
+  "settled": "مسوّى"
+}

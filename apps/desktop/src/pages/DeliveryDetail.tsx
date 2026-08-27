@@ -1,47 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { 
-  RiArrowLeftLine as ArrowLeft, 
-  RiDownloadLine as Download, 
-  RiPrinterLine as Printer, 
-  RiTruckLine as Truck, 
-  RiEditLine as Edit, 
-  RiLoader4Line as Loader2 
+import { PDFViewer } from "@react-pdf/renderer";
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  RiArrowLeftLine as ArrowLeft,
+  RiDownloadLine as Download,
+  RiPrinterLine as Printer,
+  RiEditLine as Edit,
+  RiLoader4Line as Loader2,
+  RiMailSendLine as MailSend,
 } from "@remixicon/react";
 import { Button } from "@sordi/ui";
 import { useDeliveryNote } from "@/hooks/useDeliveryNotes";
-import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
+import { useSetPageHeader } from "@/hooks/usePageHeader";
+import {
+  generateDeliveryNotePDF,
+  generateDeliveryNotePDFBlob,
+  buildDeliveryNotePDFData,
+  toDeliveryNotePDFSettings,
+  blobToBase64,
+  FALLBACK_APP_VERSION,
+  type DeliveryNotePDFData,
+} from "@/lib/pdfGenerator";
+import { DeliveryNotePDFDocument } from "@/components/pdf/DeliveryNotePDFDocument";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
-import { useLicenseStatus } from "@/hooks/useLicense";
-import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import type { DraftDeliveryInput } from "@/lib/emailDrafter";
 
 export default function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: deliveryNote, isLoading, error } = useDeliveryNote(id);
   const { data: settings } = useSettings();
-  const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  // Drives the live preview below — same shape the PDF generator consumes,
+  // so the preview (rendered via react-pdf's PDFViewer, the exact same
+  // DeliveryNotePDFDocument) can never drift from the exported file again.
+  const [pdfData, setPdfData] = useState<DeliveryNotePDFData | null>(null);
+  const [appVersion, setAppVersion] = useState<string>(FALLBACK_APP_VERSION);
 
-  const buildNoteForPDF = () => {
+  useSetPageHeader("Livraisons", [
+    { label: "Livraisons", path: "/deliveries" },
+    { label: deliveryNote?.delivery_number || "…" },
+  ]);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setPdfData(deliveryNote ? buildDeliveryNotePDFData(deliveryNote) : null);
+  }, [deliveryNote]);
+
+  const buildPdfData = async () => {
     if (!deliveryNote) return null;
-    return {
-      ...deliveryNote,
-      items: deliveryNote.delivery_note_items || [],
-      clients: deliveryNote.clients,
-    };
+    return buildDeliveryNotePDFData(deliveryNote);
   };
 
   const handleDownloadPDF = async () => {
-    const noteForPDF = buildNoteForPDF();
-    if (!noteForPDF) return;
+    const pdfData = await buildPdfData();
+    if (!pdfData) return;
 
     try {
       setIsGenerating(true);
-      await generateDeliveryNotePDF(noteForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
+      // generateDeliveryNotePDF shows its own success toast with the saved
+      // path once the native save dialog resolves; null means cancelled.
+      await generateDeliveryNotePDF(pdfData, settings);
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -51,13 +78,14 @@ export default function DeliveryDetailPage() {
   };
 
   const handlePrint = async () => {
-    const noteForPDF = buildNoteForPDF();
-    if (!noteForPDF) return;
+    const pdfData = await buildPdfData();
+    if (!pdfData) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateDeliveryNotePDF(noteForPDF as any, settings, false, undefined, licenseStatus?.state === "active");
+      const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
+      const pdfBase64 = await blobToBase64(blob);
       const { invoke } = await import("@tauri-apps/api/core");
-      const fileName = `Impression-${noteForPDF.delivery_number || "bon_livraison"}.pdf`;
+      const fileName = `Impression-${pdfData.delivery_number || "bon_livraison"}.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });
       toast.success("PDF ouvert pour impression");
     } catch (error) {
@@ -142,7 +170,7 @@ export default function DeliveryDetailPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex items-center flex-wrap gap-3">
               <Button variant="outline" onClick={() => navigate(`/deliveries/${id}/edit`)}>
                 <Edit className="w-4 h-4 mr-2" />
                 Modifier
@@ -155,23 +183,60 @@ export default function DeliveryDetailPage() {
                 {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 {isGenerating ? "Téléchargement..." : "Télécharger PDF"}
               </Button>
+              <Button variant="outline" onClick={() => setEmailModalOpen(true)}>
+                <MailSend className="w-4 h-4 mr-2" />
+                Envoyer par Email
+              </Button>
             </div>
           </div>
 
-          {/* Delivery Preview Section */}
+          {/* Delivery Preview Section — the exact PDF template, rendered live
+              via react-pdf's PDFViewer, so this is a 1:1 replica of the
+              exported file by construction, not a second hand-maintained
+              implementation that can drift out of sync. */}
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden p-8">
-            <div className="flex justify-center bg-muted rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-              <div className="shadow-xl">
-                <EditableInvoicePreview
-                  invoice={{
-                    ...deliveryNote,
-                    invoice_items: deliveryNote.delivery_note_items || [],
-                  }}
-                  onInvoiceChange={() => { }}
+            {pdfData ? (
+              <PDFViewer
+                showToolbar={false}
+                style={{ width: "100%", height: "calc(100vh - 300px)", border: "none", borderRadius: 12 }}
+              >
+                <DeliveryNotePDFDocument
+                  data={pdfData}
+                  appVersion={appVersion}
+                  settings={toDeliveryNotePDFSettings(settings)}
                 />
+              </PDFViewer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                Chargement de l'aperçu...
               </div>
-            </div>
+            )}
           </div>
+
+          {pdfData && (
+            <SendDocumentEmailModal
+              open={emailModalOpen}
+              onOpenChange={setEmailModalOpen}
+              recipientEmail={pdfData.client.email}
+              fileName={`BonLivraison-${pdfData.delivery_number || "000"}.pdf`}
+              draftInput={{
+                docType: "delivery",
+                documentNumber: pdfData.delivery_number,
+                clientName: pdfData.client.name,
+                documentDate: pdfData.delivery_date,
+                senderCompany: settings?.company_name || "Sordi",
+                items: pdfData.items.map((item) => ({
+                  name: item.product_name || "Article",
+                  quantity: item.quantity,
+                  unitPrice: item.unit_price,
+                })),
+              } satisfies DraftDeliveryInput}
+              getPdfBase64={async () => {
+                const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
+                return blobToBase64(blob);
+              }}
+            />
+          )}
         </main>
   );
 }

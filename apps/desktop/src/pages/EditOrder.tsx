@@ -160,6 +160,7 @@ export default function EditOrderPage() {
                                 order={draftOrder}
                                 onOrderChange={handleOrderChange}
                                 clients={clients}
+                                products={products}
                             />
                         </div>
                     </div>

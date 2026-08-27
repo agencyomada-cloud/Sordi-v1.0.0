@@ -1,17 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { db, Employee, CreateEmployeeData } from "@/lib/database";
 import { toast } from "sonner";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export const useEmployees = () => {
     const queryClient = useQueryClient();
+    const { activeCompanyId, isReady } = useWorkspace();
 
     const query = useQuery({
-        queryKey: ["employees"],
-        queryFn: () => db.employees.getAll(),
+        queryKey: ["employees", activeCompanyId],
+        queryFn: () => db.employees.getAll(activeCompanyId),
+        enabled: isReady,
     });
 
     const createMutation = useMutation({
-        mutationFn: (data: CreateEmployeeData) => db.employees.create(data),
+        mutationFn: (data: Omit<CreateEmployeeData, "company_id">) => db.employees.create({ ...data, company_id: activeCompanyId }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["employees"] });
             toast.success("Employé ajouté avec succès");
@@ -22,7 +25,7 @@ export const useEmployees = () => {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: CreateEmployeeData }) =>
+        mutationFn: ({ id, data }: { id: string; data: Omit<CreateEmployeeData, "company_id"> }) =>
             db.employees.update(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["employees"] });
@@ -53,9 +56,11 @@ export const useEmployees = () => {
 };
 
 export function useEmployeeTaskWorkload() {
+    const { activeCompanyId, isReady } = useWorkspace();
     return useQuery({
-        queryKey: ["employee-task-workload"],
-        queryFn: () => db.employeeTaskWorkload.getAll(),
+        queryKey: ["employee-task-workload", activeCompanyId],
+        queryFn: () => db.employeeTaskWorkload.getAll(activeCompanyId),
+        enabled: isReady,
     });
 }
 

@@ -32,7 +32,12 @@ import {
   AlertDialogTitle,
   TableLoading,
   EmptyState,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
 } from "@sordi/ui";
+import { RiTimeLine as ClockIcon, RiCheckboxCircleLine as CheckIcon, RiAlarmWarningLine as WarningIcon } from "@remixicon/react";
+import { MetricStrip, MetricTrendBadge } from "@/components/ui/metric-strip";
 import { useProjects, useDeleteProject, useProjectStatsMap } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
 import { computeProjectStatus, type ProjectStatusKey } from "@/lib/projectOverview";
@@ -65,6 +70,18 @@ export default function ProjectsPage() {
   const deleteProject = useDeleteProject();
 
   const clientNameById = useMemo(() => new Map((clients ?? []).map((c) => [c.id, c.name])), [clients]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { en_cours: 0, termine: 0, a_risque: 0 };
+    (projects ?? []).forEach((project) => {
+      const stats = statsByProjectId.get(project.id);
+      const key = stats ? computeProjectStatus(stats).key : null;
+      if (key === "en_cours" || key === "nouveau") counts.en_cours++;
+      else if (key === "termine") counts.termine++;
+      else if (key === "a_risque" || key === "en_retard" || key === "depassement_budgetaire") counts.a_risque++;
+    });
+    return counts;
+  }, [projects, statsByProjectId]);
 
   const rows = useMemo(() => {
     return (projects ?? [])
@@ -112,16 +129,29 @@ export default function ProjectsPage() {
               </Button>
             </div>
 
+            {/* Metric strip — shared KPI ribbon component (same shape as the
+                Dashboard's Tier 2), replacing the old StatsCard grid. */}
             <div className="mb-6 animate-fade-in-up animation-delay-100">
-              <div className="bg-card rounded-[6px] p-6 shadow-card border border-border/30 flex items-center gap-5 w-fit card-hover">
-                <div className="w-14 h-14 bg-primary rounded-[6px] flex items-center justify-center">
-                  <FolderIcon className="w-7 h-7 text-primary-foreground" />
-                </div>
-                <div>
-                  <p className="text-3xl font-bold text-foreground tracking-tight tabular-nums">{projects?.length || 0}</p>
-                  <p className="text-sm text-muted-foreground">Projets enregistrés</p>
-                </div>
-              </div>
+              <MetricStrip
+                cells={[
+                  { key: "total", label: "Total Projets", value: String(projects?.length || 0), numericValue: projects?.length || 0, format: (v) => String(Math.round(v)), icon: FolderIcon },
+                  { key: "en_cours", label: "En Cours", value: String(statusCounts.en_cours), numericValue: statusCounts.en_cours, format: (v) => String(Math.round(v)), icon: ClockIcon },
+                  {
+                    key: "a_risque",
+                    label: "À Risque",
+                    value: String(statusCounts.a_risque),
+                    numericValue: statusCounts.a_risque,
+                    format: (v) => String(Math.round(v)),
+                    icon: WarningIcon,
+                    trend: (
+                      <MetricTrendBadge good={statusCounts.a_risque === 0}>
+                        {statusCounts.a_risque > 0 ? "Attention requise" : "RAS"}
+                      </MetricTrendBadge>
+                    ),
+                  },
+                  { key: "termine", label: "Terminés", value: String(statusCounts.termine), numericValue: statusCounts.termine, format: (v) => String(Math.round(v)), icon: CheckIcon },
+                ]}
+              />
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-2 animate-fade-in-up animation-delay-150">
@@ -149,14 +179,14 @@ export default function ProjectsPage() {
               />
             </div>
 
-            <div className="bg-card rounded-[6px] border border-border/30 shadow-card overflow-hidden animate-fade-in-up animation-delay-200">
+            <div className="animate-fade-in-up animation-delay-200">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Projet</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead className="hidden md:table-cell">Responsable</TableHead>
-                    <TableHead className="hidden lg:table-cell">Budget facturé / prévu</TableHead>
+                    <TableHead numeric className="hidden lg:table-cell">Budget facturé / prévu</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead className="w-14"></TableHead>
                   </TableRow>
@@ -168,7 +198,7 @@ export default function ProjectsPage() {
                     <TableRow>
                       <TableCell colSpan={6}>
                         <EmptyState
-                          type="clients"
+                          type="projects"
                           title="Aucun projet"
                           description={searchQuery ? "Essayez une autre recherche" : "Créez votre premier projet"}
                           action={
@@ -181,18 +211,30 @@ export default function ProjectsPage() {
                     </TableRow>
                   ) : (
                     rows.map(({ project, stats, status }) => (
-                      <TableRow key={project.id} className="cursor-pointer" onClick={() => navigate(`/projects/${project.id}`)}>
-                        <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableRow
+                        key={project.id}
+                        className="cursor-pointer"
+                        dimmed={status?.key === "termine"}
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                      >
+                        <TableCell className="font-medium max-w-[220px]">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate">{project.name}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">{project.name}</TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{clientNameById.get(project.client_id) ?? "-"}</TableCell>
                         <TableCell className="text-muted-foreground hidden md:table-cell">{project.responsible_person || "-"}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
+                        <TableCell numeric className="hidden lg:table-cell">
                           <BudgetCell stats={stats} plannedBudget={project.planned_budget} />
                         </TableCell>
                         <TableCell>{status && <ProjectStatusBadge status={status} />}</TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
+                              <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
                                 <MoreHorizontal className="w-4 h-4" />
                               </button>
                             </DropdownMenuTrigger>
@@ -251,13 +293,13 @@ export default function ProjectsPage() {
 
 function BudgetCell({ stats, plannedBudget }: { stats: ProjectStats | undefined; plannedBudget: number }) {
   if (!stats || plannedBudget <= 0) {
-    return <span className="text-muted-foreground">{formatCurrency(plannedBudget)}</span>;
+    return <span className="text-muted-foreground font-mono tabular-nums tracking-tight">{formatCurrency(plannedBudget)}</span>;
   }
   const ratio = Math.min(1, stats.budget_facture / plannedBudget);
   const overBudget = stats.budget_facture > plannedBudget;
   return (
-    <div className="min-w-[140px]">
-      <p className={`text-sm tabular-nums ${overBudget ? "text-destructive font-medium" : "text-foreground"}`}>
+    <div className="min-w-[140px] ms-auto">
+      <p className={`text-sm font-mono tabular-nums tracking-tight ${overBudget ? "text-destructive font-medium" : "text-foreground"}`}>
         {formatCurrency(stats.budget_facture)} <span className="text-muted-foreground font-normal">/ {formatCurrency(plannedBudget)}</span>
       </p>
       <div className="h-1.5 mt-1 rounded-full bg-muted overflow-hidden">

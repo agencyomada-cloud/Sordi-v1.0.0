@@ -4,13 +4,11 @@ import { RiArrowLeftLine as ArrowLeft } from "@remixicon/react";
 import { Button } from "@sordi/ui";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
-import { useOrders } from "@/hooks/useOrders";
 import { useCreateDeliveryNote } from "@/hooks/useDeliveryNotes";
 import { toast } from "sonner";
 import { DeliveryEditablePreview } from "@/components/delivery/DeliveryEditablePreview";
-import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
+import { generateDeliveryNotePDF, buildDeliveryNotePDFData } from "@/lib/pdfGenerator";
 import { useSettings } from "@/hooks/useSettings";
-import { useLicenseStatus } from "@/hooks/useLicense";
 
 interface DeliveryItem {
   product_id: string;
@@ -29,26 +27,19 @@ export default function NewDeliveryPage() {
   const invoiceData = location.state?.invoiceData;
   const { data: clients } = useClients();
   const { data: products } = useProducts();
-  const { data: orders } = useOrders();
   const createDelivery = useCreateDeliveryNote();
   const { data: settings } = useSettings();
-  const { data: licenseStatus } = useLicenseStatus();
 
   const [draftDelivery, setDraftDelivery] = useState({
     client_id: invoiceData?.client_id || "",
     delivery_date: new Date().toISOString().split("T")[0],
     order_id: "",
-    truck_plate: "",
-    driver_name: "",
-    deliverer_name: "",
-    deliverer_nin: "",
-    transporter_name: "",
-    transporter_nin: "",
-    delivery_location: "",
-    notes: "",
     reserves: "",
-    custom_title: "BON DE LIVRAISON",
     delivery_number: "",
+    deliverer_name: "",
+    supplier_delivered_date: "",
+    client_received_date: "",
+    client_signature: "",
     items: (invoiceData?.items || []) as DeliveryItem[]
   });
 
@@ -69,20 +60,20 @@ export default function NewDeliveryPage() {
       client_id: draftDelivery.client_id,
       delivery_date: draftDelivery.delivery_date,
       order_id: draftDelivery.order_id || undefined,
-      truck_plate: draftDelivery.truck_plate || undefined,
-      driver_name: draftDelivery.driver_name || undefined,
-      deliverer_name: draftDelivery.deliverer_name || undefined,
-      deliverer_nin: draftDelivery.deliverer_nin || undefined,
-      transporter_name: draftDelivery.transporter_name || undefined,
-      transporter_nin: draftDelivery.transporter_nin || undefined,
-      delivery_location: draftDelivery.delivery_location || undefined,
-      notes: draftDelivery.notes || undefined,
       reserves: draftDelivery.reserves || undefined,
-      custom_title: draftDelivery.custom_title || undefined,
       delivery_number: draftDelivery.delivery_number || undefined,
+      deliverer_name: draftDelivery.deliverer_name || undefined,
+      supplier_delivered_date: draftDelivery.supplier_delivered_date || undefined,
+      client_received_date: draftDelivery.client_received_date || undefined,
+      client_signature: draftDelivery.client_signature || undefined,
       items: validItems.map(item => ({
-        product_id: item.product_id,
+        product_id: item.product_id || undefined,
+        // Only meaningful when product_id is absent — a custom/one-off item.
+        product_name: item.product_id ? undefined : item.product_name || undefined,
+        product_code: item.product_id ? undefined : item.product_code || undefined,
         quantity: item.quantity,
+        unit_price: item.unit_price,
+        tva_rate: item.tva_rate,
       })),
     }, {
       onSuccess: async (createdNote) => {
@@ -90,30 +81,30 @@ export default function NewDeliveryPage() {
         // PDF Gen
         try {
           const client = clients?.find(c => c.id === createdNote.client_id);
-          const noteForPDF = {
+          const pdfData = buildDeliveryNotePDFData({
             ...createdNote,
             clients: client ? {
               name: client.name,
-              address: client.address || "",
-              nif: client.nif || "",
-              nis: client.nis || "",
-              rc: client.rc || "",
-              ai: client.ai || "",
+              address: client.address,
+              city: client.city,
+              wilaya: client.wilaya,
+              phone: client.phone,
+              email: client.email,
+              nif: client.nif,
+              rc: client.rc,
+              contact_person: client.contact_person,
             } : undefined,
-            custom_title: createdNote.custom_title || draftDelivery.custom_title,
             delivery_note_items: validItems.map(item => ({
               product_id: item.product_id,
+              product_code: item.product_code,
+              product_name: item.product_name,
               product_description: item.product_description || item.products?.description || undefined,
-              products: {
-                name: item.product_name,
-                code: item.product_code,
-                description: item.product_description || item.products?.description || undefined
-              },
-              quantity: item.quantity
-            }))
-          };
-          await generateDeliveryNotePDF(noteForPDF as any, settings, true, undefined, licenseStatus?.state === "active");
-          toast.success("PDF téléchargé");
+              unit_price: item.unit_price,
+              tva_rate: item.tva_rate,
+              quantity: item.quantity,
+            })),
+          });
+          await generateDeliveryNotePDF(pdfData, settings);
         } catch (error) {
           console.error("PDF generation error", error);
           toast.error("Erreur lors de la génération du PDF");

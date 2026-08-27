@@ -21,11 +21,14 @@ import {
   RiBankCardLine as CreditCard, 
   RiCalendarLine as CalendarDays, 
   RiScales3Line as Scale, 
-  RiHashtag as Hash, 
-  RiErrorWarningLine as AlertCircle 
+  RiHashtag as Hash,
+  RiErrorWarningLine as AlertCircle,
+  RiUserSearchLine as NotFoundIcon,
 } from "@remixicon/react";
-import { Button, Badge, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsContent, TabsList, TabsTrigger } from "@sordi/ui";
+import { Button, StatusBadge, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsContent, TabsList, TabsTrigger, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useClient, useUpdateClient, useClientOverviewStats, type CreateClientData } from "@/hooks/useClients";
+import { useSetPageHeader } from "@/hooks/usePageHeader";
 import { useInvoices, useUpdateInvoiceStatus, type InvoiceStatus } from "@/hooks/useInvoices";
 import { computeAveragePaymentDelay, computePurchaseFrequency, computeClientStatus } from "@/lib/clientOverview";
 import { ClientStatusBadge } from "@/components/ClientStatusBadge";
@@ -80,7 +83,7 @@ export default function ClientDetailPage() {
 
   // Edit State
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [formData, setFormData] = useState<CreateClientData>({
+  const [formData, setFormData] = useState<Omit<CreateClientData, "company_id">>({
     name: "",
     code: "",
     phone: "",
@@ -111,6 +114,10 @@ export default function ClientDetailPage() {
   }, [selectedYear, selectedMonth]);
 
   const { data: client, isLoading: isLoadingClient } = useClient(id);
+  useSetPageHeader("Clients", [
+    { label: "Clients", path: "/clients" },
+    { label: client?.name || "…" },
+  ]);
   const { data: overviewStatsList } = useClientOverviewStats(id);
   const overviewStats = overviewStatsList?.[0];
   const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
@@ -510,18 +517,32 @@ export default function ClientDetailPage() {
 
   if (isLoadingClient || isLoadingInvoices || isLoadingProducts) {
     return (
-      <main className="flex-1 p-8">
-        <div className="text-center py-12 text-muted-foreground">Chargement...</div>
+      <main className="flex-1 p-8 pt-4">
+        <div className="max-w-[1600px] mx-auto w-full space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-56" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          </div>
+          <Skeleton className="h-32 w-full rounded-2xl" />
+          <Skeleton className="h-96 w-full rounded-2xl" />
+        </div>
       </main>
     );
   }
 
   if (!client) {
     return (
-      <main className="flex-1 p-8">
-        <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">Client non trouvé</p>
-          <Button onClick={() => navigate("/clients")}>Retour aux clients</Button>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <div className="max-w-sm">
+          <EmptyState
+            icon={NotFoundIcon}
+            title="Client introuvable"
+            description="Ce client n'existe plus ou a été supprimé."
+          />
+          <Button onClick={() => navigate("/clients")} className="w-full">Retour aux clients</Button>
         </div>
       </main>
     );
@@ -529,7 +550,8 @@ export default function ClientDetailPage() {
 
   return (
     <>
-        <main className="flex-1 p-8">
+        <main className="flex-1 p-8 pt-4">
+          <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
           <div className="flex items-center gap-4 mb-6">
             <Button variant="ghost" size="icon" onClick={() => navigate("/clients")}>
@@ -560,7 +582,7 @@ export default function ClientDetailPage() {
               {/* Aperçu — computed entirely from invoices/payments at query time, never stored */}
               {overviewStats && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
-                  <Card>
+                  <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Chiffre d'affaires total</CardTitle>
                       <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -570,7 +592,7 @@ export default function ClientDetailPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Client depuis</CardTitle>
                       <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -582,7 +604,7 @@ export default function ClientDetailPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Délai de paiement moyen</CardTitle>
                       <Clock className="h-4 w-4 text-muted-foreground" />
@@ -592,7 +614,7 @@ export default function ClientDetailPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Fréquence d'achat</CardTitle>
                       <FileText className="h-4 w-4 text-muted-foreground" />
@@ -602,7 +624,7 @@ export default function ClientDetailPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Statut</CardTitle>
                     </CardHeader>
@@ -615,7 +637,7 @@ export default function ClientDetailPage() {
 
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card>
+                <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Factures</CardTitle>
                     <FileText className="h-4 w-4 text-muted-foreground" />
@@ -626,35 +648,35 @@ export default function ClientDetailPage() {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Payées</CardTitle>
-                    <TrendingUp className="h-4 w-4 text-green-500" />
+                    <TrendingUp className="h-4 w-4 text-stat-positive" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{stats.paid}</div>
+                    <div className="text-2xl font-bold text-stat-positive">{stats.paid}</div>
                     <p className="text-xs text-muted-foreground">{formatCurrency(stats.paidAmount)}</p>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">En Attente</CardTitle>
-                    <Clock className="h-4 w-4 text-yellow-500" />
+                    <Clock className="h-4 w-4 text-warning" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-yellow-600">{stats.unpaid}</div>
+                    <div className="text-2xl font-bold text-warning">{stats.unpaid}</div>
                     <p className="text-xs text-muted-foreground">{formatCurrency(stats.unpaidAmount)}</p>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="hover:shadow-md hover:-translate-y-[1px] transition-all duration-150 ease-out">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Solde Dû</CardTitle>
-                    <TrendingDown className="h-4 w-4 text-red-500" />
+                    <TrendingDown className="h-4 w-4 text-destructive" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-red-600">{formatCurrency(stats.unpaidAmount)}</div>
+                    <div className="text-2xl font-bold text-destructive">{formatCurrency(stats.unpaidAmount)}</div>
                     <p className="text-xs text-muted-foreground">À recouvrer</p>
                   </CardContent>
                 </Card>
@@ -801,11 +823,11 @@ export default function ClientDetailPage() {
                           </div>
                         </div>
                         {client.initial_balance ? (
-                          <div className="flex items-start gap-3 mt-1 bg-orange-50 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-800/30 rounded-lg px-3 py-2.5">
-                            <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                          <div className="flex items-start gap-3 mt-1 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2.5">
+                            <AlertCircle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
                             <div>
-                              <p className="text-[10px] text-orange-600/80 uppercase tracking-wide font-semibold">Dette Antérieure</p>
-                              <p className="text-base font-bold text-orange-600 mt-0.5">{formatCurrency(client.initial_balance)}</p>
+                              <p className="text-[10px] text-warning/80 uppercase tracking-wide font-semibold">Dette Antérieure</p>
+                              <p className="text-base font-bold text-warning mt-0.5">{formatCurrency(client.initial_balance)}</p>
                             </div>
                           </div>
                         ) : (
@@ -827,37 +849,37 @@ export default function ClientDetailPage() {
 
             <TabsContent value="advances" className="mt-0">
               {/* Pre-payment / Draft Products Section */}
-              <Card className="mb-6 border-blue-200">
-                <CardHeader className="bg-blue-50/50 border-b border-blue-100">
+              <Card className="mb-6 border-primary/20">
+                <CardHeader className="bg-primary/5 border-b border-primary/10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-lg text-blue-900 flex items-center gap-2">
-                        <TrendingDown className="h-5 w-5 text-blue-500" />
+                      <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                        <TrendingDown className="h-5 w-5 text-primary" />
                         Gestion d'Avance (Chèque / Pré-paiement)
                       </CardTitle>
-                      <p className="text-sm text-blue-700 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         Enregistrez les achats non facturés payés via une avance.
                       </p>
                     </div>
-                    <div className="flex items-center gap-6 bg-white p-3 rounded-xl border shadow-sm">
+                    <div className="flex items-center gap-6 bg-card p-3 rounded-xl border shadow-sm">
                       <div className="text-center">
                         <p className="text-[10px] uppercase text-muted-foreground font-semibold">Avance Totale</p>
-                        <p className="font-bold text-base text-blue-600">{formatCurrency(advancePayment)}</p>
+                        <p className="font-bold text-base text-primary">{formatCurrency(advancePayment)}</p>
                       </div>
                       <div className="w-px h-8 bg-border"></div>
                       <div className="text-center">
                         <p className="text-[10px] uppercase text-muted-foreground font-semibold">Consommé</p>
-                        <p className="font-bold text-base text-orange-500">{formatCurrency(totalDraftAmount)}</p>
+                        <p className="font-bold text-base text-warning">{formatCurrency(totalDraftAmount)}</p>
                       </div>
                       <div className="w-px h-8 bg-border"></div>
                       <div className="text-center">
                         <p className="text-[10px] uppercase text-muted-foreground font-semibold">Reste</p>
-                        <p className={`font-bold text-base ${remainingAdvance < 0 ? 'text-red-500' : 'text-green-600'}`}>{formatCurrency(remainingAdvance)}</p>
+                        <p className={`font-bold text-base ${remainingAdvance < 0 ? 'text-destructive' : 'text-stat-positive'}`}>{formatCurrency(remainingAdvance)}</p>
                       </div>
                     </div>
                     <Button
                       onClick={() => setIsAddAdvanceDialogOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-2"
+                      className="flex items-center gap-2"
                     >
                       <TrendingUp className="w-4 h-4" />
                       Ajouter une avance
@@ -873,7 +895,7 @@ export default function ClientDetailPage() {
                         value={draftProductSearch}
                         onValueChange={setDraftProductSearch}
                       >
-                        <SelectTrigger className="bg-white">
+                        <SelectTrigger>
                           <SelectValue placeholder="Sélectionner un produit" />
                         </SelectTrigger>
                         <SelectContent>
@@ -893,7 +915,6 @@ export default function ClientDetailPage() {
                         step="0.01"
                         value={draftQuantity}
                         onChange={e => setDraftQuantity(parseFloat(e.target.value) || 0)}
-                        className="bg-white"
                       />
                     </div>
                     <Button
@@ -950,7 +971,7 @@ export default function ClientDetailPage() {
                                 </TableCell>
                                 <TableCell className="text-right text-muted-foreground">{formatCurrency(draft.amount)}</TableCell>
                                 <TableCell className="text-center text-xs text-muted-foreground">{tvaRate}%</TableCell>
-                                <TableCell className="text-right font-semibold text-blue-700">{formatCurrency(itemTtc)}</TableCell>
+                                <TableCell className="text-right font-semibold text-primary">{formatCurrency(itemTtc)}</TableCell>
                                 <TableCell className="text-right">
                                   <Button
                                     variant="ghost"
@@ -958,7 +979,7 @@ export default function ClientDetailPage() {
                                     onClick={() => deleteDraft.mutate({ id: draft.id, client_id: id! })}
                                     disabled={deleteDraft.isPending}
                                   >
-                                    <X className="h-4 w-4 text-red-500" />
+                                    <X className="h-4 w-4 text-destructive" />
                                   </Button>
                                 </TableCell>
                               </TableRow>
@@ -969,7 +990,7 @@ export default function ClientDetailPage() {
 
                       {/* Totals Summary */}
                       <div className="flex justify-end mt-4 px-4">
-                        <div className="w-80 space-y-3 border p-4 rounded-xl bg-gray-50/50 shadow-sm">
+                        <div className="w-80 space-y-3 border p-4 rounded-xl bg-muted/30 shadow-sm">
                           <div className="flex justify-between items-center text-sm text-muted-foreground">
                             <span>Sous-total HT</span>
                             <span className="font-medium text-foreground">{formatCurrency(draftTotals.subtotalHtBeforeDiscount)}</span>
@@ -1021,13 +1042,13 @@ export default function ClientDetailPage() {
                           </div>
 
                           {draftTotals.calculatedDiscount > 0 && (
-                            <div className="flex justify-between text-sm text-red-600 bg-red-50 px-2 py-1 rounded">
+                            <div className="flex justify-between text-sm text-destructive bg-destructive/10 px-2 py-1 rounded">
                               <span>Remise déduite</span>
                               <span>- {formatCurrency(draftTotals.calculatedDiscount)}</span>
                             </div>
                           )}
 
-                          <div className="flex justify-between items-center font-bold text-lg border-t pt-2 mt-2 text-blue-900">
+                          <div className="flex justify-between items-center font-bold text-lg border-t pt-2 mt-2 text-foreground">
                             <span>Consommé (TTC Final)</span>
                             <span>{formatCurrency(draftTotals.totalTtc)}</span>
                           </div>
@@ -1037,7 +1058,7 @@ export default function ClientDetailPage() {
                       <div className="mt-6 flex justify-end items-center gap-4 pt-4 border-t">
                         <Button
                           variant="outline"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => {
                             clearDrafts.mutate(id!);
                           }}
@@ -1045,18 +1066,13 @@ export default function ClientDetailPage() {
                         >
                           Vider la liste
                         </Button>
-                        <Button
-                          onClick={handleGenerateInvoiceFromDrafts}
-                          className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                        >
+                        <Button onClick={handleGenerateInvoiceFromDrafts}>
                           Générer la facture ({formatCurrency(totalDraftAmount)})
                         </Button>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-xl">
-                      Aucun produit enregistré sur l'avance.
-                    </div>
+                    <EmptyState type="products" title="Aucun produit" description="Aucun produit n'a été enregistré sur cette avance" className="py-8" />
                   )}
                 </CardContent>
               </Card>
@@ -1100,18 +1116,16 @@ export default function ClientDetailPage() {
                           <SelectItem value="Déduction Facture">Déduction Facture</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="date"
+                      <DatePicker
                         value={advanceFilterDateFrom}
-                        onChange={(e) => setAdvanceFilterDateFrom(e.target.value)}
+                        onChange={setAdvanceFilterDateFrom}
                         className="w-[150px] h-8 text-sm"
                         placeholder="Du"
                       />
                       <span className="text-muted-foreground text-sm">→</span>
-                      <Input
-                        type="date"
+                      <DatePicker
                         value={advanceFilterDateTo}
-                        onChange={(e) => setAdvanceFilterDateTo(e.target.value)}
+                        onChange={setAdvanceFilterDateTo}
                         className="w-[150px] h-8 text-sm"
                         placeholder="Au"
                       />
@@ -1148,20 +1162,24 @@ export default function ClientDetailPage() {
                     <TableBody>
                       {!filteredAdvances || filteredAdvances.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            {!clientAdvances || clientAdvances.length === 0
-                              ? "Aucune avance enregistrée pour ce client."
-                              : "Aucune avance ne correspond aux filtres sélectionnés."}
+                          <TableCell colSpan={6}>
+                            <EmptyState
+                              type="payments"
+                              title="Aucune avance"
+                              description={!clientAdvances || clientAdvances.length === 0
+                                ? "Aucune avance n'a été enregistrée pour ce client"
+                                : "Aucune avance ne correspond aux filtres sélectionnés"}
+                            />
                           </TableCell>
                         </TableRow>
                       ) : (
                         filteredAdvances.map((adv) => (
-                          <TableRow key={adv.id} className={adv.amount < 0 ? "bg-red-50/40" : ""}>
+                          <TableRow key={adv.id} className={adv.amount < 0 ? "bg-destructive/5" : ""}>
                             <TableCell className="font-medium whitespace-nowrap">
                               {format(new Date(adv.date), "dd/MM/yyyy")}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={adv.amount < 0 ? "destructive" : "outline"}>{adv.payment_mode}</Badge>
+                              <StatusBadge tone={adv.amount < 0 ? "error" : "neutral"}>{adv.payment_mode}</StatusBadge>
                             </TableCell>
                             <TableCell>
                               {(adv.payment_mode === "Chèque" || adv.payment_mode === "Virement") ? (
@@ -1177,7 +1195,7 @@ export default function ClientDetailPage() {
                             <TableCell className="text-sm text-muted-foreground">
                               {adv.notes || "-"}
                             </TableCell>
-                            <TableCell className={`text-right font-bold ${adv.amount < 0 ? "text-red-600" : "text-blue-600"}`}>
+                            <TableCell className={`text-right font-bold ${adv.amount < 0 ? "text-destructive" : "text-primary"}`}>
                               {adv.amount > 0 ? "+" : ""}{formatCurrency(adv.amount)}
                             </TableCell>
                             <TableCell className="text-right">
@@ -1187,7 +1205,7 @@ export default function ClientDetailPage() {
                                   size="icon"
                                   onClick={() => handleEditAdvance(adv)}
                                 >
-                                  <Pencil className="h-4 w-4 text-blue-500" />
+                                  <Pencil className="h-4 w-4 text-primary" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -1195,7 +1213,7 @@ export default function ClientDetailPage() {
                                   onClick={() => handleDeleteAdvance(adv.id)}
                                   disabled={deleteClientAdvance.isPending}
                                 >
-                                  <X className="h-4 w-4 text-red-500" />
+                                  <X className="h-4 w-4 text-destructive" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1315,23 +1333,23 @@ export default function ClientDetailPage() {
                     </TableHeader>
                     <TableBody>
                       {isLoadingProducts ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            Chargement des produits...
-                          </TableCell>
-                        </TableRow>
+                        <TableLoading columns={5} rows={5} numericColumns={[2, 3, 4]} />
                       ) : productsError ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-red-500">
+                          <TableCell colSpan={5} className="text-center py-8 text-destructive">
                             Erreur lors du chargement des produits
                           </TableCell>
                         </TableRow>
                       ) : !clientProducts || clientProducts.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            {hasFilters
-                              ? "Aucun produit trouvé avec les filtres sélectionnés"
-                              : "Aucun produit trouvé dans les factures de ce client"}
+                          <TableCell colSpan={5}>
+                            <EmptyState
+                              type="products"
+                              title="Aucun produit"
+                              description={hasFilters
+                                ? "Aucun produit ne correspond aux filtres sélectionnés"
+                                : "Aucun produit dans les factures de ce client"}
+                            />
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1419,8 +1437,8 @@ export default function ClientDetailPage() {
                     <TableBody>
                       {clientInvoices.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            Aucune facture pour ce client
+                          <TableCell colSpan={7}>
+                            <EmptyState type="invoices" title="Aucune facture" description="Aucune facture n'a été émise pour ce client" />
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1442,10 +1460,10 @@ export default function ClientDetailPage() {
                               <TableCell className="text-right font-medium">
                                 {formatCurrency(invoice.total_ttc || 0)}
                               </TableCell>
-                              <TableCell className="text-right text-green-600">
+                              <TableCell className="text-right text-stat-positive">
                                 {formatCurrency(invoice.amount_paid || 0)}
                               </TableCell>
-                              <TableCell className="text-right text-red-600">
+                              <TableCell className="text-right text-destructive">
                                 {formatCurrency(invoice.balance_due || 0)}
                               </TableCell>
                               <TableCell>
@@ -1477,6 +1495,7 @@ export default function ClientDetailPage() {
               </Card>
             </TabsContent>
           </Tabs>
+          </div>
         </main>
 
       {/* Edit Dialog */}
@@ -1665,7 +1684,7 @@ export default function ClientDetailPage() {
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 mt-6 text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
+                            className="h-8 w-8 mt-6 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
                             onClick={() => {
                               const newList = [...arr];
                               newList.splice(index, 1);
@@ -1713,12 +1732,12 @@ export default function ClientDetailPage() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label className="text-xs font-semibold text-blue-600">Avance (Chèque / Pré-paiement)</Label>
+                    <Label className="text-xs font-semibold text-primary">Avance (Chèque / Pré-paiement)</Label>
                     <Input
                       type="number"
                       value={calculatedAdvancePayment}
                       disabled
-                      className="mt-1.5 border-blue-200 bg-gray-50 cursor-not-allowed font-medium text-blue-700"
+                      className="mt-1.5 border-primary/20 bg-muted/50 cursor-not-allowed font-medium text-primary"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">Gérée via l'historique des avances (Total calculé)</p>
                   </div>
@@ -1748,12 +1767,10 @@ export default function ClientDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2 sm:col-span-1">
                 <Label className="text-xs text-muted-foreground">Date de paiement *</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={addAdvanceDate}
-                  onChange={(e) => setAddAdvanceDate(e.target.value)}
+                  onChange={setAddAdvanceDate}
                   className="mt-1.5"
-                  required
                 />
               </div>
               <div className="col-span-2 sm:col-span-1">
@@ -1764,7 +1781,7 @@ export default function ClientDetailPage() {
                   step="0.01"
                   value={addAdvanceAmount || ""}
                   onChange={(e) => setAddAdvanceAmount(parseFloat(e.target.value) || 0)}
-                  className="mt-1.5 text-lg font-bold text-blue-600"
+                  className="mt-1.5 text-lg font-bold text-primary"
                   required
                 />
               </div>
@@ -1845,7 +1862,7 @@ export default function ClientDetailPage() {
                   addAdvanceAmount <= 0 ||
                   ((addAdvancePaymentMode === "Chèque" || addAdvancePaymentMode === "Virement") && (!addAdvanceBank.trim() || !addAdvanceReference.trim()))
                 }
-                className="rounded-full bg-blue-600 hover:bg-blue-700"
+                className="rounded-full"
               >
                 {updateClient.isPending ? "Ajout..." : "Confirmer l'avance"}
               </Button>

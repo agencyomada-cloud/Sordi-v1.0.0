@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { createDeliveryNoteSchema } from "@/lib/validations";
 import { logError } from "@/lib/errorLogger";
-import { db, type DeliveryNote as DbDeliveryNote, type CreateDeliveryNoteData as DbCreateDeliveryNoteData } from "@/lib/database";
+import { db, type DeliveryNote as DbDeliveryNote, type CreateDeliveryNoteData as DbCreateDeliveryNoteData, type DeliveryNoteStatus } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export interface DeliveryNote extends DbDeliveryNote {
   clients?: {
@@ -17,10 +18,18 @@ export interface DeliveryNoteItem {
   delivery_note_id: string;
   product_id: string;
   quantity: number;
+  // Only populated by useDeliveryNote (singular) 's own mapping — the list
+  // hook (useDeliveryNotes) returns items raw, without these projected.
+  product_code?: string;
+  product_name?: string;
+  product_description?: string | null;
+  unit_price?: number;
+  tva_rate?: number | null;
   products?: {
     code: string;
     name: string;
     unit_price: number;
+    unit?: string | null;
     description?: string | null;
   };
 }
@@ -40,17 +49,27 @@ export interface CreateDeliveryNoteData {
   reserves?: string;
   custom_title?: string;
   delivery_number?: string;
+  supplier_delivered_date?: string;
+  client_received_date?: string;
+  /** "Nom du réceptionnaire" — a plain text field despite the column name. */
+  client_signature?: string;
   items: {
-    product_id: string;
+    product_id?: string;
+    /** Only meaningful when product_id is absent — a custom/one-off item. */
+    product_name?: string;
+    product_code?: string;
     quantity: number;
+    unit_price?: number;
+    tva_rate?: number;
   }[];
 }
 
 export function useDeliveryNotes(clientId?: string, isInvoiced?: boolean) {
+  const { activeCompanyId, isReady } = useWorkspace();
   return useQuery({
-    queryKey: ["delivery-notes", clientId, isInvoiced],
+    queryKey: ["delivery-notes", activeCompanyId, clientId, isInvoiced],
     queryFn: async () => {
-      const notes = await db.deliveryNotes.getAll(clientId, isInvoiced);
+      const notes = await db.deliveryNotes.getAll(activeCompanyId, clientId, isInvoiced);
 
       // Fetch clients separately
       const clientIds = [...new Set(notes.map(n => n.client_id))];
@@ -64,6 +83,16 @@ export function useDeliveryNotes(clientId?: string, isInvoiced?: boolean) {
           ...note,
           clients: clientMap.get(note.client_id) ? {
             name: clientMap.get(note.client_id)!.name,
+            address: clientMap.get(note.client_id)!.address,
+            city: clientMap.get(note.client_id)!.city,
+            wilaya: clientMap.get(note.client_id)!.wilaya,
+            phone: clientMap.get(note.client_id)!.phone,
+            email: clientMap.get(note.client_id)!.email,
+            nif: clientMap.get(note.client_id)!.nif,
+            nis: clientMap.get(note.client_id)!.nis,
+            rc: clientMap.get(note.client_id)!.rc,
+            ai: clientMap.get(note.client_id)!.ai,
+            contact_person: clientMap.get(note.client_id)!.contact_person,
           } : undefined,
           delivery_note_items: items,
         };
@@ -71,6 +100,7 @@ export function useDeliveryNotes(clientId?: string, isInvoiced?: boolean) {
 
       return notesWithItems as DeliveryNote[];
     },
+    enabled: isReady,
   });
 }
 
@@ -107,6 +137,7 @@ export function useDeliveryNote(id: string | undefined) {
           nis: client.nis,
           rc: client.rc,
           ai: client.ai,
+          contact_person: client.contact_person,
         } : undefined,
         delivery_note_items: items.map(item => ({
           ...item,
@@ -136,12 +167,13 @@ export function useDeliveryNote(id: string | undefined) {
 
 export function useCreateDeliveryNote() {
   const queryClient = useQueryClient();
+  const { activeCompanyId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (data: CreateDeliveryNoteData) => {
       // Validate input
       const validated = createDeliveryNoteSchema.parse(data);
-      return await db.deliveryNotes.create(validated as DbCreateDeliveryNoteData);
+      return await db.deliveryNotes.create({ ...validated, company_id: activeCompanyId } as DbCreateDeliveryNoteData);
     },
     onSuccess: (note) => {
       queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
@@ -194,9 +226,63 @@ export function useUpdateDeliveryNote() {
       if (error.issues) {
         toast.error(error.issues[0]?.message || "Erreur de validation");
       } else {
-        toast.error("Erreur lors de la modification du bon de livraison");
+        const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+        toast.error(message || "Erreur lors de la modification du bon de livraison");
       }
       logError("Delivery note update error", error);
+    },
+  });
+}
+
+export function useSetDeliveryStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: DeliveryNoteStatus }) => {
+      return await db.deliveryNotes.updateStatus(id, status);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["delivery-note"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "DELIVERY",
+        entity_id: variables.id,
+        description: `Statut du bon de livraison mis à jour : ${variables.status}`,
+      });
+    },
+    onError: (error: any) => {
+      toast.error("Erreur lors de la mise à jour du statut");
+      logError("Delivery note status update error", error);
+    },
+  });
+}
+
+export function useDeleteDeliveryNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await db.deliveryNotes.delete(id);
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["delivery-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+
+      db.history.log({
+        action: "DELETE",
+        entity_type: "DELIVERY",
+        entity_id: id,
+        description: "Bon de livraison supprimé",
+      });
+
+      toast.success("Bon de livraison supprimé avec succès");
+    },
+    onError: (error: any) => {
+      toast.error("Erreur lors de la suppression");
+      logError("Delete delivery note error", error);
     },
   });
 }

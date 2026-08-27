@@ -14,12 +14,10 @@ import {
   RiLoader4Line as Loader2,
 } from "@remixicon/react";
 import { Button, Input, Label, Textarea } from "@sordi/ui";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
 import { useClient, useCreateClient, useUpdateClient, type CreateClientData } from "@/hooks/useClients";
 import { toast } from "sonner";
 
-const defaultForm: CreateClientData = {
+const defaultForm: Omit<CreateClientData, "company_id"> = {
   name: "",
   code: "",
   phone: "",
@@ -68,7 +66,7 @@ export default function NewClientPage() {
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
 
-  const [formData, setFormData] = useState<CreateClientData>(defaultForm);
+  const [formData, setFormData] = useState<Omit<CreateClientData, "company_id">>(defaultForm);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
 
   // New client: restore an in-progress draft (or start clean). Editing: load
@@ -144,25 +142,15 @@ export default function NewClientPage() {
 
   if (isEditing && isLoadingClient) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </main>
-        </div>
-      </div>
+      <main className="flex-1 p-8 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </main>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8">
-          <form onSubmit={handleSubmit}>
+    <main className="flex-1 p-8">
+      <form onSubmit={handleSubmit}>
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <Button
@@ -190,7 +178,7 @@ export default function NewClientPage() {
 
             <div className="max-w-4xl space-y-6">
               {/* Informations Générales */}
-              <div className="bg-card rounded-[6px] border border-border/50 p-6 space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-semibold">
                   <User className="w-4 h-4" />
                   <h3>Informations Générales</h3>
@@ -240,7 +228,7 @@ export default function NewClientPage() {
               </div>
 
               {/* Localisation & Contact */}
-              <div className="bg-card rounded-[6px] border border-border/50 p-6 space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-semibold">
                   <MapPin className="w-4 h-4" />
                   <h3>Localisation &amp; Contact</h3>
@@ -284,7 +272,7 @@ export default function NewClientPage() {
               </div>
 
               {/* Registre & Fiscalité */}
-              <div className="bg-card rounded-[6px] border border-border/50 p-6 space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-semibold">
                   <FileText className="w-4 h-4" />
                   <h3>Registre &amp; Fiscalité</h3>
@@ -331,7 +319,7 @@ export default function NewClientPage() {
 
               {/* Finances — previously tracked in state and exported to CSV
                   with no way to actually enter them from the UI. */}
-              <div className="bg-card rounded-[6px] border border-border/50 p-6 space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
                 <div className="flex items-center gap-2 text-primary font-semibold">
                   <Wallet className="w-4 h-4" />
                   <h3>Finances</h3>
@@ -386,7 +374,7 @@ export default function NewClientPage() {
               </div>
 
               {/* Registres Secondaires */}
-              <div className="bg-card rounded-[6px] border border-border/50 p-6 space-y-4">
+              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-primary font-semibold">
                     <Building2 className="w-4 h-4" />
@@ -410,7 +398,7 @@ export default function NewClientPage() {
 
                 <div className="space-y-3">
                   {parseSecondaryRc(formData.secondary_rc).map((item, index, arr) => (
-                    <div key={index} className="flex gap-4 items-start p-4 bg-secondary/20 border border-border/50 rounded-[6px]">
+                    <div key={index} className="flex gap-4 items-start p-4 bg-secondary/20 border border-border/50 rounded-xl">
                       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">RC Secondaire</Label>
@@ -443,7 +431,7 @@ export default function NewClientPage() {
                       {arr.length > 1 && (
                         <button
                           type="button"
-                          className="h-11 w-11 mt-[26px] rounded-[6px] flex items-center justify-center text-muted-foreground bg-background border border-border/50 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-all shrink-0"
+                          className="h-11 w-11 mt-[26px] rounded-full flex items-center justify-center text-muted-foreground bg-background border border-border/50 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-all shrink-0"
                           onClick={() => {
                             const newList = [...arr];
                             newList.splice(index, 1);
@@ -460,8 +448,6 @@ export default function NewClientPage() {
               </div>
             </div>
           </form>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }

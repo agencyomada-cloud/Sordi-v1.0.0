@@ -7,8 +7,6 @@ import { useProducts } from "@/hooks/useProducts";
 import { useDeliveryNote, useUpdateDeliveryNote } from "@/hooks/useDeliveryNotes";
 import { toast } from "sonner";
 import { DeliveryEditablePreview } from "@/components/delivery/DeliveryEditablePreview";
-import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
-import { useSettings } from "@/hooks/useSettings";
 
 interface DeliveryItem {
     product_id: string; // Optional because UI might not have it for custom items, but generally needed. 
@@ -29,23 +27,17 @@ export default function EditDeliveryPage() {
     const { data: products } = useProducts();
     const { data: deliveryNote, isLoading: isLoadingNote } = useDeliveryNote(id);
     const updateDelivery = useUpdateDeliveryNote();
-    const { data: settings } = useSettings();
 
     const [draftDelivery, setDraftDelivery] = useState({
         client_id: "",
         delivery_date: new Date().toISOString().split("T")[0],
         order_id: "",
-        truck_plate: "",
-        driver_name: "",
-        deliverer_name: "",
-        deliverer_nin: "",
-        transporter_name: "",
-        transporter_nin: "",
-        delivery_location: "",
-        notes: "",
         reserves: "",
-        custom_title: "BON DE LIVRAISON",
         delivery_number: "",
+        deliverer_name: "",
+        supplier_delivered_date: "",
+        client_received_date: "",
+        client_signature: "",
         items: [] as any[]
     });
 
@@ -55,28 +47,19 @@ export default function EditDeliveryPage() {
                 client_id: deliveryNote.client_id || "",
                 delivery_date: deliveryNote.delivery_date,
                 order_id: deliveryNote.order_id || "",
-                truck_plate: deliveryNote.truck_plate || "",
-                driver_name: deliveryNote.driver_name || "",
-                deliverer_name: deliveryNote.deliverer_name || "",
-                deliverer_nin: deliveryNote.deliverer_nin || "",
-                transporter_name: deliveryNote.transporter_name || "",
-                transporter_nin: deliveryNote.transporter_nin || "",
-                delivery_location: deliveryNote.delivery_location || "",
-                notes: deliveryNote.notes || "",
                 reserves: deliveryNote.reserves || "",
-                custom_title: deliveryNote.custom_title || "BON DE LIVRAISON",
                 delivery_number: deliveryNote.delivery_number || "",
+                deliverer_name: deliveryNote.deliverer_name || "",
+                supplier_delivered_date: deliveryNote.supplier_delivered_date || "",
+                client_received_date: deliveryNote.client_received_date || "",
+                client_signature: deliveryNote.client_signature || "",
                 items: deliveryNote.delivery_note_items?.map((item: any) => ({
                     ...item,
-                    // Ensure product fields are flattened if needed by EditablePreview, 
-                    // but EditablePreview expects direct fields on item object usually? 
-                    // Let's check NewDelivery - it constructs items from product selection.
-                    // When loading, we might need to preserve product details.
-                    // The DeliveryEditablePreview uses item.product_name etc.
                     product_name: item.product_name || item.products?.name,
                     product_code: item.product_code || item.products?.code,
                     product_description: item.product_description || item.products?.description,
-                    unit_price: item.unit_price || item.products?.unit_price,
+                    unit_price: item.unit_price ?? item.products?.unit_price,
+                    tva_rate: item.tva_rate,
                 })) || []
             });
         }
@@ -104,26 +87,19 @@ export default function EditDeliveryPage() {
                 client_id: draftDelivery.client_id,
                 delivery_date: draftDelivery.delivery_date,
                 order_id: draftDelivery.order_id || undefined,
-                truck_plate: draftDelivery.truck_plate || undefined,
-                driver_name: draftDelivery.driver_name || undefined,
-                deliverer_name: draftDelivery.deliverer_name || undefined,
-                deliverer_nin: draftDelivery.deliverer_nin || undefined,
-                transporter_name: draftDelivery.transporter_name || undefined,
-                transporter_nin: draftDelivery.transporter_nin || undefined,
-                delivery_location: draftDelivery.delivery_location || undefined,
-                notes: draftDelivery.notes || undefined,
                 reserves: draftDelivery.reserves || undefined,
-                custom_title: draftDelivery.custom_title || undefined,
                 delivery_number: draftDelivery.delivery_number || undefined,
+                deliverer_name: draftDelivery.deliverer_name || undefined,
+                supplier_delivered_date: draftDelivery.supplier_delivered_date || undefined,
+                client_received_date: draftDelivery.client_received_date || undefined,
+                client_signature: draftDelivery.client_signature || undefined,
                 items: validItems.map((item: any) => ({
-                    product_id: item.product_id, // Might be null if custom item? Backend handling?
-                    // If we allow custom items, backend must handle nullable product_id or we create one.
-                    // Assuming existing logic handles it or we only pick from products. 
-                    // NewDelivery uses product_id. 
+                    product_id: item.product_id,
                     quantity: item.quantity,
-                    product_name: item.product_name, // If backend supports updating name overrides
+                    product_name: item.product_name,
                     product_code: item.product_code,
                     unit_price: item.unit_price,
+                    tva_rate: item.tva_rate,
                     product_description: item.product_description
                 })),
             }

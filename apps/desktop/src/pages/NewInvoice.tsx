@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { 
-  RiArrowLeftLine as ArrowLeft, 
-  RiFileTextLine as FileText, 
-  RiDownloadLine as Download, 
-  RiLoader4Line as Loader2 
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  RiArrowLeftLine as ArrowLeft,
+  RiFileTextLine as FileText,
+  RiDownloadLine as Download,
+  RiLoader4Line as Loader2
 } from "@remixicon/react";
-import { Button } from "@sordi/ui";
+import { Button, ToggleGroup, ToggleGroupItem, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
+import { useProjects } from "@/hooks/useProjects";
 import { useCreateInvoice, useUpdateInvoice, useInvoice } from "@/hooks/useInvoices";
 import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
 import { generateInvoicePDF } from "@/lib/pdfGenerator";
@@ -37,6 +38,7 @@ export default function NewInvoicePage() {
   const navigate = useNavigate();
   const { data: clients } = useClients();
   const { data: products } = useProducts();
+  const { data: projects } = useProjects();
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
   const createInvoice = useCreateInvoice();
@@ -44,6 +46,11 @@ export default function NewInvoicePage() {
   const clearDrafts = useClearClientDraftProducts();
   const { id } = useParams<{ id: string }>(); // Get ID from URL if editing
   const { data: existingInvoice, isLoading: isLoadingInvoice } = useInvoice(id);
+  const [searchParams] = useSearchParams();
+  // Opened from a project's own view (e.g. "Nouvelle facture" inside
+  // ProjectDetail) via /invoices/new?project_id=<id> — locks the Projet
+  // associé dropdown to that project instead of leaving it editable.
+  const lockedProjectId = searchParams.get("project_id");
 
   const loadDraft = () => {
     try {
@@ -55,7 +62,14 @@ export default function NewInvoicePage() {
   const [draftData] = useState(loadDraft);
 
   const [clientId, setClientId] = useState(draftData?.clientId || "");
-  const [invoiceDate, setInvoiceDate] = useState(draftData?.invoiceDate || new Date().toISOString().split("T")[0]);
+  const [projectId, setProjectId] = useState<string>(lockedProjectId || draftData?.projectId || "");
+  // Always default to today, even when restoring a draft — a saved client/
+  // items draft is worth keeping, but a stale invoice_date silently
+  // resurrected from a draft written days or months earlier (with no
+  // indicator that a draft was even restored) produces invoices dated in
+  // the past without the user noticing, which then don't show up in the
+  // dashboard's current-period view.
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(draftData?.dueDate || "");
   const [notes, setNotes] = useState(draftData?.notes || "");
   const [headerNote, setHeaderNote] = useState(draftData?.headerNote || "");
@@ -71,8 +85,10 @@ export default function NewInvoicePage() {
   const [discountRate, setDiscountRate] = useState<number>(draftData?.discountRate || 0);
   const [discountAmount, setDiscountAmount] = useState<number>(draftData?.discountAmount || 0);
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>(draftData?.discountType || 'percent');
+  const [taxMode, setTaxMode] = useState<'standard' | 'exempt' | 'ttc_direct'>(draftData?.taxMode || 'standard');
   const [customTitle, setCustomTitle] = useState(draftData?.customTitle || "");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   // Show toast on mount if draft exists
   useEffect(() => {
@@ -84,6 +100,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     const draft = {
       clientId,
+      projectId,
       invoiceDate,
       dueDate,
       notes,
@@ -93,6 +110,7 @@ export default function NewInvoicePage() {
       discountRate,
       discountAmount,
       discountType,
+      taxMode,
       customTitle,
       source: isFromDraftProducts ? 'draft_products' : undefined,
       advance_payment_consumed: advancePaymentConsumed,
@@ -100,39 +118,23 @@ export default function NewInvoicePage() {
     // Only save if there's some meaningful data
     if (clientId || items.length > 0 || notes || headerNote) {
       localStorage.setItem("draft_invoice", JSON.stringify(draft));
+      setLastSavedAt(new Date());
     }
-  }, [clientId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, customTitle, isFromDraftProducts, advancePaymentConsumed]);
-
-  // Initialize items from products using a ref to prevent loops
-  useEffect(() => {
-    // Only initialize if items are completely empty AND no id is present (new invoice)
-    // AND draftData items are not available
-    if (products && items.length === 0 && !id && !draftData?.items?.length) {
-      setItems(products.map(p => ({
-        product_id: p.id,
-        product_code: p.code,
-        product_name: p.name,
-        product_description: p.description || "",
-        quantity: 0,
-        unit_price: p.unit_price,
-        amount: 0,
-        tva_rate: p.tva_rate === undefined ? 19.0 : p.tva_rate,
-        timbre_exempt: p.timbre_exempt === true,
-      })));
-    }
-  }, [products, items.length, id, draftData]);
+  }, [clientId, projectId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, taxMode, customTitle, isFromDraftProducts, advancePaymentConsumed]);
 
   // Load existing invoice data if editing
   useEffect(() => {
     if (existingInvoice && products) {
       const inv = existingInvoice as any;
       setClientId(inv.client_id);
+      setProjectId(inv.project_id || "");
       setInvoiceDate(inv.invoice_date);
       setDueDate(inv.due_date || "");
       setNotes(inv.notes || "");
       setHeaderNote(inv.header_note || "");
       setCustomTitle(inv.custom_title || "");
       setPaymentMode(inv.payment_method || "Espèces");
+      setTaxMode(inv.tax_mode || "standard");
       const type = inv.discount_type || 'percent';
       setDiscountType(type as 'percent' | 'amount');
 
@@ -173,13 +175,36 @@ export default function NewInvoicePage() {
     }
   }, [existingInvoice, products]);
 
+  // Clear the selected project if it doesn't belong to the current client
+  // (e.g. the client was changed after a project was already picked) — the
+  // dropdown itself filters projects to the selected client, so a stale
+  // cross-client selection would otherwise stay silently applied while no
+  // longer being visible in the list. Skipped while locked from a project
+  // context (?project_id=) since that binding is intentional and fixed.
+  useEffect(() => {
+    if (lockedProjectId || !projectId || !projects) return;
+    const stillValid = projects.some((p) => p.id === projectId && (!clientId || p.client_id === clientId));
+    if (!stillValid) setProjectId("");
+  }, [clientId, projectId, projects, lockedProjectId]);
+
+  // Opened from a project view: also pre-fill the client, since an
+  // invoice always belongs to one and the locked project already implies
+  // which one. Only runs once clientId is still empty, so it never
+  // overrides a client the user (or an existing/draft invoice) already set.
+  useEffect(() => {
+    if (!lockedProjectId || clientId || !projects) return;
+    const lockedProject = projects.find((p) => p.id === lockedProjectId);
+    if (lockedProject) setClientId(lockedProject.client_id);
+  }, [lockedProjectId, clientId, projects]);
+
   // Calculate totals helper function (TVA per product)
   const calculateTotals = (
     itemsList: InvoiceItem[],
     currentPaymentMode: string = "Espèces",
     currentDiscountRate: number = 0,
     currentDiscountAmount: number = 0,
-    type: 'percent' | 'amount' = 'percent'
+    type: 'percent' | 'amount' = 'percent',
+    currentTaxMode: 'standard' | 'exempt' | 'ttc_direct' = 'standard'
   ) => {
     const calcSubtotal = itemsList.reduce((sum, item) => sum + item.amount, 0);
 
@@ -205,7 +230,9 @@ export default function NewInvoicePage() {
     itemsList.forEach(item => {
       const itemAmountHt = item.amount;
       const tvaRate = item.tva_rate;
-      const effectiveRate = tvaRate === undefined ? 19.0 : tvaRate;
+      // "Exonéré" forces every line to 0% regardless of its own stored
+      // rate, same as the editable-preview logic in useEditableInvoiceLogic.
+      const effectiveRate = currentTaxMode === 'exempt' ? 0 : (tvaRate === undefined ? 19.0 : tvaRate);
       const isTimbreExempt = item.timbre_exempt || effectiveRate === -1.0;
 
       // TVA is calculated on GROSS HT amount (before discount)
@@ -248,7 +275,7 @@ export default function NewInvoicePage() {
   };
 
   // Initial totals
-  const initialTotals = calculateTotals(items, paymentMode, discountRate, discountAmount, discountType);
+  const initialTotals = calculateTotals(items, paymentMode, discountRate, discountAmount, discountType, taxMode);
   const calculatedDiscountAmount = initialTotals.finalDiscountAmount;
 
   // Get next invoice number for preview
@@ -287,6 +314,8 @@ export default function NewInvoicePage() {
       discount_value: discountType === 'percent' ? discountRate : discountAmount,
       discount: calculatedDiscountAmount,
       discount_type: discountType,
+      tax_mode: taxMode,
+      project_id: projectId || null,
       use_secondary_register: false,
       selected_secondary_rc: null as string | null,
       selected_secondary_address: null as string | null,
@@ -316,7 +345,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     const selectedClient = clients?.find(c => c.id === clientId);
     const validItems = items.filter(item => item.quantity > 0);
-    const totals = calculateTotals(validItems, paymentMode, discountRate, discountAmount, discountType);
+    const totals = calculateTotals(validItems, paymentMode, discountRate, discountAmount, discountType, taxMode);
     const calcSubtotal = totals.calcSubtotal;
     const calcTva = totals.calcTva;
     const calcTimbre = totals.calcTimbre;
@@ -338,6 +367,8 @@ export default function NewInvoicePage() {
       discount_value: discountType === 'percent' ? discountRate : discountAmount,
       discount: totals.finalDiscountAmount,
       discount_type: discountType,
+      tax_mode: taxMode,
+      project_id: projectId || null,
       clients: selectedClient ? {
         name: selectedClient.name,
         address: selectedClient.address || null,
@@ -362,15 +393,27 @@ export default function NewInvoicePage() {
           } : fallbackProductInfo, // Provide fallback when products isn't fully loaded
           quantity: item.quantity,
           unit_price: item.unit_price,
-          tva_rate: item.tva_rate === undefined ? 19.0 : item.tva_rate,
+          tva_rate: taxMode === 'exempt' ? 0 : (item.tva_rate === undefined ? 19.0 : item.tva_rate),
         };
       }),
     }));
-  }, [clientId, invoiceDate, dueDate, items, notes, clients, products, paymentMode, discountRate, discountAmount, discountType]);
+  }, [clientId, projectId, invoiceDate, dueDate, items, notes, clients, products, paymentMode, discountRate, discountAmount, discountType, taxMode]);
 
   // Sync form state with draft invoice changes
   const handleDraftInvoiceChange = (updatedInvoice: any) => {
-    setDraftInvoice(updatedInvoice);
+    // invoice_number is populated asynchronously (from existingInvoice
+    // when editing, or getNextNumber() when creating) — if the editable
+    // preview's own onInvoiceChange fires from a stale closure captured
+    // before that resolved, its spread of the old `invoice` prop still
+    // carries an empty invoice_number, and since this is a full replace
+    // (not a merge), that empty value would otherwise get locked in
+    // permanently and fail the update with a raw NOT NULL/UNIQUE error at
+    // save time. Never let this full replace erase a real number the page
+    // already knows about.
+    setDraftInvoice((prev: any) => ({
+      ...updatedInvoice,
+      invoice_number: updatedInvoice.invoice_number || prev.invoice_number,
+    }));
 
     // Update form state from draft
     setInvoiceDate(updatedInvoice.invoice_date || invoiceDate);
@@ -378,6 +421,7 @@ export default function NewInvoicePage() {
     setNotes(updatedInvoice.notes || "");
     setHeaderNote(updatedInvoice.header_note || "");
     setPaymentMode(updatedInvoice.payment_method || "Espèces");
+    if (updatedInvoice.tax_mode) setTaxMode(updatedInvoice.tax_mode);
 
     const type = updatedInvoice.discount_type || 'percent';
     setDiscountType(type);
@@ -400,40 +444,25 @@ export default function NewInvoicePage() {
       }
     }
 
-    // Update items
+    // Update items — the preview (useEditableInvoiceLogic) already owns
+    // add/update/delete/reorder for invoice_items, so its output is the
+    // source of truth here. Re-deriving items via a catalog product_id
+    // lookup (the old approach) silently dropped any item without a
+    // matching catalog product — which is exactly what a custom/one-off
+    // line item is by design.
     if (updatedInvoice.invoice_items) {
-      const updatedItems = updatedInvoice.invoice_items.map((invoiceItem: any) => {
-        const product = products?.find(p => p.id === invoiceItem.product_id || p.code === invoiceItem.products?.code);
-        if (product) {
-          return {
-            product_id: product.id,
-            product_code: product.code,
-            product_name: product.name,
-            product_description: product.description || "",
-            quantity: invoiceItem.quantity || 0,
-            unit_price: invoiceItem.unit_price || product.unit_price,
-            amount: (invoiceItem.quantity || 0) * (invoiceItem.unit_price || product.unit_price),
-            tva_rate: invoiceItem.tva_rate,
-            timbre_exempt: invoiceItem.timbre_exempt,
-          };
-        }
-        return null;
-      }).filter((item: any) => item !== null);
-
-      // Merge with existing items
-      const mergedItems = items.map(item => {
-        const updatedItem = updatedItems.find((ui: any) => ui.product_id === item.product_id);
-        return updatedItem || { ...item, quantity: 0, amount: 0 };
-      });
-
-      // Add new items
-      updatedItems.forEach((updatedItem: any) => {
-        if (!mergedItems.find((mi: any) => mi.product_id === updatedItem.product_id)) {
-          mergedItems.push(updatedItem);
-        }
-      });
-
-      setItems(mergedItems);
+      setItems(updatedInvoice.invoice_items.map((item: any) => ({
+        product_id: item.product_id,
+        product_code: item.product_code || item.products?.code || "",
+        product_name: item.product_name || item.products?.name || "",
+        product_description: item.product_description || item.products?.description || "",
+        quantity: item.quantity || 0,
+        unit_price: item.unit_price || 0,
+        amount: (item.quantity || 0) * (item.unit_price || 0),
+        tva_rate: item.tva_rate,
+        timbre_exempt: item.timbre_exempt,
+        products: item.products,
+      })));
     }
   };
 
@@ -470,12 +499,19 @@ export default function NewInvoicePage() {
       discount: draftInvoice.discount_amount, // The flat amount for legacy/total displays
       discount_type: discountType,
       discount_value: discountType === 'percent' ? discountRate : discountAmount,
+      tax_mode: taxMode,
+      project_id: projectId || undefined,
       items: validItems.map(item => ({
-        product_id: item.product_id,
+        product_id: item.product_id || undefined,
+        // Only meaningful when product_id is absent — a custom/one-off item.
+        product_name: item.product_id ? undefined : item.product_name || undefined,
+        product_code: item.product_id ? undefined : item.product_code || undefined,
         product_description: item.product_description,
         quantity: item.quantity,
         unit_price: item.unit_price,
-        tva_rate: item.tva_rate === undefined ? 19.0 : item.tva_rate,
+        // "Exonéré" forces every line to 0% at submit time regardless of
+        // its own stored rate, matching the live totals/preview above.
+        tva_rate: taxMode === 'exempt' ? 0 : (item.tva_rate === undefined ? 19.0 : item.tva_rate),
         timbre_exempt: item.timbre_exempt ?? false,
       })),
     };
@@ -526,6 +562,12 @@ export default function NewInvoicePage() {
               </Button>
               <h1 className="text-2xl font-semibold text-foreground">{id ? "Modifier la facture" : "Nouvelle facture"}</h1>
               <p className="text-muted-foreground">{id ? `Modification de la facture ${draftInvoice.invoice_number}` : "Créer une facture en mode interactif"}</p>
+              {!id && lastSavedAt && (
+                <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Brouillon enregistré à {lastSavedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
             </div>
 
             {/* Actions Buttons */}
@@ -569,23 +611,80 @@ export default function NewInvoicePage() {
           <div className="space-y-6">
 
             {/* Live Stats */}
-            <div className="bg-card rounded-xl border border-border p-4">
+            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <Label htmlFor="project_associe" className="text-sm font-medium text-foreground">Projet associé</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {lockedProjectId
+                      ? "Verrouillé — cette facture a été créée depuis la fiche du projet."
+                      : "Optionnel — la facture compte dans le chiffre d'affaires et la rentabilité du projet choisi."}
+                  </p>
+                </div>
+                <Select
+                  value={projectId || "none"}
+                  onValueChange={(value) => setProjectId(value === "none" ? "" : value)}
+                  disabled={!!lockedProjectId}
+                >
+                  <SelectTrigger id="project_associe" className="w-full sm:w-64">
+                    <SelectValue placeholder="Aucun projet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun projet</SelectItem>
+                    {projects
+                      ?.filter((p) => !clientId || p.client_id === clientId)
+                      .map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Régime de TVA</p>
+                  <p className="text-xs text-muted-foreground">
+                    {taxMode === "exempt"
+                      ? "Hors Taxe / Sans TVA — toutes les lignes passent à 0%."
+                      : taxMode === "ttc_direct"
+                        ? "TTC Direct — le prix saisi par ligne est un prix TTC ; le HT est recalculé automatiquement."
+                        : "Standard — chaque ligne applique sa TVA catalogue (généralement 19%)."}
+                  </p>
+                </div>
+                <ToggleGroup
+                  type="single"
+                  value={taxMode}
+                  onValueChange={(value) => {
+                    if (value) setTaxMode(value as "standard" | "exempt" | "ttc_direct");
+                  }}
+                  className="justify-start sm:justify-end"
+                >
+                  <ToggleGroupItem value="standard" className="text-xs px-3 h-8">
+                    Standard (HT + TVA)
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="exempt" className="text-xs px-3 h-8">
+                    Hors Taxe / Sans TVA
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="ttc_direct" className="text-xs px-3 h-8">
+                    TTC Direct
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-secondary/30 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">Sous-total H.T</p>
-                  <p className="text-sm font-bold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
+                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
                 </div>
                 <div className="bg-secondary/30 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">Total TVA</p>
-                  <p className="text-sm font-bold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
+                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
                 </div>
                 <div className="bg-secondary/30 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground">Timbre</p>
-                  <p className="text-sm font-bold">{formatCurrency(draftInvoice.timbre || 0)}</p>
+                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.timbre || 0)}</p>
                 </div>
                 <div className="bg-primary/10 rounded-lg p-3">
                   <p className="text-xs text-primary">Total TTC</p>
-                  <p className="text-sm font-bold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
+                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
                 </div>
               </div>
             </div>
@@ -593,14 +692,12 @@ export default function NewInvoicePage() {
             {/* Editable Preview */}
             <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 250px)', minHeight: '500px' }}>
               <div className="flex justify-center">
-                <div className="shadow-2xl">
-                  <EditableInvoicePreview
-                    invoice={draftInvoice}
-                    onInvoiceChange={handleDraftInvoiceChange}
-                    clients={clients}
-                    products={products}
-                  />
-                </div>
+                <EditableInvoicePreview
+                  invoice={draftInvoice}
+                  onInvoiceChange={handleDraftInvoiceChange}
+                  clients={clients}
+                  products={products}
+                />
               </div>
             </div>
           </div>

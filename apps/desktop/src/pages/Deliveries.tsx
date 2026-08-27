@@ -3,34 +3,60 @@ import { useNavigate } from "react-router-dom";
 import {
   RiAddLine as Plus,
   RiMoreFill as MoreHorizontal,
-  RiFileTextLine as FileText,
-  RiTruckLine as Truck,
   RiEyeLine as Eye,
-  RiLoader4Line as Loader2
+  RiEditLine as Edit,
+  RiCheckLine as Check,
+  RiDeleteBinLine as Trash2,
+  RiLoader4Line as Loader2,
+  RiMailSendLine as MailIcon,
+  RiFolderZipLine as FolderZip,
+  RiFileCopyLine as Copy,
+  RiDownloadLine as Download,
 } from "@remixicon/react";
-import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TableLoading, EmptyState } from "@sordi/ui";
-import { useDeliveryNotes } from "@/hooks/useDeliveryNotes";
+import {
+  Button, StatusBadge, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent,
+} from "@sordi/ui";
+import { useDeliveryNotes, useSetDeliveryStatus, useDeleteDeliveryNote } from "@/hooks/useDeliveryNotes";
+import type { DeliveryNoteStatus } from "@/lib/database";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { useSettings } from "@/hooks/useSettings";
-import { useLicenseStatus } from "@/hooks/useLicense";
-import { generateDeliveryNotePDF } from "@/lib/pdfGenerator";
+import { generateDeliveryNotePDF, generateDeliveryNotePDFBlob, buildDeliveryNotePDFData, blobToBase64, downloadBlobsAsZip } from "@/lib/pdfGenerator";
+import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import type { DraftDeliveryInput } from "@/lib/emailDrafter";
+
+const STATUS_CONFIG: Record<DeliveryNoteStatus, { label: string; variant: "neutral" | "warning" | "success" }> = {
+  draft: { label: "Brouillon", variant: "neutral" },
+  printed: { label: "Imprimé", variant: "warning" },
+  signed: { label: "Livré & Signé", variant: "success" },
+};
 
 export default function DeliveriesPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterClient, setFilterClient] = useState<string>("all");
-
-
+  const [filterStatus, setFilterStatus] = useState<"all" | DeliveryNoteStatus>("all");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: clients } = useClients();
   const { data: deliveryNotes, isLoading } = useDeliveryNotes(
     undefined
   );
   const { data: settings } = useSettings();
-  const { data: licenseStatus } = useLicenseStatus();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
+  const setDeliveryStatus = useSetDeliveryStatus();
+  const deleteDeliveryNote = useDeleteDeliveryNote();
+  const [emailNoteId, setEmailNoteId] = useState<string | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [selectedDeliveries, setSelectedDeliveries] = useState<string[]>([]);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkMarkingSigned, setIsBulkMarkingSigned] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
   const filteredNotes = deliveryNotes?.filter(note => {
     const q = searchQuery.toLowerCase().trim();
@@ -39,7 +65,8 @@ export default function DeliveriesPage() {
       (note.delivery_number || "").toLowerCase().includes(q) ||
       (note.clients?.name || "").toLowerCase().includes(q);
     const matchesClient = filterClient === "all" || note.client_id === filterClient;
-    return matchesSearch && matchesClient;
+    const matchesStatus = filterStatus === "all" || (note.status || "draft") === filterStatus;
+    return matchesSearch && matchesClient && matchesStatus;
   });
 
 
@@ -53,7 +80,7 @@ export default function DeliveriesPage() {
   };
 
   const calculateTotal = (items: any[]) => {
-    return items?.reduce((sum, item) => sum + (item.quantity * (item.products?.unit_price || 0)), 0) || 0;
+    return items?.reduce((sum, item) => sum + (item.quantity * (item.unit_price ?? item.products?.unit_price ?? 0)), 0) || 0;
   };
 
   const formatCurrency = (amount: number) => {
@@ -71,8 +98,14 @@ export default function DeliveriesPage() {
 
     try {
       setDownloadingId(id);
-      await generateDeliveryNotePDF(note as any, settings, true, undefined, licenseStatus?.state === "active");
-      toast.success("PDF téléchargé avec succès");
+      const pdfData = buildDeliveryNotePDFData(note);
+      const saved = await generateDeliveryNotePDF(pdfData, settings);
+      // First export moves a draft into "awaiting client validation" —
+      // skipped if the user cancelled the save dialog, or the note is
+      // already past this stage (printed/signed).
+      if (saved && (note.status || "draft") === "draft") {
+        setDeliveryStatus.mutate({ id, status: "printed" });
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -81,14 +114,115 @@ export default function DeliveriesPage() {
     }
   };
 
+  const handleMarkSigned = (id: string) => {
+    setDeliveryStatus.mutate({ id, status: "signed" }, {
+      onSuccess: () => toast.success("Bon de livraison marqué comme signé"),
+    });
+  };
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    deleteDeliveryNote.mutate(deleteId, {
+      onSuccess: () => setDeleteId(null),
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedDeliveries.length === filteredNotes?.length) {
+      setSelectedDeliveries([]);
+    } else {
+      setSelectedDeliveries(filteredNotes?.map((n) => n.id) || []);
+    }
+  };
+
+  const toggleDelivery = (id: string) => {
+    setSelectedDeliveries((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const clearSelection = () => setSelectedDeliveries([]);
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast.success("ID copié dans le presse-papiers");
+  };
+
+  const handleBulkMarkSigned = async () => {
+    setIsBulkMarkingSigned(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedDeliveries.map((id) => setDeliveryStatus.mutateAsync({ id, status: "signed" }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} bon${results.length > 1 ? "s" : ""} marqué${results.length > 1 ? "s" : ""} signé${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} bon(s) sur ${results.length} n'ont pas pu être mis à jour`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkMarkingSigned(false);
+    }
+  };
+
+  const handleBulkDownloadZip = async () => {
+    setIsBulkDownloading(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedDeliveries.map(async (id) => {
+          const note = deliveryNotes?.find((n) => n.id === id);
+          if (!note) throw new Error("Bon introuvable");
+          const pdfData = buildDeliveryNotePDFData(note);
+          const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
+          return { blob, fileName: `BonLivraison-${pdfData.delivery_number || id}.pdf` };
+        })
+      );
+      const files = results.filter((r): r is PromiseFulfilledResult<{ blob: Blob; fileName: string }> => r.status === "fulfilled").map((r) => r.value);
+      const failed = results.length - files.length;
+
+      if (files.length === 0) {
+        toast.error("Aucun PDF n'a pu être généré");
+        return;
+      }
+
+      await downloadBlobsAsZip(files, `Livraisons-${new Date().toISOString().split("T")[0]}.zip`);
+      toast.success(
+        failed === 0
+          ? `${files.length} bon${files.length > 1 ? "s" : ""} téléchargé${files.length > 1 ? "s" : ""} (ZIP)`
+          : `${files.length} bon(s) téléchargés, ${failed} en échec`
+      );
+      clearSelection();
+    } catch (error) {
+      console.error("Bulk PDF download error:", error);
+      toast.error("Erreur lors du téléchargement groupé");
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const results = await Promise.allSettled(selectedDeliveries.map((id) => deleteDeliveryNote.mutateAsync(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed === 0) {
+      toast.success(`${results.length} bon${results.length > 1 ? "s" : ""} supprimé${results.length > 1 ? "s" : ""}`);
+    } else {
+      toast.error(`${failed} bon(s) sur ${results.length} n'ont pas pu être supprimés`);
+    }
+    clearSelection();
+  };
+
+  const emailNote = deliveryNotes?.find(n => n.id === emailNoteId);
+  const emailPdfData = emailNote ? buildDeliveryNotePDFData(emailNote) : null;
+
   return (
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Bons de livraison</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos livraisons et générez des factures</p>
+              <h1 className="text-3xl text-foreground tracking-tight">Bons de livraison</h1>
+              <p className="text-muted-foreground mt-1">
+                Gérez vos livraisons et générez des factures · {deliveryNotes?.length || 0} bon{(deliveryNotes?.length || 0) > 1 ? "s" : ""}
+              </p>
             </div>
 
             <div className="flex gap-3 flex-wrap">
@@ -96,19 +230,6 @@ export default function DeliveriesPage() {
                 <Plus className="w-4 h-4 mr-2" />
                 Nouveau bon
               </Button>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="mb-6">
-            <div className="bg-card rounded-2xl p-4 shadow-card border border-border/30 flex items-center gap-3 w-fit max-w-full">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-                <Truck className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xl font-bold text-foreground tracking-tight whitespace-nowrap">{deliveryNotes?.length || 0}</p>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">Bons de livraison</p>
-              </div>
             </div>
           </div>
 
@@ -132,85 +253,257 @@ export default function DeliveriesPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as "all" | DeliveryNoteStatus)}>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Tous les statuts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="draft">Brouillons</SelectItem>
+                <SelectItem value="printed">Imprimés</SelectItem>
+                <SelectItem value="signed">Signés</SelectItem>
+              </SelectContent>
+            </Select>
 
           </div>
+
+          {/* Bulk action bar */}
+          <BulkActionBar count={selectedDeliveries.length} onClear={clearSelection}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs"
+              onClick={handleBulkMarkSigned}
+              disabled={isBulkMarkingSigned}
+            >
+              {isBulkMarkingSigned ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Marquer comme Signés
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs"
+              onClick={handleBulkDownloadZip}
+              disabled={isBulkDownloading}
+            >
+              {isBulkDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderZip className="w-3.5 h-3.5" />}
+              Télécharger en lot
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full text-xs text-destructive hover:text-destructive"
+              onClick={() => setBulkDeleteDialogOpen(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Supprimer la sélection
+            </Button>
+          </BulkActionBar>
 
           {/* Table */}
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
+                <TableHead className="[&:has([role=checkbox])]:pl-5">
+                  <Checkbox
+                    checked={selectedDeliveries.length === filteredNotes?.length && filteredNotes?.length > 0}
+                    onCheckedChange={toggleAll}
+                  />
+                </TableHead>
                 <TableHead>N° BL</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead className="hidden md:table-cell">Date</TableHead>
-                <TableHead>Montant</TableHead>
+                <TableHead numeric>Montant</TableHead>
+                <TableHead className="hidden sm:table-cell">Statut</TableHead>
                 <TableHead className="w-14"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableLoading columns={5} rows={5} />
+                <TableLoading columns={7} rows={5} />
               ) : filteredNotes?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={7}>
                     <EmptyState
                       type="deliveries"
-                      title="Aucun bon de livraison trouvé"
-                      description={searchQuery ? "Essayez de modifier votre recherche" : "Créez votre premier bon de livraison"}
+                      title="Aucun bon de livraison"
+                      description={searchQuery ? "Essayez une autre recherche" : "Créez votre premier bon de livraison"}
                       action={searchQuery ? {
                         label: "Effacer la recherche",
                         onClick: () => setSearchQuery(""),
                       } : {
-                        label: "Créer un bon",
+                        label: "Créer",
                         onClick: () => navigate("/deliveries/new"),
                       }}
                     />
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredNotes?.map((note) => (
+                filteredNotes?.map((note) => {
+                  const statusConfig = STATUS_CONFIG[(note.status || "draft") as DeliveryNoteStatus];
+                  return (
                   <TableRow
                     key={note.id}
                     className="cursor-pointer"
                     onClick={() => navigate(`/deliveries/${note.id}`)}
                   >
-                    <TableCell className="font-medium">
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedDeliveries.includes(note.id)}
+                        onCheckedChange={() => toggleDelivery(note.id)}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium font-mono tabular-nums tracking-tight">
                       {note.delivery_number}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {note.clients?.name}
+                    <TableCell className="text-muted-foreground max-w-[220px]">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="block truncate">{note.clients?.name}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">{note.clients?.name}</TooltipContent>
+                      </Tooltip>
                     </TableCell>
                     <TableCell className="text-muted-foreground hidden md:table-cell">
                       {formatDate(note.delivery_date)}
                     </TableCell>
-                    <TableCell className="font-medium tabular-nums">
+                    <TableCell numeric className="font-medium">
                       {formatCurrency(calculateTotal(note.delivery_note_items || []))}
                     </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <StatusBadge tone={statusConfig.variant}>{statusConfig.label}</StatusBadge>
+                    </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="w-9 h-9 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/deliveries/${note.id}`)}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            Voir détails
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDownloadPDF(note.id)} disabled={downloadingId === note.id}>
-                            {downloadingId === note.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
-                            {downloadingId === note.id ? "Téléchargement..." : "Télécharger PDF"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                              onClick={(e) => { e.stopPropagation(); handleCopyId(note.id); }}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Copier l'ID</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground disabled:opacity-50"
+                              onClick={(e) => { e.stopPropagation(); handleDownloadPDF(note.id); }}
+                              disabled={downloadingId === note.id}
+                            >
+                              {downloadingId === note.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Télécharger PDF</TooltipContent>
+                        </Tooltip>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/deliveries/${note.id}`)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Voir détails
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate(`/deliveries/${note.id}/edit`)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Modifier
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setEmailNoteId(note.id); setEmailModalOpen(true); }}>
+                              <MailIcon className="w-4 h-4 mr-2" />
+                              Envoyer par email
+                            </DropdownMenuItem>
+                            {(note.status || "draft") !== "signed" && (
+                              <DropdownMenuItem onClick={() => handleMarkSigned(note.id)}>
+                                <Check className="w-4 h-4 mr-2" />
+                                Marquer comme Signé
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setDeleteId(note.id)} className="text-destructive focus:text-destructive">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
           </div>
       </main>
+
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer le bon de livraison ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-full">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer {selectedDeliveries.length} bon{selectedDeliveries.length > 1 ? "s" : ""} de livraison ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible et supprimera définitivement {selectedDeliveries.length > 1 ? "ces bons de livraison" : "ce bon de livraison"}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {emailPdfData && (
+        <SendDocumentEmailModal
+          open={emailModalOpen}
+          onOpenChange={(next) => {
+            setEmailModalOpen(next);
+            if (!next) setEmailNoteId(null);
+          }}
+          recipientEmail={emailPdfData.client.email}
+          fileName={`BonLivraison-${emailPdfData.delivery_number || "000"}.pdf`}
+          draftInput={{
+            docType: "delivery",
+            documentNumber: emailPdfData.delivery_number,
+            clientName: emailPdfData.client.name,
+            documentDate: emailPdfData.delivery_date,
+            senderCompany: settings?.company_name || "Sordi",
+            items: emailPdfData.items.map((item) => ({
+              name: item.product_name || "Article",
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+            })),
+          } satisfies DraftDeliveryInput}
+          getPdfBase64={async () => {
+            const blob = await generateDeliveryNotePDFBlob(emailPdfData, settings);
+            return blobToBase64(blob);
+          }}
+        />
+      )}
     </>
   );
 }

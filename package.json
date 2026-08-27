@@ -13,5 +13,16 @@
     "tauri": "pnpm --filter @sordi/desktop tauri",
     "tauri:dev": "pnpm --filter @sordi/desktop tauri:dev",
     "tauri:build": "pnpm --filter @sordi/desktop tauri:build"
+  },
+  "dependencies": {
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@fontsource/readex-pro": "^5.3.0",
+    "date-fns": "^4.4.0",
+    "framer-motion": "^13.1.1",
+    "react-day-picker": "^10.0.1",
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8",
+    "tailwindcss-animate": "^1.0.7",
+    "vaul": "^1.1.2"
   }
 }

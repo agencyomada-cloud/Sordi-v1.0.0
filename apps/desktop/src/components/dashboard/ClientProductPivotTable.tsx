@@ -3,7 +3,8 @@ import React, { useMemo, useState } from "react";
 import { useSettings } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { db } from "@/lib/database";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
 import {
     RiDownloadLine as Download,
     RiDownloadLine as FileDown,
@@ -53,9 +54,11 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
     const [searchQuery, setSearchQuery] = useState("");
     const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "total_ttc", direction: "desc" });
     const { data: settings } = useSettings();
+    const { activeCompanyId, isReady } = useWorkspace();
     const { data, isLoading } = useQuery({
-        queryKey: ["client-product-cumulatives", year, months],
-        queryFn: () => db.dashboard.getClientProductCumulatives(year, months),
+        queryKey: ["client-product-cumulatives", activeCompanyId, year, months],
+        queryFn: () => db.dashboard.getClientProductCumulatives(activeCompanyId, year, months),
+        enabled: isReady,
     });
 
     const primaryColor = settings?.primary_color || "#476CFF";
@@ -172,7 +175,8 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
 
     const SortHeader = ({ label, sortKey, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "right" }) => (
         <TableHead
-            className={cn("cursor-pointer select-none hover:text-foreground transition-colors", align === "right" && "text-right")}
+            numeric={align === "right"}
+            className="cursor-pointer select-none hover:text-foreground transition-colors"
             onClick={() => toggleSort(sortKey)}
         >
             <span className={cn("inline-flex items-center gap-1", align === "right" && "flex-row-reverse")}>
@@ -189,9 +193,29 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
     if (isLoading) {
         return (
             <Card>
-                <CardContent className="h-64 flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">Analyse des données en cours...</p>
+                <CardHeader className="flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between gap-4">
+                        <div className="space-y-1.5">
+                            <Skeleton className="h-5 w-56" />
+                            <Skeleton className="h-3 w-40" />
+                        </div>
+                        <Skeleton className="h-9 w-32 rounded-md" />
+                    </div>
+                    <Skeleton className="h-10 w-full sm:w-72 rounded-md" />
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table className="w-full text-sm">
+                        <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                                {Array.from({ length: 7 }).map((_, i) => (
+                                    <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
+                                ))}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableLoading columns={7} rows={6} numericColumns={[2, 3, 4, 5, 6]} />
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         );
@@ -263,8 +287,13 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                         <TableBody>
                             {rows.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
-                                        {searchQuery ? "Aucun résultat pour cette recherche" : "Aucune vente sur cette période"}
+                                    <TableCell colSpan={7}>
+                                        <EmptyState
+                                            type="default"
+                                            title="Aucune vente"
+                                            description={searchQuery ? "Essayez une autre recherche" : "Aucune vente enregistrée sur cette période"}
+                                            action={searchQuery ? { label: "Effacer la recherche", onClick: () => setSearchQuery("") } : undefined}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -272,11 +301,11 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                                     <TableRow key={`${r.client_name}-${r.product_name}-${i}`}>
                                         <TableCell className="font-medium">{r.client_name}</TableCell>
                                         <TableCell className="text-muted-foreground">{r.product_name}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 2 }).format(r.total_quantity)}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{formatValue(r.total_ht)}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{formatValue(r.total_tva)}</TableCell>
-                                        <TableCell className="text-right tabular-nums text-muted-foreground">{formatValue(r.total_timbre)}</TableCell>
-                                        <TableCell className="text-right tabular-nums font-semibold text-primary">{formatValue(r.total_ttc)}</TableCell>
+                                        <TableCell numeric>{new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 2 }).format(r.total_quantity)}</TableCell>
+                                        <TableCell numeric>{formatValue(r.total_ht)}</TableCell>
+                                        <TableCell numeric>{formatValue(r.total_tva)}</TableCell>
+                                        <TableCell numeric className="text-muted-foreground">{formatValue(r.total_timbre)}</TableCell>
+                                        <TableCell numeric className="font-semibold text-primary">{formatValue(r.total_ttc)}</TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -287,11 +316,11 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                                     <TableCell colSpan={2} className="uppercase tracking-wide text-xs text-primary">
                                         Total {searchQuery ? "(filtré)" : "Général"}
                                     </TableCell>
-                                    <TableCell className="text-right text-primary tabular-nums">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
-                                    <TableCell className="text-right text-primary tabular-nums">{formatValue(totals.ht)}</TableCell>
-                                    <TableCell className="text-right text-primary tabular-nums">{formatValue(totals.tva)}</TableCell>
-                                    <TableCell className="text-right text-primary tabular-nums">{formatValue(totals.timbre)}</TableCell>
-                                    <TableCell className="text-right text-primary text-base tabular-nums">{formatValue(totals.ttc)}</TableCell>
+                                    <TableCell numeric className="text-primary">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatValue(totals.ht)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatValue(totals.tva)}</TableCell>
+                                    <TableCell numeric className="text-primary">{formatValue(totals.timbre)}</TableCell>
+                                    <TableCell numeric className="text-primary text-base">{formatValue(totals.ttc)}</TableCell>
                                 </TableRow>
                             </tfoot>
                         )}

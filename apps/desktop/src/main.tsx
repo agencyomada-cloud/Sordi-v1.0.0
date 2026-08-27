@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import "remixicon/fonts/remixicon.css";
+import "./i18n";
 import { setupToastSound } from "./lib/setupToastSound";
 
 setupToastSound();

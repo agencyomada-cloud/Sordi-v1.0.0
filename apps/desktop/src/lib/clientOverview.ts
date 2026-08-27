@@ -5,20 +5,21 @@
  * data" fallbacks — lives in one place so both pages read the same rules.
  */
 import type { ClientOverviewStats } from "./database";
+import type { StatusBadgeTone } from "@sordi/ui";
 
 export type ClientStatusKey = "en_retard" | "a_surveiller" | "nouveau" | "bon_payeur";
 
 export interface ClientStatus {
   key: ClientStatusKey;
   label: string;
-  colorClass: string;
+  tone: StatusBadgeTone;
 }
 
-const STATUS_STYLES: Record<ClientStatusKey, { label: string; colorClass: string }> = {
-  en_retard: { label: "En retard", colorClass: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
-  a_surveiller: { label: "À surveiller", colorClass: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400" },
-  nouveau: { label: "Nouveau", colorClass: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400" },
-  bon_payeur: { label: "Bon payeur", colorClass: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" },
+const STATUS_STYLES: Record<ClientStatusKey, { label: string; tone: StatusBadgeTone }> = {
+  en_retard: { label: "En retard", tone: "error" },
+  a_surveiller: { label: "À surveiller", tone: "warning" },
+  nouveau: { label: "Nouveau", tone: "neutral" },
+  bon_payeur: { label: "Bon payeur", tone: "success" },
 };
 
 // Client.payment_terms_days is optional; falls back to a conventional 30-day

@@ -35,15 +35,15 @@ import {
   Input,
   Label,
   EmptyState,
-  Badge,
+  StatusBadge,
 } from "@sordi/ui";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { useProject, useProjectStats, useSetFreelancerPaymentStatus } from "@/hooks/useProjects";
+import { useProject, useProjectStats, useProjectProfitability, useSetFreelancerPaymentStatus } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useEmployees } from "@/hooks/useEmployees";
+import { useExpenses, useCreateExpense, useDeleteExpense } from "@/hooks/useExpenses";
 import {
   useProjectTasks,
   useCreateProjectTask,
@@ -60,7 +60,8 @@ import { useAssignInvoiceToProject } from "@/hooks/useProjects";
 import { computeProjectStatus, serviceCategoryLabel } from "@/lib/projectOverview";
 import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
-import type { Project, ProjectStats, Invoice, ProjectTaskStatus } from "@/lib/database";
+import { ContractModal } from "@/components/project/ContractModal";
+import type { Project, ProjectStats, Invoice, ProjectTaskStatus, Client } from "@/lib/database";
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("fr-DZ", { style: "currency", currency: "DZD", minimumFractionDigits: 0 }).format(amount);
@@ -79,7 +80,7 @@ const TASK_STATUS_ORDER: ProjectTaskStatus[] = ["à_faire", "en_cours", "en_revi
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "deliverables">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "deliverables" | "expenses">("overview");
 
   const { data: project, isLoading } = useProject(id);
   const { data: statsList } = useProjectStats(id);
@@ -91,26 +92,14 @@ export default function ProjectDetailPage() {
   const linkedInvoices = useMemo(() => (allInvoices ?? []).filter((inv) => inv.project_id === id), [allInvoices, id]);
 
   if (isLoading || !project) {
-    return (
-      <div className="flex min-h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col">
-          <Header />
-          <main className="flex-1 p-8 pt-4 text-muted-foreground">Chargement…</main>
-        </div>
-      </div>
-    );
+    return <main className="flex-1 p-8 pt-4 text-muted-foreground">Chargement…</main>;
   }
 
   const status = stats ? computeProjectStatus(stats) : null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Header />
-        <main className="flex-1 p-8 pt-4">
-          <div className="max-w-[1200px] mx-auto w-full">
+    <main className="flex-1 p-8 pt-4">
+      <div className="max-w-[1200px] mx-auto w-full">
             <button
               onClick={() => navigate("/projects")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
@@ -142,6 +131,7 @@ export default function ProjectDetailPage() {
                 { key: "overview" as const, label: "Aperçu" },
                 { key: "tasks" as const, label: "Tâches" },
                 { key: "deliverables" as const, label: "Livrables" },
+                { key: "expenses" as const, label: "Dépenses" },
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -157,13 +147,12 @@ export default function ProjectDetailPage() {
               ))}
             </div>
 
-            {activeTab === "overview" && <OverviewTab project={project} stats={stats} linkedInvoices={linkedInvoices} />}
+            {activeTab === "overview" && <OverviewTab project={project} stats={stats} linkedInvoices={linkedInvoices} client={client} />}
             {activeTab === "tasks" && <TasksTab projectId={project.id} />}
             {activeTab === "deliverables" && <DeliverablesTab projectId={project.id} />}
+            {activeTab === "expenses" && <ProjectExpensesTab projectId={project.id} />}
           </div>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }
 
@@ -171,19 +160,30 @@ function OverviewTab({
   project,
   stats,
   linkedInvoices,
+  client,
 }: {
   project: Project;
   stats: ProjectStats | undefined;
   linkedInvoices: Invoice[];
+  client: Client | undefined;
 }) {
+  const navigate = useNavigate();
   const assignInvoice = useAssignInvoiceToProject();
   const { data: employees } = useEmployees();
   const setFreelancerPayment = useSetFreelancerPaymentStatus();
+  const { data: profitability } = useProjectProfitability(project.id);
+  const [contractModalOpen, setContractModalOpen] = useState(false);
   const budgetFacture = stats?.budget_facture ?? 0;
   const budgetPaye = stats?.budget_paye ?? 0;
   const ratio = project.planned_budget > 0 ? Math.min(1, budgetFacture / project.planned_budget) : 0;
   const overBudget = project.planned_budget > 0 && budgetFacture > project.planned_budget;
   const freelancer = employees?.find((e) => e.id === project.freelancer_id);
+  const netMargin = profitability?.net_margin ?? 0;
+  const marginPercentage = profitability?.margin_percentage ?? 0;
+  const isProfitable = netMargin >= 0;
+  const directExpenses = profitability?.direct_expenses ?? 0;
+  const expenseRatio = project.planned_budget > 0 ? Math.min(1, directExpenses / project.planned_budget) : 0;
+  const expenseOverBudget = project.planned_budget > 0 && directExpenses > project.planned_budget;
 
   return (
     <div className="space-y-6">
@@ -219,6 +219,61 @@ function OverviewTab({
         </Card>
       </div>
 
+      {/* Real profitability (HT revenue minus direct costs) — distinct from the
+          planned-budget-consumption cards above, which are TTC-basis and don't
+          account for any actual cost. See get_project_profitability. */}
+      <Card className={isProfitable ? "border-green-600/20 bg-green-600/[0.03]" : "border-destructive/20 bg-destructive/[0.03]"}>
+        <CardHeader>
+          <CardTitle className="text-base">Rentabilité &amp; Finances Réelles</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Chiffre d'Affaires Réalisé (HT)</p>
+              <p className="text-xl font-bold mt-1">{formatCurrency(profitability?.revenue_ht ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Encaissé</p>
+              <p className="text-xl font-bold mt-1 text-green-600">{formatCurrency(profitability?.total_collected ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Dépenses &amp; Coûts Directs</p>
+              <p className="text-xl font-bold mt-1 text-destructive">{formatCurrency(profitability?.direct_expenses ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Marge Nette Réelle</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className={`text-xl font-bold ${isProfitable ? "text-green-600" : "text-destructive"}`}>
+                  {formatCurrency(netMargin)}
+                </p>
+                <StatusBadge tone={isProfitable ? "success" : "error"}>
+                  {marginPercentage >= 0 ? "+" : ""}
+                  {marginPercentage.toFixed(1)}%
+                </StatusBadge>
+              </div>
+            </div>
+          </div>
+
+          {/* Budget consumption — how much of the planned budget the
+              project's actual costs have used up, distinct from the
+              "Budget facturé" card above which compares revenue (not
+              expenses) against the same budget figure. */}
+          {project.planned_budget > 0 && (
+            <div>
+              <div className="flex items-center justify-between text-sm mb-1.5">
+                <span className="text-muted-foreground">Consommation du budget (dépenses)</span>
+                <span className={`font-mono tabular-nums font-medium ${expenseOverBudget ? "text-destructive" : ""}`}>
+                  {formatCurrency(directExpenses)} / {formatCurrency(project.planned_budget)}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className={`h-full rounded-full ${expenseOverBudget ? "bg-destructive" : "bg-amber-500"}`} style={{ width: `${expenseRatio * 100}%` }} />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* A different kind of money from the client-invoice-derived budget above:
           what the agency owes the freelancer, not what the client owes the agency.
           Kept as its own block rather than mixed into the budget cards. */}
@@ -237,9 +292,9 @@ function OverviewTab({
               </div>
               <div className="flex items-center gap-3">
                 {project.statut_paiement === "paye" ? (
-                  <Badge variant="success">Payé{project.date_paiement ? ` le ${formatDate(project.date_paiement)}` : ""}</Badge>
+                  <StatusBadge tone="success">Payé{project.date_paiement ? ` le ${formatDate(project.date_paiement)}` : ""}</StatusBadge>
                 ) : (
-                  <Badge variant="warning">Non payé</Badge>
+                  <StatusBadge tone="warning">Non payé</StatusBadge>
                 )}
                 <Button
                   size="sm"
@@ -292,8 +347,27 @@ function OverviewTab({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Factures liées</CardTitle>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => navigate(`/invoices/new?project_id=${project.id}`)}
+            >
+              <FileText className="w-4 h-4" />
+              Nouvelle facture
+            </Button>
+            <Button
+              size="sm"
+              className="gap-2 bg-[#EB3B48] hover:bg-[#D82F3C] text-white"
+              onClick={() => setContractModalOpen(true)}
+            >
+              <FileText className="w-4 h-4" />
+              Générer un Contrat
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {linkedInvoices.length === 0 ? (
@@ -319,7 +393,7 @@ function OverviewTab({
                     <TableCell>
                       <button
                         onClick={() => assignInvoice.mutate({ invoiceId: inv.id, projectId: null })}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground"
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground"
                         title="Délier du projet"
                       >
                         <CloseIcon className="w-4 h-4" />
@@ -332,6 +406,13 @@ function OverviewTab({
           )}
         </CardContent>
       </Card>
+
+      <ContractModal
+        open={contractModalOpen}
+        onOpenChange={setContractModalOpen}
+        initialProjectId={project.id}
+        initialClientId={project.client_id}
+      />
     </div>
   );
 }
@@ -437,7 +518,7 @@ function TasksTab({ projectId }: { projectId: string }) {
                     <TableCell>
                       <button
                         onClick={() => deleteTask.mutate({ id: task.id, projectId })}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -477,7 +558,7 @@ function TasksTab({ projectId }: { projectId: string }) {
             </div>
             <div className="space-y-1.5">
               <Label>Échéance</Label>
-              <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+              <DatePicker value={newDueDate} onChange={setNewDueDate} />
             </div>
           </div>
           <DialogFooter>
@@ -599,7 +680,7 @@ function DeliverablesTab({ projectId }: { projectId: string }) {
                     <TableCell>
                       <button
                         onClick={() => deleteDeliverable.mutate({ id: d.id, projectId })}
-                        className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -634,6 +715,148 @@ function DeliverablesTab({ projectId }: { projectId: string }) {
           <DialogFooter>
             <Button onClick={handleCreate} disabled={createDeliverable.isPending}>
               {createDeliverable.isPending ? "Ajout…" : "Ajouter le livrable"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function ProjectExpensesTab({ projectId }: { projectId: string }) {
+  const { data: expenses, isLoading } = useExpenses(undefined, projectId);
+  const createExpense = useCreateExpense();
+  const deleteExpense = useDeleteExpense();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    expense_date: new Date().toISOString().split("T")[0],
+    category: "",
+    description: "",
+    amount: "",
+  });
+
+  const handleCreate = () => {
+    if (!formData.category.trim() || !formData.amount) {
+      toast.error("Le nom et le montant de la dépense sont requis");
+      return;
+    }
+    createExpense.mutate(
+      {
+        expense_date: formData.expense_date,
+        category: formData.category.trim(),
+        description: formData.description || undefined,
+        amount: parseFloat(formData.amount),
+        project_id: projectId,
+      },
+      {
+        onSuccess: () => {
+          setDialogOpen(false);
+          setFormData({ expense_date: new Date().toISOString().split("T")[0], category: "", description: "", amount: "" });
+        },
+      }
+    );
+  };
+
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Button className="gap-2" onClick={() => setDialogOpen(true)}>
+          <Plus className="w-4 h-4" />
+          Ajouter une dépense
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-8 text-sm text-muted-foreground">Chargement…</div>
+          ) : !expenses || expenses.length === 0 ? (
+            <div className="p-8">
+              <EmptyState type="expenses" title="Aucune dépense" description="Ajoutez la première dépense directe de ce projet" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Catégorie</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {expenses.map((expense) => (
+                  <TableRow key={expense.id}>
+                    <TableCell className="text-muted-foreground">{formatDate(expense.expense_date)}</TableCell>
+                    <TableCell>
+                      <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">{expense.category}</span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{expense.description || "-"}</TableCell>
+                    <TableCell className="text-right font-medium text-destructive tabular-nums">
+                      -{formatCurrency(expense.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => deleteExpense.mutate(expense.id)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ajouter une dépense au projet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <DatePicker
+                  value={formData.expense_date}
+                  onChange={(v) => setFormData({ ...formData, expense_date: v })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Montant (DA)</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Nom de la dépense</Label>
+              <Input
+                placeholder="Ex: Sous-traitance, Impression, Déplacement..."
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input
+                placeholder="Description de la dépense"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreate} disabled={createExpense.isPending}>
+              {createExpense.isPending ? "Enregistrement…" : "Ajouter"}
             </Button>
           </DialogFooter>
         </DialogContent>

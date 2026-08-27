@@ -1,28 +1,34 @@
 import { useQuery } from "@tanstack/react-query";
 import { db } from "@/lib/database";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 const LAST_SEEN_KEY = "sordi_notifications_last_seen";
 
 export function useSidebarCounts() {
+  const { activeCompanyId, isReady } = useWorkspace();
+
   // Unpaid/pending invoices
   const { data: invoices } = useQuery({
-    queryKey: ["invoices"],
-    queryFn: () => db.invoices.getAll(),
+    queryKey: ["invoices", activeCompanyId],
+    queryFn: () => db.invoices.getAll(activeCompanyId),
     staleTime: 30_000,
+    enabled: isReady,
   });
 
   // Orders in draft or confirmed
   const { data: orders } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => db.orders.getAll(),
+    queryKey: ["orders", activeCompanyId],
+    queryFn: () => db.orders.getAll(activeCompanyId),
     staleTime: 30_000,
+    enabled: isReady,
   });
 
   // Delivery notes not yet invoiced
   const { data: deliveries } = useQuery({
-    queryKey: ["delivery-notes"],
-    queryFn: () => db.deliveryNotes.getAll(),
+    queryKey: ["delivery-notes", activeCompanyId],
+    queryFn: () => db.deliveryNotes.getAll(activeCompanyId),
     staleTime: 30_000,
+    enabled: isReady,
   });
 
   // Unread activity logs

@@ -10,6 +10,7 @@ interface OrderEditablePreviewProps {
   order: any;
   onOrderChange: (order: any) => void;
   clients?: any[];
+  products?: any[];
   readOnly?: boolean;
 }
 
@@ -21,12 +22,12 @@ interface OrderEditablePreviewProps {
  * logic lives once in useEditableOrderLogic; the three renderers only
  * differ in presentation.
  */
-export function OrderEditablePreview({ order, onOrderChange, clients, readOnly = false }: OrderEditablePreviewProps) {
+export function OrderEditablePreview({ order, onOrderChange, clients, products, readOnly = false }: OrderEditablePreviewProps) {
   const { data: settings } = useSettings();
   const theme = resolveInvoiceHtmlTheme(settings);
   const logic = useEditableOrderLogic(order, onOrderChange);
 
-  const props = { order, onOrderChange, clients, settings, logic, readOnly };
+  const props = { order, onOrderChange, clients, products, settings, logic, readOnly };
 
   return (
     <ScaleToFit>
