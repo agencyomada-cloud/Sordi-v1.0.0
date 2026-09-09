@@ -8,7 +8,7 @@ import {
   ClientAdvance, CreateClientAdvanceData, UpdateClientAdvanceData,
   Order, CreateOrderData,
   DeliveryNote, CreateDeliveryNoteData,
-  Expense, CreateExpenseData,
+  Expense, CreateExpenseData, UpdateExpenseData,
   Employee, CreateEmployeeData,
   Project, ProjectStats, ProjectProfitability,
   Partner, CreatePartnerData, UpdatePartnerData, PartnerFinancials,
@@ -913,18 +913,18 @@ const INITIAL_PAYMENTS: Payment[] = [
 ];
 
 const INITIAL_EXPENSES: Expense[] = [
-  { id: "exp-001", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau janvier", amount: 180000, payment_method: "virement", reference: "LOY-JAN25", notes: "Propriétaire SARL Immo", month_period: "2025-01", created_at: "2025-01-05T10:00:00Z", updated_at: "2025-01-05T10:00:00Z" },
-  { id: "exp-002", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-18", category: "Carburant & Transport", description: "Carburant camions et engins", amount: 95000, payment_method: "carte", reference: "NAFT-4521", notes: "Cartes Naftal", month_period: "2025-01", created_at: "2025-01-18T16:00:00Z", updated_at: "2025-01-18T16:00:00Z" },
-  { id: "exp-003", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau février", amount: 180000, payment_method: "virement", reference: "LOY-FEV25", notes: null, month_period: "2025-02", created_at: "2025-02-05T10:00:00Z", updated_at: "2025-02-05T10:00:00Z" },
-  { id: "exp-004", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-22", category: "Maintenance & Pièces", description: "Réparation chargeur Caterpillar", amount: 145000, payment_method: "cheque", reference: "REP-ENGIN-02", notes: "Société Technique Engins", month_period: "2025-02", created_at: "2025-02-22T14:30:00Z", updated_at: "2025-02-22T14:30:00Z" },
-  { id: "exp-005", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau mars", amount: 180000, payment_method: "virement", reference: "LOY-MAR25", notes: null, month_period: "2025-03", created_at: "2025-03-05T10:00:00Z", updated_at: "2025-03-05T10:00:00Z" },
-  { id: "exp-006", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-20", category: "Électricité & Eau", description: "Facture Sonelgaz 1er Trimestre", amount: 64500, payment_method: "virement", reference: "SON-2025-T1", notes: "Site carrière", month_period: "2025-03", created_at: "2025-03-20T11:00:00Z", updated_at: "2025-03-20T11:00:00Z" },
-  { id: "exp-007", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau avril", amount: 180000, payment_method: "virement", reference: "LOY-AVR25", notes: null, month_period: "2025-04", created_at: "2025-04-05T10:00:00Z", updated_at: "2025-04-05T10:00:00Z" },
-  { id: "exp-008", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-18", category: "Fournitures & Bureautique", description: "Achat consommables et impressions", amount: 32000, payment_method: "especes", reference: "FOURN-04", notes: "Facture payée", month_period: "2025-04", created_at: "2025-04-18T15:00:00Z", updated_at: "2025-04-18T15:00:00Z" },
+  { id: "exp-001", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau janvier", amount: 180000, payment_method: "virement", reference: "LOY-JAN25", notes: "Propriétaire SARL Immo", month_period: "2025-01", is_paid: true, created_at: "2025-01-05T10:00:00Z", updated_at: "2025-01-05T10:00:00Z" },
+  { id: "exp-002", company_id: MOCK_COMPANY_ID, expense_date: "2025-01-18", category: "Carburant & Transport", description: "Carburant camions et engins", amount: 95000, payment_method: "carte", reference: "NAFT-4521", notes: "Cartes Naftal", month_period: "2025-01", is_paid: true, created_at: "2025-01-18T16:00:00Z", updated_at: "2025-01-18T16:00:00Z" },
+  { id: "exp-003", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau février", amount: 180000, payment_method: "virement", reference: "LOY-FEV25", notes: null, month_period: "2025-02", is_paid: true, created_at: "2025-02-05T10:00:00Z", updated_at: "2025-02-05T10:00:00Z" },
+  { id: "exp-004", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-22", category: "Maintenance & Pièces", description: "Réparation chargeur Caterpillar", amount: 145000, payment_method: "cheque", reference: "REP-ENGIN-02", notes: "Société Technique Engins", month_period: "2025-02", is_paid: true, created_at: "2025-02-22T14:30:00Z", updated_at: "2025-02-22T14:30:00Z" },
+  { id: "exp-005", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau mars", amount: 180000, payment_method: "virement", reference: "LOY-MAR25", notes: null, month_period: "2025-03", is_paid: true, created_at: "2025-03-05T10:00:00Z", updated_at: "2025-03-05T10:00:00Z" },
+  { id: "exp-006", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-20", category: "Électricité & Eau", description: "Facture Sonelgaz 1er Trimestre", amount: 64500, payment_method: "virement", reference: "SON-2025-T1", notes: "Site carrière", month_period: "2025-03", is_paid: true, created_at: "2025-03-20T11:00:00Z", updated_at: "2025-03-20T11:00:00Z" },
+  { id: "exp-007", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-05", category: "Loyer & Charges", description: "Loyer dépôt et bureau avril", amount: 180000, payment_method: "virement", reference: "LOY-AVR25", notes: null, month_period: "2025-04", is_paid: true, created_at: "2025-04-05T10:00:00Z", updated_at: "2025-04-05T10:00:00Z" },
+  { id: "exp-008", company_id: MOCK_COMPANY_ID, expense_date: "2025-04-18", category: "Fournitures & Bureautique", description: "Achat consommables et impressions", amount: 32000, payment_method: "especes", reference: "FOURN-04", notes: "Facture payée", month_period: "2025-04", is_paid: true, created_at: "2025-04-18T15:00:00Z", updated_at: "2025-04-18T15:00:00Z" },
   // Both linked to project "Refonte Identité Visuelle & Site Web" — direct
   // costs for the Rentabilité & Finances Réelles card / Dépenses tab.
-  { id: "exp-009", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-25", category: "Sous-traitance Design", description: "Freelance illustration & maquettes", amount: 35000, payment_method: "virement", reference: "FREELANCE-02", notes: "Prestataire externe", month_period: "2025-02", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: false, recurrence_interval: null, created_at: "2025-02-25T10:00:00Z", updated_at: "2025-02-25T10:00:00Z" },
-  { id: "exp-010", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-10", category: "Licences & Outils", description: "Abonnement Adobe Creative Cloud", amount: 18000, payment_method: "carte", reference: "ADOBE-MAR25", notes: "Licence mensuelle équipe design", month_period: "2025-03", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: true, recurrence_interval: "monthly", created_at: "2025-03-10T10:00:00Z", updated_at: "2025-03-10T10:00:00Z" }
+  { id: "exp-009", company_id: MOCK_COMPANY_ID, expense_date: "2025-02-25", category: "Sous-traitance Design", description: "Freelance illustration & maquettes", amount: 35000, payment_method: "virement", reference: "FREELANCE-02", notes: "Prestataire externe", month_period: "2025-02", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: false, recurrence_interval: null, is_paid: true, created_at: "2025-02-25T10:00:00Z", updated_at: "2025-02-25T10:00:00Z" },
+  { id: "exp-010", company_id: MOCK_COMPANY_ID, expense_date: "2025-03-10", category: "Licences & Outils", description: "Abonnement Adobe Creative Cloud", amount: 18000, payment_method: "carte", reference: "ADOBE-MAR25", notes: "Licence mensuelle équipe design", month_period: "2025-03", project_id: "3f1a1e9c-2b7d-4b3a-9c4e-8f2a6d1b5e7a", project_name: "Refonte Identité Visuelle & Site Web", is_recurring: true, recurrence_interval: "monthly", is_paid: true, created_at: "2025-03-10T10:00:00Z", updated_at: "2025-03-10T10:00:00Z" }
 ];
 
 const INITIAL_DELIVERIES: DeliveryNote[] = [
@@ -1155,6 +1155,7 @@ const INITIAL_PROJECTS: Project[] = [
     montant_convenu: null,
     statut_paiement: "non_paye",
     date_paiement: null,
+    status: "en_cours",
   },
   {
     id: "7c2b4d8e-1a3f-4e6c-b5d7-9f0a2c4e6b8d",
@@ -1172,6 +1173,7 @@ const INITIAL_PROJECTS: Project[] = [
     montant_convenu: null,
     statut_paiement: "non_paye",
     date_paiement: null,
+    status: "en_cours",
   },
   {
     id: "b4d6f8a0-3c5e-4a7b-9d1f-2e4c6a8b0d2f",
@@ -1189,6 +1191,7 @@ const INITIAL_PROJECTS: Project[] = [
     montant_convenu: null,
     statut_paiement: "non_paye",
     date_paiement: null,
+    status: "en_cours",
   },
 ];
 
@@ -1633,6 +1636,15 @@ export const mockStore = {
       setStorage("invoices", list);
     }
   },
+  updateInvoiceHeader: (id: string, invoiceNumber: string, customTitle: string | null): void => {
+    const list = getStorage("invoices", INITIAL_INVOICES);
+    const index = list.findIndex(i => i.id === id);
+    if (index !== -1) {
+      list[index].invoice_number = invoiceNumber;
+      list[index].custom_title = customTitle;
+      setStorage("invoices", list);
+    }
+  },
   deleteInvoice: (id: string): void => {
     const list = getStorage("invoices", INITIAL_INVOICES);
     setStorage("invoices", list.filter(i => i.id !== id));
@@ -1698,11 +1710,31 @@ export const mockStore = {
       supplier_name: null,
       is_recurring: data.is_recurring || false,
       recurrence_interval: data.recurrence_interval || null,
+      is_paid: data.is_paid ?? true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setStorage("expenses", [newExp, ...list]);
     return newExp;
+  },
+  updateExpense: (data: UpdateExpenseData): Expense => {
+    const list = getStorage("expenses", INITIAL_EXPENSES);
+    const existing = list.find(e => e.id === data.id);
+    if (!existing) throw new Error("Dépense introuvable");
+    const updated: Expense = {
+      ...existing,
+      expense_date: data.expense_date,
+      category: data.category,
+      description: data.description || null,
+      amount: data.amount,
+      payment_method: data.payment_method || null,
+      project_id: data.project_id || null,
+      is_paid: data.is_paid,
+      month_period: data.expense_date.substring(0, 7),
+      updated_at: new Date().toISOString(),
+    };
+    setStorage("expenses", list.map(e => (e.id === data.id ? updated : e)));
+    return updated;
   },
   deleteExpense: (id: string): void => {
     const list = getStorage("expenses", INITIAL_EXPENSES);
@@ -2215,7 +2247,11 @@ export const mockStore = {
         label: lbl,
         revenue: rev,
         expenses: exp,
-        profit: rev - exp
+        profit: rev - exp,
+        // Mock mode has no payroll_runs model — all charges here are
+        // "expenses only", nothing settled through payroll to split out.
+        expenses_only: exp,
+        payroll_amount: 0
       };
     });
 
@@ -2234,7 +2270,8 @@ export const mockStore = {
         paid: totalPaid,
         unpaid: totalUnpaid,
         initial_debt: 480000,
-        total_receivables: totalUnpaid + 480000
+        total_receivables: totalUnpaid + 480000,
+        outstanding_invoice_count: invoices.filter(i => i.invoice_type !== "credit_note" && i.invoice_type !== "proforma" && i.total_ttc > (i.amount_paid || 0)).length
       },
       sales_cumulatives: {
         total_ht: filteredInvoices.reduce((s, i) => s + i.subtotal_ht, 0),
@@ -2244,13 +2281,13 @@ export const mockStore = {
       },
       monthly_data: monthlyData,
       daily_data: [
-        { label: "01", revenue: 85000, expenses: 15000, profit: 70000 },
-        { label: "05", revenue: 140000, expenses: 32000, profit: 108000 },
-        { label: "10", revenue: 320000, expenses: 60000, profit: 260000 },
-        { label: "15", revenue: 450000, expenses: 95000, profit: 355000 },
-        { label: "20", revenue: 600000, expenses: 110000, profit: 490000 },
-        { label: "25", revenue: 780000, expenses: 140000, profit: 640000 },
-        { label: "30", revenue: 950000, expenses: 180000, profit: 770000 }
+        { label: "01", revenue: 85000, expenses: 15000, profit: 70000, expenses_only: 15000, payroll_amount: 0 },
+        { label: "05", revenue: 140000, expenses: 32000, profit: 108000, expenses_only: 32000, payroll_amount: 0 },
+        { label: "10", revenue: 320000, expenses: 60000, profit: 260000, expenses_only: 60000, payroll_amount: 0 },
+        { label: "15", revenue: 450000, expenses: 95000, profit: 355000, expenses_only: 95000, payroll_amount: 0 },
+        { label: "20", revenue: 600000, expenses: 110000, profit: 490000, expenses_only: 110000, payroll_amount: 0 },
+        { label: "25", revenue: 780000, expenses: 140000, profit: 640000, expenses_only: 140000, payroll_amount: 0 },
+        { label: "30", revenue: 950000, expenses: 180000, profit: 770000, expenses_only: 180000, payroll_amount: 0 }
       ],
       product_stats: [
         { product_id: "a1ad9717-44b7-44d8-b705-5bdb14851f17", product_code: "0/3", product_name: "Sable Concassé 0/3", total_quantity: 1830, total_amount: 1189500 },

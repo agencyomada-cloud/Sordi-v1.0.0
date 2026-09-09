@@ -10,27 +10,24 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
-      position="bottom-right"
-      offset="20px"
+      position="bottom-center"
+      offset="24px"
       richColors
-      // richColors now drives each type's background/icon/border color
-      // (success=green, error=red, warning=amber, info=blue) — the previous
-      // per-type overrides below are gone since they'd fight richColors'
-      // own colors rather than complement them. Explicitly chosen over the
-      // brand-tinted alternative (see git history on this file).
       closeButton
-      expand
-      duration={3500}
-      style={{ "--width": "360px" } as React.CSSProperties}
+      expand={false}
+      visibleToasts={3}
+      gap={8}
+      duration={3000}
+      style={{ "--width": "350px" } as React.CSSProperties}
       toastOptions={{
         classNames: {
-          // bg-card/border/text apply to plain untyped toasts — richColors
-          // only paints toasts that carry a type (success/error/warning/info).
           toast:
-            "group toast group-[.toaster]:bg-card group-[.toaster]:text-foreground group-[.toaster]:border-border/60 group-[.toaster]:shadow-elevated rounded-2xl font-sans text-sm",
-          description: "group-[.toast]:text-muted-foreground text-xs",
-          actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground font-medium rounded-full",
-          cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground rounded-full",
+            "group toast group-[.toaster]:bg-white/95 dark:group-[.toaster]:bg-slate-900/95 group-[.toaster]:backdrop-blur-xl group-[.toaster]:text-slate-900 dark:group-[.toaster]:text-slate-100 group-[.toaster]:border group-[.toaster]:border-slate-200/80 dark:group-[.toaster]:border-slate-800/80 group-[.toaster]:shadow-[0_12px_36px_-6px_rgba(0,0,0,0.12)] rounded-2xl font-sans text-xs font-medium py-2.5 px-4",
+          title: "text-xs font-medium text-slate-800 dark:text-slate-100 tracking-tight",
+          description: "group-[.toast]:text-slate-500 dark:group-[.toast]:text-slate-400 text-[11px] leading-relaxed",
+          actionButton: "group-[.toast]:bg-slate-900 group-[.toast]:text-white font-medium rounded-xl text-xs",
+          cancelButton: "group-[.toast]:bg-slate-100 group-[.toast]:text-slate-600 rounded-xl text-xs",
+          closeButton: "!bg-white dark:!bg-slate-800 !border-slate-200/80 dark:!border-slate-700 !text-slate-400 hover:!text-slate-700 dark:hover:!text-slate-200",
         },
       }}
       {...props}

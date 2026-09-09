@@ -24,13 +24,17 @@ import {
   RiFolder3Line as FolderIcon,
   RiMailLine,
   RiDeleteBinLine as TrashIcon,
+  RiDatabase2Line as DatabaseIcon,
 } from "@remixicon/react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDirDialog } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { appDataDir, join } from "@tauri-apps/api/path";
 import { notificationAudio } from "@/lib/notificationSound";
 import { db } from "@/lib/database";
 import { useQueryClient } from "@tanstack/react-query";
 import { INVOICE_PDF_THEMES, INVOICE_PDF_FONTS } from "@/components/pdf/invoicePdfShared";
+import { useSecureSession } from "@/hooks/useSecureSession";
 
 const emptyCompanyForm: CreateCompanyData = {
     name: "",
@@ -57,9 +61,11 @@ export default function SettingsPage() {
     const updateSettings = useUpdateSettings();
     const { company, isReady: isCompanyReady } = useActiveCompany();
     const updateActiveCompany = useUpdateActiveCompany();
+    const { executeSecuredAction } = useSecureSession();
     const resetToFactoryState = useResetToFactoryState();
     const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [resetConfirmText, setResetConfirmText] = useState("");
+    const [isBackingUp, setIsBackingUp] = useState(false);
     const [companyFormData, setCompanyFormData] = useState<CreateCompanyData>(emptyCompanyForm);
     const [companyFormHydrated, setCompanyFormHydrated] = useState(false);
     // `formData` starts as hardcoded empty defaults and is only populated
@@ -224,7 +230,7 @@ export default function SettingsPage() {
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         // formData/companyFormData haven't been hydrated from the real
         // settings/company yet — saving now would overwrite everything
@@ -233,19 +239,21 @@ export default function SettingsPage() {
         // from.
         if (!formHydrated || !companyFormHydrated) return;
 
-        updateSettings.mutate(formData, {
-            onError: () => {
-                toast.error("Erreur lors de l'enregistrement");
-            }
-        });
-        updateActiveCompany.mutate(companyFormData, {
-            onSuccess: () => {
-                toast.success("Paramètres enregistrés avec succès");
-            },
-            onError: () => {
-                toast.error("Erreur lors de l'enregistrement de l'entreprise");
-            }
-        });
+        await executeSecuredAction(() => {
+            updateSettings.mutate(formData, {
+                onError: () => {
+                    toast.error("Erreur lors de l'enregistrement");
+                }
+            });
+            updateActiveCompany.mutate(companyFormData, {
+                onSuccess: () => {
+                    toast.success("Paramètres enregistrés avec succès");
+                },
+                onError: () => {
+                    toast.error("Erreur lors de l'enregistrement de l'entreprise");
+                }
+            });
+        }, "Autoriser la modification des coordonnées légales et bancaires");
     };
 
     const handlePasswordChange = async (e: React.FormEvent) => {
@@ -289,6 +297,33 @@ export default function SettingsPage() {
                 setResetConfirmText("");
             },
         });
+    };
+
+    const handleBackupNow = async () => {
+        setIsBackingUp(true);
+        try {
+            const path = await db.database.backup();
+            const filename = path.split(/[\\/]/).pop() || path;
+            const timestamp = new Date().toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "medium" });
+            toast.success(`Sauvegarde créée : ${filename}`, { description: `${path} — ${timestamp}` });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            toast.error("Échec de la sauvegarde de la base de données", { description: message });
+        } finally {
+            setIsBackingUp(false);
+        }
+    };
+
+    const handleOpenBackupsFolder = async () => {
+        try {
+            const dataDir = await appDataDir();
+            const backupsDir = await join(dataDir, "backups");
+            await openPath(backupsDir);
+        } catch {
+            toast.error("Impossible d'ouvrir le dossier des sauvegardes", {
+                description: "Aucune sauvegarde n'a peut-être encore été créée — cliquez d'abord sur « Exporter une sauvegarde ».",
+            });
+        }
     };
 
     const handleEmailSettingsSave = (e: React.FormEvent) => {
@@ -1081,6 +1116,40 @@ export default function SettingsPage() {
                                                 </Button>
                                             </div>
                                         </form>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="max-w-2xl">
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <DatabaseIcon className="w-5 h-5 text-primary" />
+                                            Base de données &amp; sauvegardes
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Crée une copie complète et cohérente de la base de données locale (VACUUM INTO — sûr à exécuter
+                                            pendant que l'application est en cours d'utilisation), enregistrée dans le dossier « backups » de
+                                            l'application.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-wrap gap-3">
+                                        <Button
+                                            type="button"
+                                            className="gap-2"
+                                            onClick={handleBackupNow}
+                                            disabled={isBackingUp}
+                                        >
+                                            {isBackingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                            {isBackingUp ? "Sauvegarde en cours..." : "Exporter une sauvegarde"}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="gap-2"
+                                            onClick={handleOpenBackupsFolder}
+                                        >
+                                            <FolderIcon className="w-4 h-4" />
+                                            Ouvrir le dossier des sauvegardes
+                                        </Button>
                                     </CardContent>
                                 </Card>
 

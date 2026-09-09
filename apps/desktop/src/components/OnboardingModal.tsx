@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open as openDirDialog } from "@tauri-apps/plugin-dialog";
-import { Button, Dialog, DialogContent } from "@sordi/ui";
+import { Button, Dialog, DialogContent, DialogTitle, DialogDescription } from "@sordi/ui";
 import { useSettings, useUpdateSetting } from "@/hooks/useSettings";
 import {
   RiShieldCheckLine as ShieldCheck,
@@ -73,12 +73,16 @@ export function OnboardingModal() {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
               <ShieldCheck className="h-8 w-8 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Bienvenue sur Sordi</h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Sordi fonctionne <strong className="text-foreground">100% hors ligne</strong> — toutes vos
-              données restent sur cet ordinateur, sans latence cloud et sans compromis sur la
-              confidentialité. Conçu pour la gestion commerciale des entreprises algériennes.
-            </p>
+            <DialogTitle asChild>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Bienvenue sur Sordi</h2>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Sordi fonctionne <strong className="text-foreground">100% hors ligne</strong> — toutes vos
+                données restent sur cet ordinateur, sans latence cloud et sans compromis sur la
+                confidentialité. Conçu pour la gestion commerciale des entreprises algériennes.
+              </p>
+            </DialogDescription>
 
             <div className="mt-6 grid grid-cols-3 gap-3 text-left">
               <div className="rounded-xl border border-border/50 p-3">
@@ -105,11 +109,15 @@ export function OnboardingModal() {
             <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
               <FolderIcon className="h-6 w-6 text-primary" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Sauvegarde automatique des PDF</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Chaque facture, proforma et bon de livraison généré sera automatiquement enregistré
-              sous forme de copie structurée dans le dossier de votre choix.
-            </p>
+            <DialogTitle asChild>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">Sauvegarde automatique des PDF</h2>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Chaque facture, proforma et bon de livraison généré sera automatiquement enregistré
+                sous forme de copie structurée dans le dossier de votre choix.
+              </p>
+            </DialogDescription>
 
             <div className="mt-5 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 p-3">
               <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" />

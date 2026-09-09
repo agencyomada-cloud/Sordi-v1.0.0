@@ -52,8 +52,13 @@ export function useSidebarCounts() {
     (d) => !d.is_invoiced
   ).length || 0;
 
+  // `created_at` is written server-side as local time (`+01:00`-style
+  // offset) while `lastSeen` is UTC (`Z`) — comparing the raw strings with
+  // `>` is unreliable since they're different textual representations of
+  // time. Parsing both to an actual instant compares correctly regardless
+  // of which offset either side used (see NotificationBell.tsx's isAfter).
   const unreadLogsCount = logs?.filter(
-    (log) => log.created_at > lastSeen
+    (log) => new Date(log.created_at).getTime() > new Date(lastSeen).getTime()
   ).length || 0;
 
   return {

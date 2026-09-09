@@ -5,12 +5,22 @@ import {
   formatPhone,
   formatCurrency,
 } from "./invoiceHtmlShared";
+import { InteractiveStampZone } from "./InteractiveStampZone";
 
 interface Props {
   invoice: any;
+  stampSize?: number;
+  onStampSizeChange?: (size: number) => void;
+  onStampSizeCommit?: (size: number) => void;
 }
 
-export function InvoiceReadOnlyEpure({ invoice, settings }: Props & { settings: any }) {
+export function InvoiceReadOnlyEpure({
+  invoice,
+  settings,
+  stampSize,
+  onStampSizeChange,
+  onStampSizeCommit,
+}: Props & { settings: any }) {
   const accent = settings?.primary_color || "#476CFF";
   const data = resolveHtmlInvoiceData(invoice);
   const phones = getCompanyPhones(settings);
@@ -31,12 +41,13 @@ export function InvoiceReadOnlyEpure({ invoice, settings }: Props & { settings: 
             <div className="flex flex-col h-full justify-between">
               <div>
                 <div className="flex justify-between items-start mb-4">
-                  <div>
-                    {settings?.logo_data ? (
-                      <img src={settings.logo_data} className="h-10 max-w-[160px] object-contain object-left" alt={settings?.company_name || ""} />
-                    ) : settings?.company_name ? (
-                      <span className="text-[12pt] font-bold tracking-wide">{settings.company_name}</span>
-                    ) : null}
+                  <div className="flex flex-col items-start gap-1">
+                    {settings?.logo_data && (
+                      <img src={settings.logo_data} className="h-10 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                    )}
+                    <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
+                      {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+                    </span>
                   </div>
                   <div className="text-right">
                     <div className="text-[13pt] font-semibold tracking-[-0.02em] uppercase">{data.docTitle}</div>
@@ -139,40 +150,20 @@ export function InvoiceReadOnlyEpure({ invoice, settings }: Props & { settings: 
                       {!data.isProforma && !data.isCreditNote ? (
                         <div className="text-[8.5pt] text-gray-700" />
                       ) : <div />}
-                      <div className="w-44 flex flex-col items-center relative">
+                      <div className="flex flex-col items-center relative" style={{ minWidth: "160px" }}>
                         {(settings?.stamp_data || settings?.signature_data) && (
                           <>
                             <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
                             <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
                           </>
                         )}
-                        <div
-                          className="w-full relative flex items-center justify-center border-none px-3 py-3"
-                          style={{ height: `${Math.max(settings?.stamp_size || 56, settings?.signature_size || 56, 56) + 32}px` }}
-                        >
-                          {!settings?.stamp_data && !settings?.signature_data ? (
-                            <span className="text-[9pt] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
-                          ) : (
-                            <>
-                              {settings?.stamp_data && (
-                                <img
-                                  src={settings.stamp_data}
-                                  alt="Cachet"
-                                  style={{ height: `${settings.stamp_size || 56}px` }}
-                                  className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
-                                />
-                              )}
-                              {settings?.signature_data && (
-                                <img
-                                  src={settings.signature_data}
-                                  alt="Signature"
-                                  style={{ height: `${settings.signature_size || 56}px` }}
-                                  className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
-                                />
-                              )}
-                            </>
-                          )}
-                        </div>
+                        <InteractiveStampZone
+                          settings={settings}
+                          stampSize={stampSize}
+                          onStampSizeChange={onStampSizeChange}
+                          onStampSizeCommit={onStampSizeCommit}
+                          showTitle={false}
+                        />
                       </div>
                     </div>
                   </>

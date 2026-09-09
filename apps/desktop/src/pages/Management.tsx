@@ -7,10 +7,10 @@ import EmployeesSection from "@/pages/management/Employees";
 const Management = () => {
     return (
         <main className="flex-1 p-8 pt-4">
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
                 <div>
-                    <h1 className="text-3xl font-bold text-foreground tracking-tight">Employés</h1>
-                    <p className="text-muted-foreground mt-1">Gérez votre équipe</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employés & Contrats</h1>
+                    <p className="text-xs text-slate-500 mt-1">Gérez votre équipe</p>
                 </div>
 
                 <EmployeesSection />

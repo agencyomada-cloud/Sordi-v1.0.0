@@ -1,11 +1,11 @@
-// Shared background layer for the splash poster and the Auth.tsx left hero
-// panel: snow canvas, coral atmospheric glow, and a precise plus-grid —
-// factored out so both contexts render byte-identical backgrounds instead of
-// two hand-tuned copies that could drift apart.
+// Shared background layer for the splash poster and the Auth.tsx login
+// screen: a crisp, fixed-light Apple-minimal canvas — off-white base, a very
+// faint dotted grid, and one soft ambient gradient orb. Factored out so both
+// contexts render byte-identical backgrounds, which is what makes the
+// splash-to-login handoff read as one continuous scene rather than a cut.
 interface BlueprintCanvasProps {
-  /** Where the radial glow/grid mask should be centered — "center" for the
-   *  splash (logo sits mid-screen), "top-left" for the hero panel (content
-   *  starts near the top-left logo badge). */
+  /** Where the glow/grid mask should be centered — "center" for the splash
+   *  (logo sits mid-screen) and the unified login canvas alike. */
   origin?: "center" | "top-left";
 }
 
@@ -14,19 +14,15 @@ export function BlueprintCanvas({ origin = "center" }: BlueprintCanvasProps) {
 
   return (
     <>
-      <div className="absolute inset-0 bg-[#F6F8FA] dark:bg-[#0D0E12]" />
+      <div className="absolute inset-0 bg-[#F8FAFC]" />
+      {/* Ambient gradient orb — soft blue/indigo, barely-there */}
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at ${gradientOrigin}, rgba(235,59,72,0.10), transparent 60%)` }}
+        style={{ background: `radial-gradient(ellipse at ${gradientOrigin}, rgba(59,130,246,0.07), transparent 60%)` }}
       />
-      {/* Plus-mark blueprint grid — a small "+" glyph tiled at every
-          intersection, not just hairlines, per spec ("micro plus-marks at
-          line intersections"). Built as a repeating background-image data
-          URI so it renders identically in light/dark instead of relying on
-          two overlapping linear-gradients (which only draws lines, no
-          crosses). */}
+      {/* Faint plus-mark grid — opacity-[0.03], just a hint of structure */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-30 dark:opacity-[0.15]"
+        className="pointer-events-none absolute inset-0 opacity-[0.03]"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='%2394A3B8' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E\")",

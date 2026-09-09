@@ -65,7 +65,14 @@ export const openSavedFile = async (path: string | null, blob?: Blob): Promise<v
       await invoke("open_file_path", { path });
       return;
     } catch (err) {
-      console.warn("open_file_path failed, falling back to blob preview:", err);
+      console.warn("open_file_path failed, trying plugin-opener:", err);
+      try {
+        const { openPath } = await import("@tauri-apps/plugin-opener");
+        await openPath(path);
+        return;
+      } catch (openerErr) {
+        console.warn("plugin-opener openPath failed, falling back to blob preview:", openerErr);
+      }
     }
   }
   if (blob) {
@@ -188,10 +195,16 @@ export const generateInvoicePDFBlob = async (
       driver_cni: doc.driver_cni,
       vehicle_number: doc.vehicle_number,
       delivery_location: doc.delivery_location,
+      stamp_size: (doc as any).stamp_size !== undefined && (doc as any).stamp_size !== null
+        ? Number((doc as any).stamp_size)
+        : (settings?.stamp_size ? Number(settings.stamp_size) : 180),
     };
+
+    const effectiveStampSize = formattedInvoice.stamp_size || 180;
 
     const pdfSettings: PDFSettings = settings ? {
       company_name: settings.company_name,
+      legal_name: (settings as any)?.legal_name || settings?.company_name || "EURL OMADA AGENCY",
       company_address: settings.company_address,
       company_activity: settings.company_activity,
       company_phone: settings.company_phone,
@@ -209,12 +222,12 @@ export const generateInvoicePDFBlob = async (
       footer_logo_data: settings.footer_logo_data,
       body_pattern_data: settings.body_pattern_data,
       stamp_data: settings.stamp_data,
-      stamp_size: settings.stamp_size ? Number(settings.stamp_size) : undefined,
+      stamp_size: effectiveStampSize,
       signature_data: settings.signature_data,
       signature_size: settings.signature_size ? Number(settings.signature_size) : undefined,
       primary_color: settings.primary_color,
       license_active: licenseActive,
-    } : { license_active: licenseActive };
+    } : { license_active: licenseActive, stamp_size: effectiveStampSize, legal_name: "EURL OMADA AGENCY" };
 
     const theme = (settings?.invoice_pdf_theme as InvoicePdfTheme) || 'structure';
     const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
@@ -371,7 +384,7 @@ export const generatePayrollPDF = async (
 
 // Only used if getVersion() can't run (e.g. previewing outside Tauri) — the
 // real value always comes from the running app via getVersion() below.
-export const FALLBACK_APP_VERSION = "1.0.3";
+export const FALLBACK_APP_VERSION = "1.0.4";
 
 /**
  * Generates one employee's individual "Bulletin de Paie" (Algerian payslip

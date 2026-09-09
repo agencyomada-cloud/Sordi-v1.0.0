@@ -170,7 +170,7 @@ export function CreateCompanyDialog({ open, onOpenChange }: CreateCompanyDialogP
             <Button
               type="submit"
               disabled={!formData.name.trim() || isCreatingCompany}
-              className="bg-[#EB3B48] hover:bg-[#D82F3C] text-white"
+              className="bg-primary hover:bg-primary-hover text-primary-foreground"
             >
               {isCreatingCompany ? "Création..." : "Créer l'espace"}
             </Button>

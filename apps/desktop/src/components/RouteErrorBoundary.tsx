@@ -4,6 +4,10 @@ import { Button } from "@sordi/ui";
 
 interface Props {
   children: ReactNode;
+  /** SPA navigation back to "/" — falls back to a hard reload only if the
+   *  caller doesn't supply one (this is a class component, so it can't
+   *  call useNavigate() itself). */
+  onGoHome?: () => void;
 }
 
 interface State {
@@ -59,7 +63,8 @@ export class RouteErrorBoundary extends Component<Props, State> {
                 className="gap-2 rounded-full"
                 onClick={() => {
                   this.setState({ error: null });
-                  window.location.assign("/");
+                  if (this.props.onGoHome) this.props.onGoHome();
+                  else window.location.assign("/");
                 }}
               >
                 <Home className="w-4 h-4" />

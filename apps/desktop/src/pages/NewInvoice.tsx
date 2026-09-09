@@ -4,15 +4,39 @@ import {
   RiArrowLeftLine as ArrowLeft,
   RiFileTextLine as FileText,
   RiDownloadLine as Download,
-  RiLoader4Line as Loader2
+  RiLoader4Line as Loader2,
+  RiInformationLine as InfoIcon
 } from "@remixicon/react";
-import { Button, ToggleGroup, ToggleGroupItem, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import {
+  Button,
+  ToggleGroup,
+  ToggleGroupItem,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@sordi/ui";
+import { RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useProjects } from "@/hooks/useProjects";
 import { useCreateInvoice, useUpdateInvoice, useInvoice } from "@/hooks/useInvoices";
 import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
-import { generateInvoicePDF } from "@/lib/pdfGenerator";
+import { generateInvoicePDF, openSavedFile } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
@@ -20,6 +44,7 @@ import { useLicenseStatus } from "@/hooks/useLicense";
 import { useParams } from "react-router-dom";
 import { useClearClientDraftProducts } from "@/hooks/useClientDraftProducts";
 import { useAddClientAdvance } from "@/hooks/useClientAdvances";
+import { useSecureSession } from "@/hooks/useSecureSession";
 
 interface InvoiceItem {
   product_id: string;
@@ -34,7 +59,15 @@ interface InvoiceItem {
   products?: any;
 }
 
-export default function NewInvoicePage() {
+interface NewInvoicePageProps {
+  // Set only by the /proformas/new route — when editing an existing
+  // document (the /invoices/:id/edit route, which also handles proformas
+  // since there's no separate proforma edit route) the type is instead
+  // derived from the loaded invoice itself, once it arrives.
+  documentType?: "invoice" | "proforma";
+}
+
+export default function NewInvoicePage({ documentType: documentTypeProp = "invoice" }: NewInvoicePageProps = {}) {
   const navigate = useNavigate();
   const { data: clients } = useClients();
   const { data: products } = useProducts();
@@ -44,6 +77,7 @@ export default function NewInvoicePage() {
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
   const clearDrafts = useClearClientDraftProducts();
+  const { executeSecuredAction } = useSecureSession();
   const { id } = useParams<{ id: string }>(); // Get ID from URL if editing
   const { data: existingInvoice, isLoading: isLoadingInvoice } = useInvoice(id);
   const [searchParams] = useSearchParams();
@@ -52,14 +86,29 @@ export default function NewInvoicePage() {
   // associé dropdown to that project instead of leaving it editable.
   const lockedProjectId = searchParams.get("project_id");
 
+  // Distinct localStorage draft per document type, so a stray "Nouvelle
+  // facture" draft never bleeds into a fresh proforma or vice versa.
+  const draftStorageKey = documentTypeProp === "proforma" ? "draft_proforma" : "draft_invoice";
+
   const loadDraft = () => {
+    if (id) return null; // editing an existing document must never resurrect the "new" draft
     try {
-      const saved = localStorage.getItem("draft_invoice");
+      const saved = localStorage.getItem(draftStorageKey);
       if (saved) return JSON.parse(saved);
-    } catch (e) { }
+    } catch (e) {
+      console.error("Failed to parse saved invoice draft:", e);
+    }
     return null;
   };
   const [draftData] = useState(loadDraft);
+
+  // While creating, fixed by the route (/invoices/new vs /proformas/new).
+  // While editing, derived from the loaded document's own invoice_type
+  // once it arrives (see the "Load existing invoice data" effect below) —
+  // update_invoice never touches invoice_type, so this never flips a
+  // document's real type, only how this page currently labels/treats it.
+  const [documentType, setDocumentType] = useState<"invoice" | "proforma">(documentTypeProp);
+  const isProforma = documentType === "proforma";
 
   const [clientId, setClientId] = useState(draftData?.clientId || "");
   const [projectId, setProjectId] = useState<string>(lockedProjectId || draftData?.projectId || "");
@@ -86,18 +135,83 @@ export default function NewInvoicePage() {
   const [discountAmount, setDiscountAmount] = useState<number>(draftData?.discountAmount || 0);
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>(draftData?.discountType || 'percent');
   const [taxMode, setTaxMode] = useState<'standard' | 'exempt' | 'ttc_direct'>(draftData?.taxMode || 'standard');
-  const [customTitle, setCustomTitle] = useState(draftData?.customTitle || "");
+  const [customTitle, setCustomTitle] = useState(draftData?.customTitle || (documentTypeProp === "proforma" ? "Facture Proforma" : ""));
   const [isDownloading, setIsDownloading] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-
-  // Show toast on mount if draft exists
-  useEffect(() => {
-    if (draftData) {
-      toast.info("Brouillon restauré");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() => {
+    if (draftData?.savedAt) {
+      const d = new Date(draftData.savedAt);
+      if (!isNaN(d.getTime())) return d;
     }
-  }, []);
+    if (draftData && (draftData.clientId || (draftData.items && draftData.items.length > 0))) {
+      return new Date();
+    }
+    return null;
+  });
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetFeedback, setResetFeedback] = useState<string | null>(null);
+
+  const handleConfirmReset = async () => {
+    await executeSecuredAction(() => {
+      localStorage.removeItem(draftStorageKey);
+      setClientId("");
+      setProjectId(lockedProjectId || "");
+      setInvoiceDate(new Date().toISOString().split("T")[0]);
+      setDueDate("");
+      setNotes("");
+      setHeaderNote("");
+      setCustomTitle(isProforma ? "Facture Proforma" : "");
+      setPaymentMode("Espèces");
+      setDiscountRate(0);
+      setDiscountAmount(0);
+      setDiscountType("percent");
+      setTaxMode("standard");
+      setAdvancePaymentConsumed(0);
+      setIsFromDraftProducts(false);
+      setItems([]);
+      setLastSavedAt(null);
+      setDraftInvoice((prev: any) => ({
+        ...prev,
+        clientId: "",
+        client_id: "",
+        clients: undefined,
+        client_name: "",
+        client_address: "",
+        project_id: lockedProjectId || null,
+        invoice_date: new Date().toISOString().split("T")[0],
+        due_date: null,
+        notes: null,
+        header_note: null,
+        custom_title: isProforma ? "Facture Proforma" : "",
+        payment_method: "Espèces",
+        discount_rate: 0,
+        discount_amount: 0,
+        discount_type: "percent",
+        discount_value: 0,
+        discount: 0,
+        tax_mode: "standard",
+        subtotal_ht: 0,
+        tva_amount: 0,
+        timbre: 0,
+        total_ttc: 0,
+        stamp_size: Number(settings?.stamp_size) || 180,
+        invoice_items: [],
+      }));
+      setShowResetConfirm(false);
+      setResetFeedback("Formulaire réinitialisé");
+      setTimeout(() => {
+        setResetFeedback(null);
+      }, 4000);
+      toast.success("Brouillon réinitialisé");
+    }, "Autoriser la réinitialisation du brouillon");
+  };
 
   useEffect(() => {
+    // Editing an existing invoice must never overwrite the "new invoice"
+    // draft slot — this key isn't scoped per-invoice, so writing here would
+    // silently resurrect this invoice's client/items the next time someone
+    // starts a genuinely new one.
+    if (id) return;
+    const now = new Date();
     const draft = {
       clientId,
       projectId,
@@ -114,18 +228,20 @@ export default function NewInvoicePage() {
       customTitle,
       source: isFromDraftProducts ? 'draft_products' : undefined,
       advance_payment_consumed: advancePaymentConsumed,
+      savedAt: now.toISOString(),
     };
     // Only save if there's some meaningful data
     if (clientId || items.length > 0 || notes || headerNote) {
-      localStorage.setItem("draft_invoice", JSON.stringify(draft));
-      setLastSavedAt(new Date());
+      localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      setLastSavedAt(now);
     }
-  }, [clientId, projectId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, taxMode, customTitle, isFromDraftProducts, advancePaymentConsumed]);
+  }, [id, draftStorageKey, clientId, projectId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, taxMode, customTitle, isFromDraftProducts, advancePaymentConsumed]);
 
   // Load existing invoice data if editing
   useEffect(() => {
     if (existingInvoice && products) {
       const inv = existingInvoice as any;
+      setDocumentType(inv.invoice_type === "proforma" ? "proforma" : "invoice");
       setClientId(inv.client_id);
       setProjectId(inv.project_id || "");
       setInvoiceDate(inv.invoice_date);
@@ -297,8 +413,11 @@ export default function NewInvoicePage() {
   const [draftInvoice, setDraftInvoice] = useState(() => {
     const totals = calculateTotals(items);
     return {
-      invoice_number: "",
-      invoice_type: "invoice" as const,
+      // Proformas are numbered by the backend at save time (PRO-<timestamp>,
+      // a separate sequence from real invoices) — this placeholder is never
+      // sent as-is (see submitInvoice), just shown until it's saved.
+      invoice_number: documentTypeProp === "proforma" ? "PRO-..." : "",
+      invoice_type: documentTypeProp,
       invoice_date: invoiceDate,
       due_date: dueDate || null,
       subtotal_ht: totals.calcSubtotal,
@@ -325,9 +444,11 @@ export default function NewInvoicePage() {
     };
   });
 
-  // Update invoice number when nextInvoiceNumber is fetched
+  // Update invoice number when nextInvoiceNumber is fetched — proformas are
+  // numbered by the backend at save time instead (see the draftInvoice
+  // initializer above), so the fetched sequential number doesn't apply here.
   useEffect(() => {
-    if (nextInvoiceNumber && !id) { // Only set number if NEW invoice
+    if (nextInvoiceNumber && !id && !isProforma) { // Only set number if NEW invoice
       setDraftInvoice(prev => ({
         ...prev,
         invoice_number: nextInvoiceNumber,
@@ -339,7 +460,7 @@ export default function NewInvoicePage() {
         invoice_number: existingInvoice.invoice_number,
       }));
     }
-  }, [nextInvoiceNumber, id, existingInvoice]);
+  }, [nextInvoiceNumber, id, isProforma, existingInvoice]);
 
   // Sync draft invoice with form state
   useEffect(() => {
@@ -353,6 +474,7 @@ export default function NewInvoicePage() {
 
     setDraftInvoice(prev => ({
       ...prev,
+      invoice_type: documentType,
       invoice_date: invoiceDate,
       due_date: dueDate || null,
       notes: notes || null,
@@ -397,7 +519,7 @@ export default function NewInvoicePage() {
         };
       }),
     }));
-  }, [clientId, projectId, invoiceDate, dueDate, items, notes, clients, products, paymentMode, discountRate, discountAmount, discountType, taxMode]);
+  }, [documentType, clientId, projectId, invoiceDate, dueDate, items, notes, headerNote, clients, products, paymentMode, discountRate, discountAmount, discountType, taxMode]);
 
   // Sync form state with draft invoice changes
   const handleDraftInvoiceChange = (updatedInvoice: any) => {
@@ -436,11 +558,16 @@ export default function NewInvoicePage() {
 
     setCustomTitle(updatedInvoice.custom_title || "");
 
-    // Update client
+    // Update client — matched by name since the preview only carries a
+    // display name, not the id. Two clients sharing a name would otherwise
+    // silently bind the invoice to whichever matches first, so only act
+    // on an unambiguous match.
     if (updatedInvoice.clients?.name) {
-      const newClient = clients?.find(c => c.name === updatedInvoice.clients.name);
-      if (newClient) {
-        setClientId(newClient.id);
+      const matches = clients?.filter(c => c.name === updatedInvoice.clients.name) ?? [];
+      if (matches.length === 1) {
+        setClientId(matches[0].id);
+      } else if (matches.length > 1) {
+        console.warn(`Ambiguous client name "${updatedInvoice.clients.name}" matched ${matches.length} clients — keeping current selection.`);
       }
     }
 
@@ -489,12 +616,23 @@ export default function NewInvoicePage() {
       notes: notes || undefined,
       header_note: headerNote || undefined,
       custom_title: draftInvoice.custom_title,
-      invoice_number: draftInvoice.invoice_number,
+      // Proformas are numbered by the backend at save time (its own
+      // PRO-<timestamp> sequence, separate from real invoices) — sending
+      // the unresolved "PRO-..." preview placeholder as a real number would
+      // both skip that and collide across every unsaved proforma.
+      invoice_number: (isProforma && (!draftInvoice.invoice_number || draftInvoice.invoice_number === "PRO-..."))
+        ? undefined
+        : draftInvoice.invoice_number,
+      invoice_type: documentType,
       payment_method: paymentMode,
       use_secondary_register: draftInvoice.use_secondary_register,
       selected_secondary_rc: draftInvoice.selected_secondary_rc || undefined,
       selected_secondary_address: draftInvoice.selected_secondary_address || undefined,
-      status: isFromDraftProducts ? "paid" : "issued", // Auto-mark as paid if generated from draft
+      // Never force a status for proformas — leaving it undefined keeps the
+      // backend's own default on create ("issued") and, on update, keeps
+      // whatever status the proforma already has (e.g. "converted") intact
+      // instead of silently reverting it every time the form is saved.
+      status: isProforma ? undefined : (isFromDraftProducts ? "paid" : "issued"),
       amount_paid: isFromDraftProducts ? draftInvoice.total_ttc : 0, // Auto-fill the paid amount
       discount: draftInvoice.discount_amount, // The flat amount for legacy/total displays
       discount_type: discountType,
@@ -516,19 +654,21 @@ export default function NewInvoicePage() {
       })),
     };
 
+    const listDestination = isProforma ? "/invoices?tab=proformas" : "/invoices";
+
     if (id) {
       // UPDATE MODE
       updateInvoice.mutate({ id, data: payload }, {
         onSuccess: () => {
-          localStorage.removeItem("draft_invoice");
-          navigate("/invoices"); // Or navigate back to detail
+          localStorage.removeItem(draftStorageKey);
+          navigate(listDestination); // Or navigate back to detail
         }
       });
     } else {
       // CREATE MODE
       createInvoice.mutate(payload, {
         onSuccess: async (createdInvoice) => {
-          localStorage.removeItem("draft_invoice");
+          localStorage.removeItem(draftStorageKey);
 
           if (isFromDraftProducts && advancePaymentConsumed > 0) {
             // Clear the draft products queue
@@ -546,7 +686,7 @@ export default function NewInvoicePage() {
           }
 
           // toast handled in hook
-          navigate("/invoices");
+          navigate(listDestination);
         },
       });
     }
@@ -558,15 +698,50 @@ export default function NewInvoicePage() {
             <div>
               <Button variant="ghost" onClick={() => navigate("/invoices")} className="gap-2 mb-2 p-0 h-auto hover:bg-transparent hover:text-primary">
                 <ArrowLeft className="w-4 h-4" />
-                Retour aux factures
+                {isProforma ? "Retour aux factures/proformas" : "Retour aux factures"}
               </Button>
-              <h1 className="text-2xl font-semibold text-foreground">{id ? "Modifier la facture" : "Nouvelle facture"}</h1>
-              <p className="text-muted-foreground">{id ? `Modification de la facture ${draftInvoice.invoice_number}` : "Créer une facture en mode interactif"}</p>
-              {!id && lastSavedAt && (
-                <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Brouillon enregistré à {lastSavedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                </p>
+              <h1 className="text-2xl font-semibold text-foreground">
+                {id
+                  ? (isProforma ? "Modifier le proforma" : "Modifier la facture")
+                  : (isProforma ? "Nouvelle Facture Proforma" : "Nouvelle facture")}
+              </h1>
+              <p className="text-muted-foreground">
+                {id
+                  ? `Modification ${isProforma ? "du proforma" : "de la facture"} ${draftInvoice.invoice_number}`
+                  : (isProforma ? "Créer une facture proforma / devis" : "Créer une facture en mode interactif")}
+              </p>
+              {!id && (lastSavedAt || resetFeedback) && (
+                <div className="flex items-center gap-2 mt-1.5 select-none">
+                  {/* Ambient Auto-Save Indicator */}
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+                    <span
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full ring-2",
+                        resetFeedback ? "bg-amber-500 ring-amber-500/20" : "bg-emerald-500 ring-emerald-500/20"
+                      )}
+                    />
+                    <span>
+                      {resetFeedback || `Brouillon enregistré à ${lastSavedAt?.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
+                    </span>
+                  </span>
+
+                  {!resetFeedback && (
+                    <>
+                      <span className="text-slate-200 select-none">•</span>
+
+                      {/* Discrete Reset Action */}
+                      <button
+                        type="button"
+                        onClick={() => setShowResetConfirm(true)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-400 hover:text-rose-600 hover:bg-rose-50/60 transition-all group"
+                        title="Effacer ce brouillon et recommencer à zéro"
+                      >
+                        <RotateCcw className="w-3 h-3 stroke-[2] text-slate-400 group-hover:text-rose-600 transition-colors" />
+                        <span>Réinitialiser</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
 
@@ -577,15 +752,36 @@ export default function NewInvoicePage() {
                 variant="outline"
                 onClick={async () => {
                   if (!draftInvoice.clients || !draftInvoice.invoice_items || draftInvoice.invoice_items.length === 0) {
-                    toast.error("Veuillez remplir les informations client et ajouter au moins un produit");
+                    toast.error("Veuillez remplir les informations client et ajouter au moins un produit", {
+                      id: "invoice-validation-error",
+                    });
                     return;
                   }
+                  const toastId = "download-invoice-pdf";
                   try {
                     setIsDownloading(true);
-                    await generateInvoicePDF(draftInvoice, settings, true, undefined, licenseStatus?.state === "active");
-                    toast.success("PDF téléchargé avec succès");
+                    toast.loading("Génération du PDF...", { id: toastId });
+                    await generateInvoicePDF(
+                      draftInvoice,
+                      settings,
+                      true,
+                      undefined,
+                      licenseStatus?.state === "active",
+                      ({ path, blob, fileName }) => {
+                        toast.success(isProforma ? "Facture proforma PDF générée" : "Facture PDF générée", {
+                          id: toastId,
+                          description: "Le fichier a été enregistré avec succès.",
+                          action: {
+                            label: "Ouvrir",
+                            onClick: () => openSavedFile(path, blob),
+                          },
+                          duration: 5000,
+                        });
+                      }
+                    );
                   } catch (error) {
-                    toast.error("Erreur lors de la génération du PDF");
+                    console.error("PDF generation error:", error);
+                    toast.error("Erreur lors de la génération du PDF", { id: toastId });
                   } finally {
                     setIsDownloading(false);
                   }
@@ -602,31 +798,32 @@ export default function NewInvoicePage() {
                 disabled={!clientId || items.every(i => i.quantity === 0) || createInvoice.isPending}
                 className="gap-2"
               >
-                {createInvoice.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                {createInvoice.isPending || updateInvoice.isPending ? "Traitement..." : (id ? "Mettre à jour" : "Créer la facture")}
+                {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {createInvoice.isPending || updateInvoice.isPending
+                  ? "Traitement..."
+                  : (id ? "Mettre à jour" : (isProforma ? "Créer le proforma" : "Créer la facture"))}
               </Button>
             </div>
           </div>
 
           <div className="space-y-6">
 
-            {/* Live Stats */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <Label htmlFor="project_associe" className="text-sm font-medium text-foreground">Projet associé</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {lockedProjectId
-                      ? "Verrouillé — cette facture a été créée depuis la fiche du projet."
-                      : "Optionnel — la facture compte dans le chiffre d'affaires et la rentabilité du projet choisi."}
-                  </p>
-                </div>
+            {/* Settings + live totals — a single compact bar instead of three
+                stacked full-width sections. Those took ~250px of vertical
+                space before reaching the actual invoice document below,
+                which is the one thing this page is actually for editing;
+                on a laptop screen that left barely any room for it. The
+                "why" text for each control moved into a tooltip instead of
+                always-visible caption text. */}
+            <div className="bg-card rounded-xl border border-border px-4 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="project_associe" className="text-xs font-medium text-muted-foreground shrink-0">Projet</Label>
                 <Select
                   value={projectId || "none"}
                   onValueChange={(value) => setProjectId(value === "none" ? "" : value)}
                   disabled={!!lockedProjectId}
                 >
-                  <SelectTrigger id="project_associe" className="w-full sm:w-64">
+                  <SelectTrigger id="project_associe" className="w-40 h-8 text-xs">
                     <SelectValue placeholder="Aucun projet" />
                   </SelectTrigger>
                   <SelectContent>
@@ -638,59 +835,77 @@ export default function NewInvoicePage() {
                       ))}
                   </SelectContent>
                 </Select>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    {lockedProjectId
+                      ? "Verrouillé — cette facture a été créée depuis la fiche du projet."
+                      : "Optionnel — la facture compte dans le chiffre d'affaires et la rentabilité du projet choisi."}
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Régime de TVA</p>
-                  <p className="text-xs text-muted-foreground">
-                    {taxMode === "exempt"
-                      ? "Hors Taxe / Sans TVA — toutes les lignes passent à 0%."
-                      : taxMode === "ttc_direct"
-                        ? "TTC Direct — le prix saisi par ligne est un prix TTC ; le HT est recalculé automatiquement."
-                        : "Standard — chaque ligne applique sa TVA catalogue (généralement 19%)."}
-                  </p>
-                </div>
+
+              <div className="h-6 w-px bg-border shrink-0" aria-hidden="true" />
+
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs font-medium text-muted-foreground shrink-0">TVA</Label>
                 <ToggleGroup
                   type="single"
                   value={taxMode}
                   onValueChange={(value) => {
                     if (value) setTaxMode(value as "standard" | "exempt" | "ttc_direct");
                   }}
-                  className="justify-start sm:justify-end"
                 >
-                  <ToggleGroupItem value="standard" className="text-xs px-3 h-8">
-                    Standard (HT + TVA)
+                  <ToggleGroupItem value="standard" className="text-xs px-2.5 h-8">
+                    Standard
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="exempt" className="text-xs px-3 h-8">
-                    Hors Taxe / Sans TVA
+                  <ToggleGroupItem value="exempt" className="text-xs px-2.5 h-8">
+                    Hors Taxe
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="ttc_direct" className="text-xs px-3 h-8">
+                  <ToggleGroupItem value="ttc_direct" className="text-xs px-2.5 h-8">
                     TTC Direct
                   </ToggleGroupItem>
                 </ToggleGroup>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    {taxMode === "exempt"
+                      ? "Hors Taxe / Sans TVA — toutes les lignes passent à 0%."
+                      : taxMode === "ttc_direct"
+                        ? "TTC Direct — le prix saisi par ligne est un prix TTC ; le HT est recalculé automatiquement."
+                        : "Standard — chaque ligne applique sa TVA catalogue (généralement 19%)."}
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Sous-total H.T</p>
+
+              {/* Live totals — pushed to the far end, inline instead of a
+                  4-cell grid of their own. */}
+              <div className="ml-auto flex items-center gap-5">
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Sous-total H.T</p>
                   <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
                 </div>
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Total TVA</p>
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total TVA</p>
                   <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
                 </div>
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground">Timbre</p>
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Timbre</p>
                   <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.timbre || 0)}</p>
                 </div>
-                <div className="bg-primary/10 rounded-lg p-3">
-                  <p className="text-xs text-primary">Total TTC</p>
-                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
+                <div className="text-right border-l border-border pl-5">
+                  <p className="text-[10px] uppercase tracking-wide text-primary">Total TTC</p>
+                  <p className="text-base font-mono tabular-nums tracking-tight font-bold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
                 </div>
               </div>
             </div>
 
             {/* Editable Preview */}
-            <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 250px)', minHeight: '500px' }}>
+            <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 170px)', minHeight: '500px' }}>
               <div className="flex justify-center">
                 <EditableInvoicePreview
                   invoice={draftInvoice}
@@ -701,6 +916,27 @@ export default function NewInvoicePage() {
               </div>
             </div>
           </div>
+
+          {/* Safety Confirmation Dialog for Resetting Draft */}
+          <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Réinitialiser ce brouillon ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Voulez-vous réinitialiser ce brouillon ? Toutes les données non enregistrées seront perdues.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleConfirmReset}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Réinitialiser
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </main>
   );
 }

@@ -35,6 +35,14 @@ import {
   StatusBadge,
   Skeleton,
   EmptyState,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@sordi/ui";
 import { DatePicker } from "@/components/ui/date-picker";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -66,8 +74,14 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: employees, isLoading, updateEmployee } = useEmployees();
+  const { data: employees, isLoading, updateEmployee, deleteEmployee } = useEmployees();
   const employee = employees?.find((e) => e.id === id);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const handleDelete = () => {
+    if (!id) return;
+    deleteEmployee.mutate(id, { onSuccess: () => navigate("/management") });
+  };
 
   const { data: absenceStats } = useEmployeeAbsenceStats(id, currentMonth);
   const { data: advances } = useEmployeeAdvances(id);
@@ -306,6 +320,10 @@ export default function EmployeeDetailPage() {
                 <Button variant="outline" className="gap-2" onClick={openEditDialog}>
                   <Pencil className="w-4 h-4" />
                   Modifier
+                </Button>
+                <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+                  <Trash2 className="w-4 h-4" />
+                  Supprimer
                 </Button>
                 <Button onClick={handleRunPayroll} disabled={runPayroll.isPending || !employee.base_salary}>
                   {runPayroll.isPending ? "Calcul…" : `Calculer la paie (${currentMonth})`}
@@ -696,6 +714,23 @@ export default function EmployeeDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="rounded-3xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cet employé ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. Toutes les données liées à cet employé (bulletins de paie, avances, documents) seront supprimées.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleteEmployee.isPending} className="bg-destructive text-destructive-foreground rounded-xl">
+              {deleteEmployee.isPending ? "Suppression..." : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -9,6 +9,7 @@ import {
   getDocumentSectionFlags,
   resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
+import { chunkItems } from '@/lib/paginationUtils';
 
 // The four selectable document fonts (Paramètres > Thème de la facture PDF >
 // Police) — all registered up front; react-pdf only actually fetches the
@@ -73,6 +74,27 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
+  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
+  // 595.28 / 793.700787 = 0.75 pt/px
+  const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
+  // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
+  // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
+  // range (80-400), making the control look broken above that point.
+  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
+  const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
+  const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
+  // This theme's header/main/footer bands are absolutely positioned to fill
+  // exactly one page (96.1 + 651.4 + 94.4 = 841.89pt) with no native
+  // pagination, so an invoice with enough line items to overflow that
+  // 651.4pt main band used to render past it and get silently painted over
+  // by the opaque footer. Chunking items across multiple explicit <Page>s
+  // (same ITEMS_PER_PAGE/ITEMS_PER_LAST_PAGE budget the live preview's own
+  // pagination already uses) guarantees every line item lands on some page
+  // instead of being clipped — each page reproduces the same header/main/
+  // footer bands unchanged; only the item chunk and the last-page-only
+  // notes/totals/signature block vary per page.
+  const pages = chunkItems(data.items);
 
   const styles = StyleSheet.create({
     page: {
@@ -273,7 +295,15 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       paddingHorizontal: 4,
     },
 
+    // Notes + totals share one row (notesRow) so they read as a single
+    // balanced line instead of notes sitting full-width above the totals.
+    notesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+    notesBlock: { width: '42%', padding: 8, borderWidth: 0.75, borderColor: '#e5e7eb' },
+    notesLabel: { fontFamily, fontSize: 7.5, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
+    notesText: { fontSize: 8.5, color: '#374151', lineHeight: 1.4 },
+
     totalsRightContainer: { alignItems: 'flex-end', marginBottom: 14 },
+    totalsRightColumn: { alignItems: 'flex-end' },
     totalsBox: { width: '42%' },
     totalsRow: {
       flexDirection: 'row',
@@ -320,8 +350,8 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
     signatureBoxLabel: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
     signatureBoxPlaceholder: { fontSize: 7, fontFamily, color: '#9ca3af', textTransform: 'uppercase' },
-    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 140, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
-    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 140, objectFit: 'contain' },
+    stampImage: { position: 'absolute', objectFit: 'contain', opacity: 0.85, transform: 'rotate(-2deg)' },
+    signatureImage: { position: 'absolute', objectFit: 'contain' },
 
     footer: {
       position: 'absolute',
@@ -371,14 +401,21 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
   return (
     <Document title={`${data.docTitle} ${data.docNumber}`} author={settings?.company_name || undefined}>
-      <Page size="A4" style={styles.page}>
+      {pages.map((pageItems, pageIndex) => {
+        const isFirstPage = pageIndex === 0;
+        const isLastPage = pageIndex === pages.length - 1;
+        return (
+      <Page key={pageIndex} size="A4" style={styles.page}>
 
         <View style={styles.header} fixed>
-          {settings?.logo_data && (
-            <View style={styles.headerLogoContainer}>
+          <View style={styles.headerLogoContainer}>
+            {settings?.logo_data && (
               <Image src={settings.logo_data} style={styles.logoImage} />
-            </View>
-          )}
+            )}
+            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#1e293b', textTransform: 'uppercase', marginTop: 3 }}>
+              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+            </Text>
+          </View>
           {settings?.company_name && (
             <View style={styles.companyNameBadge}>
               <Text style={styles.companyNameText}>{settings.company_name}</Text>
@@ -434,7 +471,13 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                     {data.docNumber || "-"}
                   </Text>
                 </View>
-                {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
+                {!data.isCreditNote && invoice.due_date && (
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Échéance</Text>
+                    <Text style={styles.metaValue}>{invoice.due_date}</Text>
+                  </View>
+                )}
+                {flags.showPaymentMethod && !data.isCreditNote && (
                   <View style={[styles.metaRow, { borderBottomWidth: 0 }]}>
                     <Text style={styles.metaLabel}>Mode de paiement</Text>
                     <Text style={[styles.metaValue, { textTransform: 'uppercase' }]}>{invoice.payment_method || "Chèque"}</Text>
@@ -457,7 +500,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 <Text style={[styles.tableHeaderCell, styles.colAmount, { textAlign: 'right' }]}>Total HT</Text>
               </View>
 
-              {data.items.map((item, idx) => {
+              {pageItems.map((item, idx) => {
                 const name = item.product_name || item.products?.name || "";
                 const unit = item.products?.unit || item.unit || "TN";
                 const quantityVal = Number(item.quantity || 0);
@@ -478,77 +521,127 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               })}
             </View>
 
-            <View style={styles.totalsRightContainer}>
-              <View style={styles.totalsBox}>
-                <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>Total HT</Text>
-                  <Text style={styles.totalsValueText}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
-                </View>
-                {flags.showTva && (
-                  <View style={styles.totalsRow}>
-                    <Text style={styles.totalsLabel}>TVA (19%)</Text>
-                    <Text style={styles.totalsValueText}>{formatCurrency(invoice.tva_amount || 0)}</Text>
-                  </View>
-                )}
-                {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
-                  <View style={styles.totalsRow}>
-                    <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
-                    <Text style={styles.totalsValueText}>{formatCurrency(invoice.timbre || 0)}</Text>
-                  </View>
-                )}
-                {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
-                  <View style={styles.totalsRow}>
-                    <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
-                    <Text style={[styles.totalsValueText, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
-                  </View>
-                )}
-                <View style={styles.ttcRow}>
-                  <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
-                  <Text style={styles.ttcValueText}>{formatCurrency(invoice.total_ttc || 0)}</Text>
-                </View>
-              </View>
-              {flags.taxExemptionLegend && (
-                <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right', maxWidth: 220 }}>
-                  {flags.taxExemptionLegend}
-                </Text>
-              )}
-            </View>
-
-            <View style={styles.bottomBlock}>
-              {flags.showMontantEnLettres && (
+            {isLastPage && (() => {
+              const hasNotes = invoice.notes && invoice.notes.trim() !== "";
+              const totalsContent = (
                 <>
-                  <Text style={styles.wordsTitle}>Arrêté la présente facture à la somme de</Text>
-                  <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+                  <View style={styles.totalsBox}>
+                    <View style={styles.totalsRow}>
+                      <Text style={styles.totalsLabel}>Total HT</Text>
+                      <Text style={styles.totalsValueText}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
+                    </View>
+                    {flags.showTva && (
+                      <View style={styles.totalsRow}>
+                        <Text style={styles.totalsLabel}>TVA (19%)</Text>
+                        <Text style={styles.totalsValueText}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+                      </View>
+                    )}
+                    {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
+                      <View style={styles.totalsRow}>
+                        <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
+                        <Text style={styles.totalsValueText}>{formatCurrency(invoice.timbre || 0)}</Text>
+                      </View>
+                    )}
+                    {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
+                      <View style={styles.totalsRow}>
+                        <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
+                        <Text style={[styles.totalsValueText, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
+                      </View>
+                    )}
+                    <View style={styles.ttcRow}>
+                      <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
+                      <Text style={styles.ttcValueText}>{formatCurrency(invoice.total_ttc || 0)}</Text>
+                    </View>
+                  </View>
+                  {flags.taxExemptionLegend && (
+                    <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right', maxWidth: 220 }}>
+                      {flags.taxExemptionLegend}
+                    </Text>
+                  )}
                 </>
-              )}
+              );
 
-              {/* Mode de paiement now lives in the top metadata block
-                  alongside Date/Numéro — this row just anchors the
-                  signature block to the right, same as the DOM versions. */}
-              <View style={[styles.signatureRow, { justifyContent: 'flex-end' }]}>
-                <View>
-                  {(settings?.stamp_data || settings?.signature_data) && (
+              if (hasNotes) {
+                return (
+                  <View style={styles.notesRow} wrap={false}>
+                    <View style={styles.notesBlock}>
+                      <Text style={styles.notesLabel}>Notes</Text>
+                      <Text style={styles.notesText}>{invoice.notes}</Text>
+                    </View>
+                    <View style={styles.totalsRightColumn}>
+                      {totalsContent}
+                    </View>
+                  </View>
+                );
+              }
+
+              return (
+                <View style={styles.totalsRightContainer}>
+                  {totalsContent}
+                </View>
+              );
+            })()}
+
+            {isLastPage && (
+            <View style={styles.bottomBlock}>
+              {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
+              <View style={[styles.signatureRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]} wrap={false}>
+                {flags.showMontantEnLettres ? (
+                  <View style={{ maxWidth: 280, paddingRight: 16 }}>
+                    <Text style={styles.wordsTitle}>Arrêté la présente facture à la somme de</Text>
+                    <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+                  </View>
+                ) : (
+                  <View />
+                )}
+                <View style={{ alignItems: 'center' }}>
+                  {mainStampUrl && (
                     <Text style={[styles.signatureBoxLabel, { textAlign: 'center' }]}>Cachet et Signature</Text>
                   )}
-                  <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 32, 220), Math.min(settings?.signature_size || 40, 220), 32) + 24 }]}>
-                    {!settings?.stamp_data && !settings?.signature_data ? (
+                  <View style={[styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]}>
+                    {!mainStampUrl ? (
                       <View style={styles.signatureBoxEmpty}>
                         <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
                       </View>
-                    ) : (
+                    ) : hasBoth ? (
                       <>
-                        {settings?.stamp_data && (
-                          <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 32, 220) }]} />
-                        )}
-                        {settings?.signature_data && (
-                          <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 40, 220) }]} />
-                        )}
+                        <Image
+                          src={settings!.stamp_data!}
+                          style={{
+                            width: stampWidth,
+                            height: stampHeight,
+                            objectFit: 'contain',
+                            opacity: 0.88,
+                            transform: 'rotate(-2deg)',
+                          }}
+                        />
+                        <Image
+                          src={settings!.signature_data!}
+                          style={{
+                            position: 'absolute',
+                            width: Math.round(stampWidth * 0.85),
+                            height: Math.round(stampHeight * 0.65),
+                            objectFit: 'contain',
+                          }}
+                        />
                       </>
+                    ) : (
+                      <Image
+                        src={mainStampUrl}
+                        style={{
+                          width: stampWidth,
+                          height: stampHeight,
+                          objectFit: 'contain',
+                          opacity: 0.88,
+                          transform: 'rotate(-2deg)',
+                        }}
+                      />
                     )}
                   </View>
                 </View>
               </View>
             </View>
+            )}
           </View>
         </View>
 
@@ -634,6 +727,8 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
         </View>
 
       </Page>
+        );
+      })}
     </Document>
   );
 }

@@ -57,7 +57,7 @@ import {
   useDeleteProjectDeliverable,
 } from "@/hooks/useProjectDeliverables";
 import { useAssignInvoiceToProject } from "@/hooks/useProjects";
-import { computeProjectStatus, serviceCategoryLabel } from "@/lib/projectOverview";
+import { getProjectStatus, serviceCategoryLabel } from "@/lib/projectOverview";
 import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import { EmployeeAvatar } from "@/components/EmployeeAvatar";
 import { ContractModal } from "@/components/project/ContractModal";
@@ -95,7 +95,7 @@ export default function ProjectDetailPage() {
     return <main className="flex-1 p-8 pt-4 text-muted-foreground">Chargement…</main>;
   }
 
-  const status = stats ? computeProjectStatus(stats) : null;
+  const status = getProjectStatus(project.status);
 
   return (
     <main className="flex-1 p-8 pt-4">
@@ -361,7 +361,7 @@ function OverviewTab({
             </Button>
             <Button
               size="sm"
-              className="gap-2 bg-[#EB3B48] hover:bg-[#D82F3C] text-white"
+              className="gap-2 bg-primary hover:bg-primary-hover text-primary-foreground"
               onClick={() => setContractModalOpen(true)}
             >
               <FileText className="w-4 h-4" />
@@ -462,7 +462,7 @@ function TasksTab({ projectId }: { projectId: string }) {
         <CardContent className="p-0">
           {!tasks || tasks.length === 0 ? (
             <div className="p-8">
-              <EmptyState type="clients" title="Aucune tâche" description="Ajoutez la première tâche de ce projet" />
+              <EmptyState type="tasks" title="Aucune tâche" description="Ajoutez la première tâche de ce projet" />
             </div>
           ) : (
             <Table>
@@ -614,7 +614,7 @@ function DeliverablesTab({ projectId }: { projectId: string }) {
         <CardContent className="p-0">
           {!deliverables || deliverables.length === 0 ? (
             <div className="p-8">
-              <EmptyState type="clients" title="Aucun livrable" description="Ajoutez le premier livrable de ce projet" />
+              <EmptyState type="deliverables" title="Aucun livrable" description="Ajoutez le premier livrable de ce projet" />
             </div>
           ) : (
             <Table>
@@ -737,8 +737,9 @@ function ProjectExpensesTab({ projectId }: { projectId: string }) {
   });
 
   const handleCreate = () => {
-    if (!formData.category.trim() || !formData.amount) {
-      toast.error("Le nom et le montant de la dépense sont requis");
+    const amount = parseFloat(formData.amount);
+    if (!formData.category.trim() || !formData.amount || isNaN(amount) || amount <= 0) {
+      toast.error("Le nom et un montant valide sont requis");
       return;
     }
     createExpense.mutate(
@@ -746,7 +747,7 @@ function ProjectExpensesTab({ projectId }: { projectId: string }) {
         expense_date: formData.expense_date,
         category: formData.category.trim(),
         description: formData.description || undefined,
-        amount: parseFloat(formData.amount),
+        amount,
         project_id: projectId,
       },
       {

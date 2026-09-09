@@ -49,6 +49,7 @@ export * from "./textarea";
 export * from "./toggle";
 export * from "./toggle-group";
 export * from "./tooltip";
+export * from "./tracker";
 
 // The shadcn Toast primitive/Toaster/use-toast trio (toast.tsx, toaster.tsx,
 // hooks/use-toast.ts) was removed — confirmed dead, zero call sites ever

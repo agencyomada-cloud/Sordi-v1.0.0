@@ -163,13 +163,13 @@ export default function ContractsPage() {
     <>
       <main className="flex-1 p-8 pt-4">
         <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Contrats</h1>
-              <p className="text-muted-foreground mt-1">Générez et gérez les contrats de prestation de services clients</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Contrats</h1>
+              <p className="text-xs text-slate-500 mt-1">Générez et gérez les contrats de prestation de services clients</p>
             </div>
 
-            <Button className="gap-2 bg-[#EB3B48] hover:bg-[#D82F3C] text-white" onClick={() => setCreateOpen(true)}>
+            <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setCreateOpen(true)}>
               <Plus className="w-4 h-4" />
               Nouveau Contrat
             </Button>
@@ -214,7 +214,7 @@ export default function ContractsPage() {
                   <TableRow>
                     <TableCell colSpan={7}>
                       <EmptyState
-                        type="invoices"
+                        type="contracts"
                         title="Aucun contrat"
                         description={searchQuery ? "Essayez une autre recherche" : "Créez votre premier contrat client"}
                         action={

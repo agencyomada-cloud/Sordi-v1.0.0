@@ -13,6 +13,9 @@ import {
   RiPieChartLine as PartnersIcon,
   RiWalletLine as PayrollIcon,
   RiUserSettingsLine as EmployeesIcon,
+  RiTaskLine as TasksIcon,
+  RiArchiveLine as DeliverablesIcon,
+  RiFileShield2Line as ContractsIcon,
 } from "@remixicon/react";
 import { cn } from "./lib/utils";
 import { Button } from "./button";
@@ -33,6 +36,9 @@ const defaultIcons: Record<string, React.ElementType> = {
   partners: PartnersIcon,
   payroll: PayrollIcon,
   employees: EmployeesIcon,
+  tasks: TasksIcon,
+  deliverables: DeliverablesIcon,
+  contracts: ContractsIcon,
   default: FileX,
 };
 

@@ -35,30 +35,34 @@ import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  StatusDot,
+  statusBadgeVariants,
 } from "@sordi/ui";
-import { RiTimeLine as ClockIcon, RiCheckboxCircleLine as CheckIcon, RiAlarmWarningLine as WarningIcon } from "@remixicon/react";
-import { MetricStrip, MetricTrendBadge } from "@/components/ui/metric-strip";
-import { useProjects, useDeleteProject, useProjectStatsMap } from "@/hooks/useProjects";
+import { RiTimeLine as ClockIcon, RiCheckboxCircleLine as CheckIcon, RiPauseCircleLine as PauseIcon } from "@remixicon/react";
+import { MetricStrip } from "@/components/ui/metric-strip";
+import { useProjects, useDeleteProject, useProjectStatsMap, useUpdateProjectStatus } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
-import { computeProjectStatus, type ProjectStatusKey } from "@/lib/projectOverview";
-import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
-import type { ProjectStats } from "@/lib/database";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { getProjectStatus, PROJECT_STATUS_OPTIONS, type ProjectStatusKey } from "@/lib/projectOverview";
+import { cn } from "@/lib/utils";
+import type { ProjectStats, ProjectLifecycleStatus } from "@/lib/database";
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("fr-DZ", { style: "currency", currency: "DZD", minimumFractionDigits: 0 }).format(amount);
 
 const STATUS_FILTERS: { key: ProjectStatusKey | "all"; label: string }[] = [
   { key: "all", label: "Tous" },
-  { key: "en_retard", label: "En retard" },
-  { key: "depassement_budgetaire", label: "Dépassement budgétaire" },
-  { key: "a_risque", label: "À risque" },
-  { key: "en_cours", label: "En cours" },
-  { key: "nouveau", label: "Nouveau" },
-  { key: "termine", label: "Terminé" },
+  ...PROJECT_STATUS_OPTIONS,
 ];
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
+  const { executeSecuredAction } = useSecureSession();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatusKey | "all">("all");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -68,30 +72,31 @@ export default function ProjectsPage() {
   const { data: clients } = useClients();
   const { data: statsByProjectId } = useProjectStatsMap();
   const deleteProject = useDeleteProject();
+  const updateProjectStatus = useUpdateProjectStatus();
 
   const clientNameById = useMemo(() => new Map((clients ?? []).map((c) => [c.id, c.name])), [clients]);
 
+  // Explicit status field, straight off the project record — no longer
+  // derived from payment collection or task data, so this is a plain
+  // COUNT(*) grouped by projects.status.
   const statusCounts = useMemo(() => {
-    const counts = { en_cours: 0, termine: 0, a_risque: 0 };
+    const counts: Record<ProjectLifecycleStatus, number> = { en_cours: 0, termine: 0, en_pause: 0 };
     (projects ?? []).forEach((project) => {
-      const stats = statsByProjectId.get(project.id);
-      const key = stats ? computeProjectStatus(stats).key : null;
-      if (key === "en_cours" || key === "nouveau") counts.en_cours++;
-      else if (key === "termine") counts.termine++;
-      else if (key === "a_risque" || key === "en_retard" || key === "depassement_budgetaire") counts.a_risque++;
+      const key = getProjectStatus(project.status).key;
+      counts[key]++;
     });
     return counts;
-  }, [projects, statsByProjectId]);
+  }, [projects]);
 
   const rows = useMemo(() => {
     return (projects ?? [])
       .map((project) => {
         const stats = statsByProjectId.get(project.id);
-        const status = stats ? computeProjectStatus(stats) : null;
+        const status = getProjectStatus(project.status);
         return { project, stats, status };
       })
       .filter(({ project, status }) => {
-        if (statusFilter !== "all" && status?.key !== statusFilter) return false;
+        if (statusFilter !== "all" && status.key !== statusFilter) return false;
         if (!searchQuery.trim()) return true;
         const query = searchQuery.toLowerCase().trim();
         const clientName = clientNameById.get(project.client_id) ?? "";
@@ -103,27 +108,29 @@ export default function ProjectsPage() {
       });
   }, [projects, statsByProjectId, statusFilter, searchQuery, clientNameById]);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!projectToDelete) return;
-    deleteProject.mutate(projectToDelete, {
-      onSuccess: () => {
-        setDeleteDialogOpen(false);
-        setProjectToDelete(null);
-      },
-    });
+    await executeSecuredAction(() => {
+      deleteProject.mutate(projectToDelete, {
+        onSuccess: () => {
+          setDeleteDialogOpen(false);
+          setProjectToDelete(null);
+        },
+      });
+    }, "Autoriser la suppression du projet");
   };
 
   return (
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
               <div>
-                <h1 className="text-3xl font-bold text-foreground tracking-tight">Projets</h1>
-                <p className="text-muted-foreground mt-1">Suivez vos projets clients, tâches et livrables</p>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Projets & Opérations</h1>
+                <p className="text-xs text-slate-500 mt-1">Suivez vos projets clients, tâches et livrables</p>
               </div>
 
-              <Button className="gap-2" onClick={() => navigate("/projects/new")}>
+              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/projects/new")}>
                 <Plus className="w-4 h-4" />
                 Nouveau projet
               </Button>
@@ -136,19 +143,7 @@ export default function ProjectsPage() {
                 cells={[
                   { key: "total", label: "Total Projets", value: String(projects?.length || 0), numericValue: projects?.length || 0, format: (v) => String(Math.round(v)), icon: FolderIcon },
                   { key: "en_cours", label: "En Cours", value: String(statusCounts.en_cours), numericValue: statusCounts.en_cours, format: (v) => String(Math.round(v)), icon: ClockIcon },
-                  {
-                    key: "a_risque",
-                    label: "À Risque",
-                    value: String(statusCounts.a_risque),
-                    numericValue: statusCounts.a_risque,
-                    format: (v) => String(Math.round(v)),
-                    icon: WarningIcon,
-                    trend: (
-                      <MetricTrendBadge good={statusCounts.a_risque === 0}>
-                        {statusCounts.a_risque > 0 ? "Attention requise" : "RAS"}
-                      </MetricTrendBadge>
-                    ),
-                  },
+                  { key: "en_pause", label: "En Pause", value: String(statusCounts.en_pause), numericValue: statusCounts.en_pause, format: (v) => String(Math.round(v)), icon: PauseIcon },
                   { key: "termine", label: "Terminés", value: String(statusCounts.termine), numericValue: statusCounts.termine, format: (v) => String(Math.round(v)), icon: CheckIcon },
                 ]}
               />
@@ -186,7 +181,7 @@ export default function ProjectsPage() {
                     <TableHead>Projet</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead className="hidden md:table-cell">Responsable</TableHead>
-                    <TableHead numeric className="hidden lg:table-cell">Budget facturé / prévu</TableHead>
+                    <TableHead numeric className="hidden lg:table-cell">Montant encaissé / Total facturé</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead className="w-14"></TableHead>
                   </TableRow>
@@ -214,7 +209,7 @@ export default function ProjectsPage() {
                       <TableRow
                         key={project.id}
                         className="cursor-pointer"
-                        dimmed={status?.key === "termine"}
+                        dimmed={status.key === "termine"}
                         onClick={() => navigate(`/projects/${project.id}`)}
                       >
                         <TableCell className="font-medium max-w-[220px]">
@@ -228,9 +223,29 @@ export default function ProjectsPage() {
                         <TableCell className="text-muted-foreground">{clientNameById.get(project.client_id) ?? "-"}</TableCell>
                         <TableCell className="text-muted-foreground hidden md:table-cell">{project.responsible_person || "-"}</TableCell>
                         <TableCell numeric className="hidden lg:table-cell">
-                          <BudgetCell stats={stats} plannedBudget={project.planned_budget} />
+                          {/* Purely informational — real cash collected vs. real
+                              invoiced total, independent of operational status. */}
+                          <BudgetCell stats={stats} />
                         </TableCell>
-                        <TableCell>{status && <ProjectStatusBadge status={status} />}</TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {/* Explicit, manually-set operational status — the
+                              dropdown itself IS the quick-toggle; matching
+                              items also live in the "..." action menu. */}
+                          <Select
+                            value={status.key}
+                            onValueChange={(value) => updateProjectStatus.mutate({ id: project.id, status: value as ProjectLifecycleStatus })}
+                          >
+                            <SelectTrigger className={cn(statusBadgeVariants(), "h-9 w-fit gap-1.5 border-border")}>
+                              <StatusDot tone={status.tone} />
+                              <span>{status.label}</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PROJECT_STATUS_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -247,6 +262,16 @@ export default function ProjectsPage() {
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Modifier
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {PROJECT_STATUS_OPTIONS.filter((opt) => opt.key !== status.key).map((opt) => (
+                                <DropdownMenuItem
+                                  key={opt.key}
+                                  onClick={() => updateProjectStatus.mutate({ id: project.id, status: opt.key })}
+                                >
+                                  <StatusDot tone={getProjectStatus(opt.key).tone} className="mr-2" />
+                                  Marquer {opt.label}
+                                </DropdownMenuItem>
+                              ))}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -270,43 +295,38 @@ export default function ProjectsPage() {
           </div>
       </main>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce projet ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible. Les tâches et livrables associés seront aussi supprimés. Les factures liées ne seront pas
-              supprimées, seulement déliées.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Supprimer le projet"
+        itemIdentifier={projects?.find((p) => p.id === projectToDelete)?.name || "Projet"}
+        description="Cette action est irréversible. Les tâches et livrables associés seront aussi supprimés. Les factures liées ne seront pas supprimées, seulement déliées."
+        isLoading={deleteProject.isPending}
+        onConfirm={handleDelete}
+      />
     </>
   );
 }
 
-function BudgetCell({ stats, plannedBudget }: { stats: ProjectStats | undefined; plannedBudget: number }) {
-  if (!stats || plannedBudget <= 0) {
-    return <span className="text-muted-foreground font-mono tabular-nums tracking-tight">{formatCurrency(plannedBudget)}</span>;
+/** Purely financial/informational — real cash collected (budget_paye) vs.
+ *  the real invoiced total (budget_facture), from the payments ledger via
+ *  get_project_stats. Deliberately has no relationship to projects.status:
+ *  a project can be 100% collected and still "En cours" operationally, or
+ *  "Terminé" with a balance still outstanding. */
+function BudgetCell({ stats }: { stats: ProjectStats | undefined }) {
+  const total = stats?.budget_facture ?? 0;
+  if (!stats || total <= 0) {
+    return <span className="text-muted-foreground font-mono tabular-nums tracking-tight">—</span>;
   }
-  const ratio = Math.min(1, stats.budget_facture / plannedBudget);
-  const overBudget = stats.budget_facture > plannedBudget;
+  const collected = stats.budget_paye;
+  const ratio = Math.min(1, collected / total);
   return (
     <div className="min-w-[140px] ms-auto">
-      <p className={`text-sm font-mono tabular-nums tracking-tight ${overBudget ? "text-destructive font-medium" : "text-foreground"}`}>
-        {formatCurrency(stats.budget_facture)} <span className="text-muted-foreground font-normal">/ {formatCurrency(plannedBudget)}</span>
+      <p className="text-sm font-mono tabular-nums tracking-tight text-foreground">
+        {formatCurrency(collected)} <span className="text-muted-foreground font-normal">/ {formatCurrency(total)}</span>
       </p>
       <div className="h-1.5 mt-1 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full ${overBudget ? "bg-destructive" : "bg-primary"}`}
-          style={{ width: `${ratio * 100}%` }}
-        />
+        <div className="h-full rounded-full bg-primary" style={{ width: `${ratio * 100}%` }} />
       </div>
     </div>
   );

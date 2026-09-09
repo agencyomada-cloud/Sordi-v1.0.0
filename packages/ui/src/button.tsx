@@ -9,12 +9,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Inner top-edge highlight (a restrained glass touch) on top of the
-        // existing soft->elevated shadow lift on hover.
-        default:
-          "bg-primary text-primary-foreground hover:bg-primary-hover shadow-[var(--shadow-soft),inset_0_1px_0_0_rgba(255,255,255,0.15)] hover:shadow-[var(--shadow-elevated),inset_0_1px_0_0_rgba(255,255,255,0.15)]",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-soft",
-        outline: "border border-border bg-card hover:bg-secondary hover:text-foreground shadow-sm",
+        // Clean/minimal direction: solid fills carry no shadow at all —
+        // depth-via-border doesn't apply to a filled control the way it
+        // does to a card/panel, so these just lean on the color change.
+        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-border bg-card hover:bg-secondary hover:text-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-secondary hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",

@@ -47,6 +47,7 @@ const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: "default" |
   partial: { label: "Partielle", variant: "outline" },
   overdue: { label: "En retard", variant: "destructive" },
   cancelled: { label: "Annulée", variant: "secondary" },
+  converted: { label: "Convertie", variant: "outline" },
 };
 
 export default function ClientDetailPage() {
@@ -1858,13 +1859,16 @@ export default function ClientDetailPage() {
               <Button
                 type="submit"
                 disabled={
-                  updateClient.isPending ||
+                  addClientAdvance.isPending ||
+                  updateClientAdvance.isPending ||
                   addAdvanceAmount <= 0 ||
                   ((addAdvancePaymentMode === "Chèque" || addAdvancePaymentMode === "Virement") && (!addAdvanceBank.trim() || !addAdvanceReference.trim()))
                 }
                 className="rounded-full"
               >
-                {updateClient.isPending ? "Ajout..." : "Confirmer l'avance"}
+                {(addClientAdvance.isPending || updateClientAdvance.isPending)
+                  ? (editingAdvanceId ? "Modification..." : "Ajout...")
+                  : "Confirmer l'avance"}
               </Button>
             </div>
           </form>

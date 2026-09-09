@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useSettings } from "@/hooks/useSettings";
+import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { resolveInvoiceHtmlTheme } from "./invoiceHtmlShared";
 import { useEditableInvoiceLogic } from "./useEditableInvoiceLogic";
 import { EditableInvoiceStructure } from "./EditableInvoiceStructure";
 import { EditableInvoiceEpure } from "./EditableInvoiceEpure";
 import { EditableInvoiceModerne } from "./EditableInvoiceModerne";
+
+const DEFAULT_STAMP_SIZE = 140;
 
 interface EditableInvoicePreviewProps {
   invoice: any;
@@ -85,10 +87,51 @@ export function ScaleToFit({ children }: { children: React.ReactNode }) {
  */
 export function EditableInvoicePreview({ invoice, onInvoiceChange, clients, products }: EditableInvoicePreviewProps) {
   const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
   const theme = resolveInvoiceHtmlTheme(settings);
   const logic = useEditableInvoiceLogic(invoice, onInvoiceChange);
 
-  const props = { invoice, onInvoiceChange, clients, products, settings, logic };
+  const [stampSize, setStampSize] = useState(() => {
+    return Number(invoice?.stamp_size || settings?.stamp_size || DEFAULT_STAMP_SIZE);
+  });
+  const [hasLocalOverride, setHasLocalOverride] = useState(false);
+
+  useEffect(() => {
+    if (!hasLocalOverride) {
+      if (invoice?.stamp_size) {
+        setStampSize(Number(invoice.stamp_size));
+      } else if (settings?.stamp_size) {
+        setStampSize(Number(settings.stamp_size));
+      }
+    }
+  }, [invoice?.stamp_size, settings?.stamp_size, hasLocalOverride]);
+
+  const handleStampSizeChange = (v: number) => {
+    setStampSize(v);
+    setHasLocalOverride(true);
+    if (onInvoiceChange && invoice) {
+      onInvoiceChange({ ...invoice, stamp_size: v });
+    }
+  };
+
+  const handleStampSizeCommit = (v: number) => {
+    updateSettings.mutate({ stamp_size: String(Math.round(v)) });
+    if (onInvoiceChange && invoice) {
+      onInvoiceChange({ ...invoice, stamp_size: v });
+    }
+  };
+
+  const props = {
+    invoice,
+    onInvoiceChange,
+    clients,
+    products,
+    settings,
+    logic,
+    stampSize,
+    onStampSizeChange: handleStampSizeChange,
+    onStampSizeCommit: handleStampSizeCommit,
+  };
 
   return (
     <ScaleToFit>

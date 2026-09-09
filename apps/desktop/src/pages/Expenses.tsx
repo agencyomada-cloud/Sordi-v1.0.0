@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import {
   RiAddLine as Plus,
   RiDeleteBinLine as Trash2,
+  RiPencilLine as Pencil,
   RiReceiptLine as Receipt,
   RiWallet3Line as Wallet,
   RiExpandUpDownLine as ChevronsUpDown,
@@ -10,13 +12,44 @@ import {
   RiStore2Line as StoreIcon,
   RiArrowDownSLine as ChevronDown,
 } from "@remixicon/react";
-import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, Label, Input, Textarea, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Tooltip, TooltipTrigger, TooltipContent, Collapsible, CollapsibleTrigger, CollapsibleContent } from "@sordi/ui";
+import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, Label, Input, Textarea, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Tooltip, TooltipTrigger, TooltipContent, Collapsible, CollapsibleTrigger, CollapsibleContent, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@sordi/ui";
 import { MetricStrip } from "@/components/ui/metric-strip";
 import { DatePicker } from "@/components/ui/date-picker";
-import { useExpenses, useCreateExpense, useDeleteExpense, useExpenseStats } from "@/hooks/useExpenses";
+import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, useExpenseStats } from "@/hooks/useExpenses";
 import { useProjects } from "@/hooks/useProjects";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { cn } from "@/lib/utils";
+import type { Expense } from "@/lib/database";
+
+const isExpensePaid = (expense: Expense) => expense.is_paid !== false;
+
+const formatPaymentMethod = (method: string | null | undefined) => {
+  const key = (method || "").trim().toLowerCase();
+  if (key === "cash" || key === "especes" || key === "espèces") return "Espèces";
+  if (key === "cheque" || key === "chèque") return "Chèque";
+  if (key === "transfer" || key === "virement") return "Virement";
+  if (key === "card" || key === "carte") return "Carte";
+  // No payment method was recorded — a cash/bank outlay is the overwhelmingly
+  // common case for this app's expenses, so that's a more useful default
+  // than a bare, unscannable dash.
+  return "Espèces / Virement";
+};
+
+// Some pre-existing/imported rows carry French-language payment_method
+// values ("virement", "especes", "carte") instead of the canonical English
+// keys the Select below actually offers ("transfer", "cash", "card") — fed
+// straight into the Select, those render as a blank trigger since nothing
+// matches. Normalize to a canonical key before populating the edit form.
+const normalizePaymentMethod = (method: string | null | undefined): string => {
+  const key = (method || "").trim().toLowerCase();
+  if (key === "especes" || key === "espèces") return "cash";
+  if (key === "chèque") return "cheque";
+  if (key === "virement") return "transfer";
+  if (key === "carte") return "card";
+  if (["cash", "cheque", "transfer", "card"].includes(key)) return key;
+  return "cash";
+};
 
 const Expenses = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +59,19 @@ const Expenses = () => {
   const [projectComboOpen, setProjectComboOpen] = useState(false);
   const [supplierComboOpen, setSupplierComboOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "pending">("all");
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    expense_date: "",
+    category: "",
+    description: "",
+    amount: "",
+    payment_method: "cash",
+    project_id: "",
+    is_paid: true,
+  });
+  const [editProjectComboOpen, setEditProjectComboOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     expense_date: new Date().toISOString().split("T")[0],
@@ -37,6 +83,7 @@ const Expenses = () => {
     notes: "",
     project_id: "",
     supplier_id: "",
+    is_paid: true,
   });
 
   const { data: expenses, isLoading } = useExpenses(undefined); // Fetch all expenses
@@ -48,9 +95,11 @@ const Expenses = () => {
   const { data: projects } = useProjects();
   const { data: suppliers } = useSuppliers();
   const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
   const selectedProject = projects?.find((p) => p.id === formData.project_id);
   const selectedSupplier = suppliers?.find((s) => s.id === formData.supplier_id);
+  const editSelectedProject = projects?.find((p) => p.id === editFormData.project_id);
 
   // "Nouvelle dépense associée" from the Suppliers page arrives as
   // /expenses?supplier_id=X — open the create dialog with that supplier
@@ -75,16 +124,22 @@ const Expenses = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Montant invalide");
+      return;
+    }
     createExpense.mutate({
       expense_date: formData.expense_date,
       category: formData.category,
       description: formData.description || undefined,
-      amount: parseFloat(formData.amount),
+      amount,
       payment_method: formData.payment_method,
       reference: formData.reference || undefined,
       notes: formData.notes || undefined,
       project_id: formData.project_id || undefined,
       supplier_id: formData.supplier_id || undefined,
+      is_paid: formData.is_paid,
     }, {
       onSuccess: () => {
         setIsDialogOpen(false);
@@ -99,12 +154,48 @@ const Expenses = () => {
           notes: "",
           project_id: "",
           supplier_id: "",
+          is_paid: true,
         });
       }
     });
   };
 
-  // Filter by search query and selected months
+  const openEditDialog = (expense: Expense) => {
+    setEditingExpense(expense);
+    setEditFormData({
+      expense_date: expense.expense_date,
+      category: expense.category,
+      description: expense.description || "",
+      amount: String(expense.amount),
+      payment_method: normalizePaymentMethod(expense.payment_method),
+      project_id: expense.project_id || "",
+      is_paid: isExpensePaid(expense),
+    });
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense) return;
+    const amount = parseFloat(editFormData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Montant invalide");
+      return;
+    }
+    updateExpense.mutate({
+      id: editingExpense.id,
+      expense_date: editFormData.expense_date,
+      category: editFormData.category,
+      description: editFormData.description || undefined,
+      amount,
+      payment_method: editFormData.payment_method,
+      project_id: editFormData.project_id || undefined,
+      is_paid: editFormData.is_paid,
+    }, {
+      onSuccess: () => setEditingExpense(null),
+    });
+  };
+
+  // Filter by search query, selected months, and payment status
   const filteredExpenses = expenses?.filter(expense => {
     const matchesSearch = expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       expense.category.toLowerCase().includes(searchQuery.toLowerCase());
@@ -119,8 +210,14 @@ const Expenses = () => {
         return m === month.replace(/^0/, ''); // Remove leading zero
       });
 
-    return matchesSearch && matchesMonth;
+    const matchesStatus = statusFilter === "all" ||
+      (statusFilter === "paid" ? isExpensePaid(expense) : !isExpensePaid(expense));
+
+    return matchesSearch && matchesMonth && matchesStatus;
   }) || [];
+
+  const paidCount = (expenses ?? []).filter(isExpensePaid).length;
+  const pendingCount = (expenses ?? []).length - paidCount;
 
   // Charges/CA ratio needs both sides scoped to the same year — `stats` above
   // is all-time, so the numerator is recomputed here from the current year's
@@ -154,15 +251,15 @@ const Expenses = () => {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Charges & Dépenses</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos charges et suivez vos dépenses</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dépenses & Charges</h1>
+              <p className="text-xs text-slate-500 mt-1">Gérez vos charges et suivez vos dépenses</p>
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
                   <Plus className="w-4 h-4 mr-2" />
                   Nouvelle Charge
                 </Button>
@@ -185,6 +282,7 @@ const Expenses = () => {
                       <Label className="text-sm text-muted-foreground">Montant (DA)</Label>
                       <Input
                         type="number"
+                        min="0"
                         placeholder="0"
                         value={formData.amount}
                         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -203,6 +301,27 @@ const Expenses = () => {
                       required
                       className="mt-1.5"
                     />
+                  </div>
+
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Statut</Label>
+                    <div className="flex items-center gap-1 p-1 mt-1.5 bg-secondary/30 w-fit rounded-xl border border-border/50">
+                      {([{ value: true, label: "Payée" }, { value: false, label: "À payer" }] as const).map((opt) => (
+                        <button
+                          key={String(opt.value)}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, is_paid: opt.value })}
+                          className={cn(
+                            "px-4 py-2 text-sm font-medium transition-all rounded-lg",
+                            formData.is_paid === opt.value
+                              ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div>
@@ -243,6 +362,7 @@ const Expenses = () => {
                               <SelectItem value="cash">Espèces</SelectItem>
                               <SelectItem value="cheque">Chèque</SelectItem>
                               <SelectItem value="transfer">Virement</SelectItem>
+                              <SelectItem value="card">Carte</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -412,7 +532,7 @@ const Expenses = () => {
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6 relative z-30">
+          <div className="flex flex-col sm:flex-row gap-4 mb-4 relative z-30">
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
@@ -430,6 +550,37 @@ const Expenses = () => {
             </div>
           </div>
 
+          {/* Payment-status filter — same segmented-pill pattern used
+              elsewhere in the app for view tabs with counts. */}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            {([
+              { key: "all", label: "Toutes", count: expenses?.length || 0 },
+              { key: "paid", label: "Payées", count: paidCount },
+              { key: "pending", label: "À payer", count: pendingCount },
+            ] as const).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-all",
+                  statusFilter === tab.key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-border/50 hover:border-primary/40 hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                <span
+                  className={cn(
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums",
+                    statusFilter === tab.key ? "bg-primary-foreground/20" : "bg-secondary text-foreground/70"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
           {/* Table — borderless outer surface, resting directly on the page canvas. */}
           <div>
             <Table>
@@ -441,15 +592,16 @@ const Expenses = () => {
                   <TableHead className="hidden lg:table-cell">Projet</TableHead>
                   <TableHead className="hidden sm:table-cell">Mode</TableHead>
                   <TableHead numeric>Montant</TableHead>
-                  <TableHead className="w-14"></TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableLoading columns={7} rows={5} />
+                  <TableLoading columns={8} rows={5} />
                 ) : filteredExpenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <EmptyState
                         type="expenses"
                         title="Aucune charge"
@@ -465,7 +617,7 @@ const Expenses = () => {
                     </TableCell>
                   </TableRow>
                 ) : filteredExpenses.map((expense) => (
-                  <TableRow key={expense.id}>
+                  <TableRow key={expense.id} onDoubleClick={() => openEditDialog(expense)} className="cursor-pointer">
                     <TableCell className="text-muted-foreground">
                       {new Date(expense.expense_date).toLocaleDateString("fr-FR")}
                     </TableCell>
@@ -494,16 +646,38 @@ const Expenses = () => {
                         <span className="text-muted-foreground text-xs">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="capitalize text-muted-foreground hidden sm:table-cell">{expense.payment_method}</TableCell>
+                    <TableCell className="text-muted-foreground hidden sm:table-cell">{formatPaymentMethod(expense.payment_method)}</TableCell>
                     <TableCell numeric className="font-medium text-destructive">
                       -{formatCurrency(expense.amount)}
                     </TableCell>
                     <TableCell>
-                      <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                      {isExpensePaid(expense) ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
+                          Payée
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                          À payer
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => deleteExpense.mutate(expense.id)}
+                              onClick={() => openEditDialog(expense)}
+                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                            >
+                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Modifier</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => setExpenseToDelete(expense)}
                               className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
@@ -520,6 +694,190 @@ const Expenses = () => {
           </div>
           </div>
       </main>
+
+      {/* Edit Expense Modal — opened from the row's pencil action or a
+          double-click on the row itself, pre-populated from the expense
+          being edited. */}
+      <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Modifier la charge</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm text-muted-foreground">Date</Label>
+                <DatePicker
+                  value={editFormData.expense_date}
+                  onChange={(v) => setEditFormData({ ...editFormData, expense_date: v })}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Montant (DA)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editFormData.amount}
+                  onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                  required
+                  className="mt-1.5"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Catégorie *</Label>
+              <Input
+                placeholder="Ex: Électricité, Carburant, Salaires..."
+                value={editFormData.category}
+                onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                required
+                className="mt-1.5"
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Description</Label>
+              <Input
+                placeholder="Description de la charge"
+                value={editFormData.description}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                className="mt-1.5"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm text-muted-foreground">Mode de paiement</Label>
+                <Select
+                  value={editFormData.payment_method}
+                  onValueChange={(v) => setEditFormData({ ...editFormData, payment_method: v })}
+                >
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Espèces</SelectItem>
+                    <SelectItem value="cheque">Chèque</SelectItem>
+                    <SelectItem value="transfer">Virement</SelectItem>
+                    <SelectItem value="card">Carte</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">Projet associé</Label>
+                <Popover open={editProjectComboOpen} onOpenChange={setEditProjectComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      className="mt-1.5 w-full justify-between font-normal"
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <FolderIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                        {editSelectedProject?.name || "Aucun projet"}
+                      </span>
+                      <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Rechercher un projet..." />
+                      <CommandList>
+                        <CommandEmpty>Aucun projet trouvé.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="__none__"
+                            onSelect={() => {
+                              setEditFormData({ ...editFormData, project_id: "" });
+                              setEditProjectComboOpen(false);
+                            }}
+                          >
+                            Aucun projet
+                          </CommandItem>
+                          {projects?.map((project) => (
+                            <CommandItem
+                              key={project.id}
+                              value={project.name}
+                              onSelect={() => {
+                                setEditFormData({ ...editFormData, project_id: project.id });
+                                setEditProjectComboOpen(false);
+                              }}
+                            >
+                              {project.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Statut</Label>
+              <div className="flex items-center gap-1 p-1 mt-1.5 bg-secondary/30 w-fit rounded-xl border border-border/50">
+                {([{ value: true, label: "Payée" }, { value: false, label: "À payer" }] as const).map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => setEditFormData({ ...editFormData, is_paid: opt.value })}
+                    className={cn(
+                      "px-4 py-2 text-sm font-medium transition-all rounded-lg",
+                      editFormData.is_paid === opt.value
+                        ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="ghost" onClick={() => setEditingExpense(null)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={updateExpense.isPending}>
+                {updateExpense.isPending ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!expenseToDelete} onOpenChange={(open) => !open && setExpenseToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette charge ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {expenseToDelete && (
+                <>
+                  "{expenseToDelete.description || expenseToDelete.category}" — {formatCurrency(expenseToDelete.amount)} du{" "}
+                  {expenseToDelete.expense_date}. Cette action est irréversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (expenseToDelete) deleteExpense.mutate(expenseToDelete.id);
+                setExpenseToDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

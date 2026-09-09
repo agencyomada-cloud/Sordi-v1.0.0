@@ -12,8 +12,8 @@ export default {
   prefix: "",
   theme: {
     // Every key resolves from the --radius-* variables in src/index.css
-    // (all currently 6px / 4px for a flat corporate look) instead of literal
-    // values, so the whole app's radius scale stays driven from one place.
+    // (10px / 8px / 16px / 20px) instead of literal values, so the whole
+    // app's radius scale stays driven from one place.
     borderRadius: {
       none: "0px",
       sm: "var(--radius-sm)",
@@ -35,10 +35,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        // Plus Jakarta Sans for Latin/French, Readex Pro as the Arabic
-        // pairing (see src/i18n) — both geometric, modern SaaS faces.
-        sans: ['"Plus Jakarta Sans"', '"Readex Pro"', 'sans-serif'],
-        display: ['"Plus Jakarta Sans"', '"Readex Pro"', 'sans-serif'],
+        // Inter for Latin/French (AgentOps-blue direction), Readex Pro as
+        // the Arabic pairing (see src/i18n).
+        sans: ['"Inter"', '"Readex Pro"', 'sans-serif'],
+        display: ['"Inter"', '"Readex Pro"', 'sans-serif'],
         // Financial/tabular data only — monetary values, document numbers,
         // stats. Not the body font: JetBrains Mono is a true monospace,
         // Space Grotesk a geometric fallback, neither suited to prose.
@@ -50,6 +50,9 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Inner panel between the outer canvas (background) and white
+        // cards — the AgentOps-blue direction's 3-tier depth.
+        surface: "hsl(var(--surface))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -116,11 +119,24 @@ export default {
           "5": "hsl(var(--chart-5))",
         },
       },
+      // Clean/minimal direction: depth is drawn with a border, not a
+      // shadow. This zeroes out both Tailwind's own default scale (sm,
+      // DEFAULT, md, lg, xl, 2xl, inner) and the app's own soft/card/
+      // elevated/glow tokens in one place, so every `shadow-*` utility
+      // anywhere in the app — present or future — renders as none instead
+      // of requiring every call site to be hunted down individually.
       boxShadow: {
-        soft: "var(--shadow-soft)",
-        card: "var(--shadow-card)",
-        elevated: "var(--shadow-elevated)",
-        glow: "var(--shadow-glow)",
+        sm: "none",
+        DEFAULT: "none",
+        md: "none",
+        lg: "none",
+        xl: "none",
+        "2xl": "none",
+        inner: "none",
+        soft: "none",
+        card: "none",
+        elevated: "none",
+        glow: "none",
       },
       keyframes: {
         "accordion-down": {

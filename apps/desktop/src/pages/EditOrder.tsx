@@ -91,6 +91,11 @@ export default function EditOrderPage() {
             return;
         }
 
+        if (validItems.some((item: any) => (item.unit_price ?? 0) < 0)) {
+            toast.error("Le prix unitaire ne peut pas être négatif");
+            return;
+        }
+
         updateOrder.mutate({
             id,
             data: {

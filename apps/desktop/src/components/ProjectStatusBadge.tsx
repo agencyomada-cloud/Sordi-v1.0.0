@@ -1,5 +1,5 @@
 import type { ProjectStatus } from "@/lib/projectOverview";
-import { statusBadgeVariants, StatusDot } from "@sordi/ui";
+import { statusBadgeVariants } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 
 interface ProjectStatusBadgeProps {
@@ -9,8 +9,7 @@ interface ProjectStatusBadgeProps {
 
 export function ProjectStatusBadge({ status, className }: ProjectStatusBadgeProps) {
   return (
-    <span className={cn(statusBadgeVariants(), className)}>
-      <StatusDot tone={status.tone} />
+    <span className={cn(statusBadgeVariants({ tone: status.tone }), className)}>
       {status.label}
     </span>
   );

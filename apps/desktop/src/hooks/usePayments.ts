@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { paymentSchema } from "@/lib/validations";
+import { paymentSchema, updatePaymentSchema } from "@/lib/validations";
 import { logError } from "@/lib/errorLogger";
-import { db, type Payment, type CreatePaymentData, type PaymentAttachment } from "@/lib/database";
+import { db, type Payment, type CreatePaymentData, type UpdatePaymentData, type PaymentAttachment } from "@/lib/database";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
 export function usePayments(invoiceId?: string) {
@@ -56,9 +56,13 @@ export function useUpdatePayment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Omit<CreatePaymentData, "company_id"> }) => {
-      const validated = paymentSchema.parse(data) as Omit<CreatePaymentData, "company_id">;
-      return await db.payments.update(id, validated);
+    mutationFn: async (data: UpdatePaymentData) => {
+      // Validate only — the backend's UpdatePaymentData shape (with `id`,
+      // without `invoice_id`) doesn't line up with zod's inferred output
+      // closely enough to spread it back out, so `data` itself (already
+      // correctly typed) is what actually gets sent.
+      updatePaymentSchema.parse(data);
+      return await db.payments.update(data);
     },
     onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ["payments"] });

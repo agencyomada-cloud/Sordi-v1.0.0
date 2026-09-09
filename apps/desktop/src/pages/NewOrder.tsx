@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useNavigate } from "react-router-dom";
@@ -62,40 +62,43 @@ export default function NewOrderPage() {
     total_ttc: 0,
   });
 
-  // Auto-fill order number when loaded
+  // Auto-fill order number once when it first loads — a ref flag (not
+  // draftOrder.order_number itself) guards this, so clearing the field by
+  // hand afterward doesn't get silently overwritten by this effect firing
+  // again with the same nextOrderNumber.
+  const orderNumberAutoFilled = useRef(false);
   useEffect(() => {
-    if (nextOrderNumber && !draftOrder.order_number) {
+    if (nextOrderNumber && !orderNumberAutoFilled.current) {
+      orderNumberAutoFilled.current = true;
       setDraftOrder(prev => ({ ...prev, order_number: nextOrderNumber }));
     }
   }, [nextOrderNumber]);
 
-  // Calculate totals whenever items change
-  useMemo(() => {
-    const subtotal = draftOrder.items.reduce((sum, l) => sum + (l.quantity || 0) * (l.unit_price || 0), 0);
+  // Calculate totals whenever items change — useEffect (its return value
+  // was never used as a useMemo). Reading prev.* inside the updater instead
+  // of draftOrder.* from the outer closure means the guard always sees the
+  // latest totals without needing them as dependencies — they only ever
+  // change as a result of this same effect running.
+  useEffect(() => {
+    setDraftOrder(prev => {
+      const subtotal = prev.items.reduce((sum, l) => sum + (l.quantity || 0) * (l.unit_price || 0), 0);
 
-    let tvaAmount = 0;
-    draftOrder.items.forEach(item => {
-      const itemAmount = (item.quantity || 0) * (item.unit_price || 0);
-      const tvaRate = item.tva_rate === undefined ? 19.0 : item.tva_rate;
-      if (tvaRate && tvaRate > 0) {
-        tvaAmount += itemAmount * (tvaRate / 100);
+      let tvaAmount = 0;
+      prev.items.forEach(item => {
+        const itemAmount = (item.quantity || 0) * (item.unit_price || 0);
+        const tvaRate = item.tva_rate === undefined ? 19.0 : item.tva_rate;
+        if (tvaRate && tvaRate > 0) {
+          tvaAmount += itemAmount * (tvaRate / 100);
+        }
+      });
+
+      const total = subtotal + tvaAmount;
+
+      if (subtotal === prev.subtotal_ht && tvaAmount === prev.tva_amount && total === prev.total_ttc) {
+        return prev;
       }
+      return { ...prev, subtotal_ht: subtotal, tva_amount: tvaAmount, total_ttc: total };
     });
-
-    const total = subtotal + tvaAmount;
-
-    if (
-      subtotal !== draftOrder.subtotal_ht ||
-      tvaAmount !== draftOrder.tva_amount ||
-      total !== draftOrder.total_ttc
-    ) {
-      setDraftOrder(prev => ({
-        ...prev,
-        subtotal_ht: subtotal,
-        tva_amount: tvaAmount,
-        total_ttc: total
-      }));
-    }
   }, [draftOrder.items]);
 
   const handleOrderChange = (updatedOrder: any) => {
@@ -111,6 +114,11 @@ export default function NewOrderPage() {
     const validLines = draftOrder.items.filter((l) => (l.product_name?.trim() || l.product_code?.trim()) && l.quantity > 0);
     if (validLines.length === 0) {
       toast.error("Ajoutez au moins un produit");
+      return;
+    }
+
+    if (validLines.some((l) => (l.unit_price ?? 0) < 0)) {
+      toast.error("Le prix unitaire ne peut pas être négatif");
       return;
     }
 

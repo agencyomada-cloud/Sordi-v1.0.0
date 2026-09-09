@@ -42,13 +42,19 @@ export interface PaymentStats {
   unpaid: number;
   initial_debt: number;
   total_receivables: number;
+  outstanding_invoice_count: number;
 }
 
 export interface TimePointStats {
   label: string;
   revenue: number;
+  /** Combined total (expenses_only + payroll_amount). */
   expenses: number;
   profit: number;
+  /** `expenses` table only, no payroll folded in. */
+  expenses_only: number;
+  /** Settled payroll for this period — always 0 in daily_data. */
+  payroll_amount: number;
 }
 
 export interface ProductSalesStat {
@@ -366,6 +372,8 @@ export interface Invoice {
   project_id?: string | null;
   /** Defaults to "standard" on the Rust side for any row created before this column existed. */
   tax_mode?: InvoiceTaxMode;
+  /** Set once a proforma has been converted — points at the invoice it became. */
+  converted_to_invoice_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -374,6 +382,10 @@ export interface InvoiceWithClient extends Invoice {
   clients?: {
     name: string;
     email: string | null;
+  };
+  projects?: {
+    name: string;
+    service_categories: string | null;
   };
 }
 
@@ -442,6 +454,17 @@ export interface CreatePaymentData {
   bank_name?: string;
   value_date?: string;
   notes?: string;
+  employee_id?: string;
+}
+
+export interface UpdatePaymentData {
+  id: string;
+  payment_date: string;
+  amount: number;
+  payment_method?: string;
+  cheque_number?: string;
+  bank_name?: string;
+  value_date?: string;
   employee_id?: string;
 }
 
@@ -633,6 +656,10 @@ export interface Expense {
   supplier_name?: string | null;
   is_recurring?: boolean | null;
   recurrence_interval?: string | null;
+  /** Payment-completion flag for the Charges & Dépenses page's STATUT
+   *  column — true (the default) means the cash was actually disbursed,
+   *  false means a recorded commitment still "à payer". */
+  is_paid: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -650,6 +677,18 @@ export interface CreateExpenseData {
   supplier_id?: string;
   is_recurring?: boolean;
   recurrence_interval?: string;
+  is_paid?: boolean;
+}
+
+export interface UpdateExpenseData {
+  id: string;
+  expense_date: string;
+  category: string;
+  description?: string;
+  amount: number;
+  payment_method?: string;
+  project_id?: string;
+  is_paid: boolean;
 }
 
 
@@ -709,6 +748,9 @@ export interface CreateEmployeeData {
   contract_type?: string | null;
   rib?: string | null;
   external_code?: string | null;
+  /** Only consulted by the update path — creating an employee always
+   *  starts them active. */
+  is_active?: boolean;
 }
 
 export interface EmployeeDocument {
@@ -739,6 +781,24 @@ export interface EmployeeAbsenceStats {
   flagged: boolean;
 }
 
+export type DayAttendanceStatus = "present" | "late" | "absent" | "weekend";
+
+export interface DayAttendance {
+  date: string;
+  status: DayAttendanceStatus;
+  arrival_time: string | null;
+  late_minutes: number | null;
+}
+
+export interface EmployeeDailyAttendance {
+  employee_id: string;
+  month: string;
+  days: DayAttendance[];
+  present_count: number;
+  late_count: number;
+  absent_count: number;
+}
+
 export interface PunchImportRow {
   external_code: string;
   punch_time: string;
@@ -747,6 +807,7 @@ export interface PunchImportRow {
 export interface PunchImportSummary {
   imported: number;
   skipped_duplicates: number;
+  invalid_format: number;
   unmatched_employee_codes: string[];
 }
 
@@ -794,6 +855,7 @@ export interface PayrollRun {
   paid_date: string | null;
   created_at: string;
   updated_at: string;
+  notes: string | null;
 }
 
 export interface PayrollDashboardStats {
@@ -801,6 +863,20 @@ export interface PayrollDashboardStats {
   total_payroll_cost: number;
   flagged_employee_count: number;
   pending_payroll_count: number;
+}
+
+export interface EmployeeHrStats {
+  active_count: number;
+  inactive_count: number;
+  monthly_payroll: number;
+  total_paid_year: number;
+}
+
+export interface EmployeePayrollSummary {
+  employee_id: string;
+  total_paid: number;
+  last_paid_month: string | null;
+  last_paid_amount: number | null;
 }
 
 export interface UpdatePayrollRunData {
@@ -813,6 +889,7 @@ export interface UpdatePayrollRunData {
   primes: number;
   avance_deduction: number;
   net_a_payer: number;
+  notes?: string | null;
 }
 
 // ============= CLIENT DRAFT PRODUCTS =============
@@ -844,6 +921,11 @@ export interface CreateClientDraftProductData {
 
 export type FreelancePaymentStatus = "non_paye" | "paye";
 
+/** Explicit, manually-set operational lifecycle status — never computed
+ *  from payment/task data. See PROJECT_STATUS_STYLES in projectOverview.ts
+ *  for the label/tone each one renders as. */
+export type ProjectLifecycleStatus = "en_cours" | "termine" | "en_pause";
+
 export interface Project {
   id: string;
   company_id: string | null;
@@ -861,6 +943,7 @@ export interface Project {
   montant_convenu: number | null;
   statut_paiement: FreelancePaymentStatus;
   date_paiement: string | null;
+  status: ProjectLifecycleStatus;
 }
 
 export interface CreateProjectData {
@@ -874,6 +957,7 @@ export interface CreateProjectData {
   planned_budget: number;
   freelancer_id?: string | null;
   montant_convenu?: number | null;
+  status?: ProjectLifecycleStatus;
 }
 
 export interface FreelancePayment {
@@ -1270,16 +1354,19 @@ export const db = {
     update: (id: string, data: Omit<CreateInvoiceData, "company_id">): Promise<Invoice> => safeInvoke("update_invoice", { id, data }, () => mockStore.updateInvoice(id, data as CreateInvoiceData)),
     updateStatus: (id: string, status: string) => safeInvoke("update_invoice_status", { id, status }, () => mockStore.updateInvoiceStatus(id, status)),
     updateHeader: (id: string, invoiceNumber: string, customTitle: string | null) =>
-      safeInvoke("update_invoice_header", { id, invoiceNumber, customTitle }, () => {}),
+      safeInvoke("update_invoice_header", { id, invoiceNumber, customTitle }, () => mockStore.updateInvoiceHeader(id, invoiceNumber, customTitle)),
     delete: (id: string) => safeInvoke("delete_invoice", { id }, () => mockStore.deleteInvoice(id)),
-    convertProforma: (id: string): Promise<Invoice> => safeInvoke("convert_to_real_invoice", { id }, () => mockStore.getInvoice(id)!),
+    // Clones the proforma into a brand-new invoice (its own number, today's
+    // date) and marks the source proforma "converted" — it stays visible,
+    // linked to the invoice it became, rather than being mutated in place.
+    convertProforma: (id: string): Promise<Invoice> => safeInvoke("convert_proforma_to_invoice", { id }, () => mockStore.getInvoice(id)!),
   },
 
   // Payments
   payments: {
     getAll: (company_id: string, invoice_id?: string): Promise<Payment[]> => safeInvoke("get_payments", { companyId: company_id, invoice_id }, () => mockStore.getPayments(invoice_id)),
     create: (data: CreatePaymentData): Promise<Payment> => safeInvoke("create_payment", { data }, () => mockStore.createPayment(data)),
-    update: (id: string, data: Omit<CreatePaymentData, "company_id">): Promise<Payment> => safeInvoke("update_payment", { id, data }, () => mockStore.createPayment(data as CreatePaymentData)),
+    update: (data: UpdatePaymentData): Promise<Payment> => safeInvoke("update_payment", { data }),
     delete: (id: string): Promise<void> => safeInvoke("delete_payment", { id }, () => mockStore.deletePayment(id)),
   },
 
@@ -1322,6 +1409,7 @@ export const db = {
     getAll: (company_id: string, month_period?: string, project_id?: string): Promise<Expense[]> =>
       safeInvoke("get_expenses", { companyId: company_id, month_period, project_id }, () => mockStore.getExpenses(month_period, project_id)),
     create: (data: CreateExpenseData): Promise<Expense> => safeInvoke("create_expense", { data }, () => mockStore.createExpense(data)),
+    update: (data: UpdateExpenseData): Promise<Expense> => safeInvoke("update_expense", { data }, () => mockStore.updateExpense(data)),
     delete: (id: string): Promise<void> => safeInvoke("delete_expense", { id }, () => mockStore.deleteExpense(id)),
   },
 
@@ -1377,6 +1465,8 @@ export const db = {
   payroll: {
     getAbsenceStats: (employee_id: string, month: string): Promise<EmployeeAbsenceStats> =>
       safeInvoke("get_employee_absence_stats", { employeeId: employee_id, month }),
+    getDailyAttendance: (employee_id: string, month: string): Promise<EmployeeDailyAttendance> =>
+      safeInvoke("get_employee_daily_attendance", { employeeId: employee_id, month }),
     run: (employee_id: string, month: string, primes?: number): Promise<PayrollRun> =>
       safeInvoke("run_payroll", { employeeId: employee_id, month, primes }),
     getRuns: (employee_id?: string, month?: string, paid?: boolean): Promise<PayrollRun[]> =>
@@ -1387,6 +1477,10 @@ export const db = {
     delete: (id: string): Promise<void> => safeInvoke("delete_payroll_run", { id }),
     getDashboardStats: (company_id: string, month: string): Promise<PayrollDashboardStats> =>
       safeInvoke("get_payroll_dashboard_stats", { companyId: company_id, month }, () => ({ month, total_payroll_cost: 0, flagged_employee_count: 0, pending_payroll_count: 0 })),
+    getHrStats: (company_id: string, year: string): Promise<EmployeeHrStats> =>
+      safeInvoke("get_employee_hr_stats", { companyId: company_id, year }, () => ({ active_count: 0, inactive_count: 0, monthly_payroll: 0, total_paid_year: 0 })),
+    getEmployeeSummaries: (company_id: string): Promise<EmployeePayrollSummary[]> =>
+      safeInvoke("get_employee_payroll_summaries", { companyId: company_id }, () => []),
   },
 
   // Projects (omada-agency branch only)
@@ -1396,6 +1490,7 @@ export const db = {
     create: (data: CreateProjectData): Promise<Project> => safeInvoke("create_project", { data }),
     update: (id: string, data: Omit<CreateProjectData, "company_id">): Promise<Project> => safeInvoke("update_project", { id, data }),
     delete: (id: string): Promise<void> => safeInvoke("delete_project", { id }),
+    updateStatus: (id: string, status: ProjectLifecycleStatus): Promise<Project> => safeInvoke("update_project_status", { id, status }),
     setFreelancerPaymentStatus: (project_id: string, statut_paiement: FreelancePaymentStatus, date_paiement: string | null): Promise<Project> =>
       safeInvoke("update_freelancer_payment_status", { projectId: project_id, statutPaiement: statut_paiement, datePaiement: date_paiement }),
     getFreelancePayments: (company_id: string): Promise<FreelancePayment[]> => safeInvoke("get_freelance_payments", { companyId: company_id }, () => []),
@@ -1474,6 +1569,14 @@ export const db = {
   pdfBackup: {
     save: (rootDir: string, clientName: string, docNumber: string, pdfBytes: Uint8Array): Promise<void> =>
       safeInvoke("save_pdf_backup", { rootDir, clientName, docNumber, pdfBytes: Array.from(pdfBytes) }, () => undefined),
+  },
+
+  // Database backup — VACUUM INTO snapshot of the live SQLite file.
+  // Returns the absolute path the backup was written to. Omit destPath to
+  // let the backend write a timestamped file under <app_data_dir>/backups/.
+  database: {
+    backup: (destPath?: string): Promise<string> =>
+      safeInvoke("backup_database", { destPath }, () => Promise.reject(new Error("Database backup is not available outside the desktop app"))),
   },
 };
 

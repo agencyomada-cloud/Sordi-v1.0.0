@@ -2,41 +2,37 @@ import { useState, useEffect, forwardRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  RiDashboardLine,
-  RiGroupLine,
-  RiFileTextLine,
-  RiFileList2Line,
-  RiTruckLine,
-  RiStore2Line,
-  RiBankCardLine,
-  RiBox3Line,
-  RiArrowDownSLine,
-  RiSearchLine,
-  RiReceiptLine,
-  RiFileList3Line,
-  RiMenuLine,
-  RiCloseLine,
-  RiSettings3Line,
-  RiHistoryLine,
-  RiBarChartBoxLine,
-  RiFolderChartLine,
-  RiWalletLine,
-  RiPieChartLine,
-  RiUserSettingsLine,
-  RiPlugLine,
-  RiFileShield2Line,
-  RiArrowLeftSLine as ChevronLeft,
-} from "@remixicon/react";
+  LayoutDashboard,
+  Users,
+  FileText,
+  FileSpreadsheet,
+  Truck,
+  Store,
+  CreditCard,
+  Package,
+  ChevronDown,
+  Receipt,
+  ClipboardList,
+  Menu,
+  X,
+  Settings,
+  History,
+  BarChart3,
+  FolderKanban,
+  Wallet,
+  PieChart,
+  UserCog,
+  Plug,
+  FileCheck2,
+  ChevronLeft,
+} from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/hooks/useLanguage";
-import { AccountPopover } from "@/components/layout/AccountPopover";
-import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import { useSidebarCounts } from "@/hooks/useSidebarCounts";
 import { useGlobalSearch } from "@/hooks/useGlobalSearch";
 import { formatCurrency } from "@/lib/i18nFormat";
 
-const logoIcon = "/brand/sordi-icon.svg";
 const logoHorizontal = "/brand/sordi-logo.svg";
 
 interface NavItem {
@@ -53,7 +49,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-const topItem: NavItem = { icon: RiDashboardLine, labelKey: "dashboard", path: "/" };
+const topItem: NavItem = { icon: LayoutDashboard, labelKey: "dashboard", path: "/" };
 
 // Tree-hierarchy groups — paths point at the sidebar-tree route aliases
 // registered in App.tsx (e.g. /factures), which render the same page
@@ -62,44 +58,48 @@ const topItem: NavItem = { icon: RiDashboardLine, labelKey: "dashboard", path: "
 // full rename so nothing else in the codebase had to change.
 const navGroups: NavGroup[] = [
   {
-    id: "sales",
-    titleKey: "groups.sales",
+    id: "finance",
+    titleKey: "groups.finance",
     items: [
-      { icon: RiFileTextLine, labelKey: "links.invoicing", path: "/factures" },
-      { icon: RiFileList2Line, labelKey: "links.quotes", path: "/devis?tab=proformas" },
-      { icon: RiTruckLine, labelKey: "links.deliveries", path: "/livraisons" },
-      { icon: RiFileShield2Line, labelKey: "links.contracts", path: "/contracts" },
-      { icon: RiGroupLine, labelKey: "links.clients", path: "/clients" },
-    ],
-  },
-  {
-    id: "purchasing",
-    titleKey: "groups.purchasing",
-    items: [
-      { icon: RiReceiptLine, labelKey: "links.expenses", path: "/charges" },
-      { icon: RiStore2Line, labelKey: "links.suppliers", path: "/fournisseurs" },
-      { icon: RiFileList3Line, labelKey: "links.orders", path: "/commandes" },
+      { icon: FileText, labelKey: "links.invoicing", path: "/factures" },
+      { icon: CreditCard, labelKey: "links.payments", path: "/payments" },
+      { icon: FileSpreadsheet, labelKey: "links.quotes", path: "/devis?tab=proformas" },
+      { icon: Receipt, labelKey: "links.expenses", path: "/charges" },
+      { icon: Truck, labelKey: "links.deliveries", path: "/livraisons" },
     ],
   },
   {
     id: "operations",
     titleKey: "groups.operations",
     items: [
-      { icon: RiFolderChartLine, labelKey: "links.projects", path: "/projects" },
-      { icon: RiWalletLine, labelKey: "links.payroll", path: "/paie" },
-      { icon: RiBox3Line, labelKey: "links.catalogue", path: "/stocks" },
+      { icon: FolderKanban, labelKey: "links.projects", path: "/projects" },
+      { icon: FileCheck2, labelKey: "links.contracts", path: "/contracts" },
+      { icon: Package, labelKey: "links.catalogue", path: "/stocks" },
     ],
   },
-  // Payments has no dedicated slot in the new spec'd tree — kept in
-  // Pilotage & RH rather than dropped, so it doesn't lose its sidebar entry.
   {
-    id: "pilotage",
-    titleKey: "groups.pilotage",
+    id: "relations",
+    titleKey: "groups.relations",
     items: [
-      { icon: RiBankCardLine, labelKey: "links.payments", path: "/payments" },
-      { icon: RiBarChartBoxLine, labelKey: "links.analytics", path: "/analyses" },
-      { icon: RiUserSettingsLine, labelKey: "links.employees", path: "/employes" },
-      { icon: RiPieChartLine, labelKey: "links.partners", path: "/associes" },
+      { icon: Users, labelKey: "links.clients", path: "/clients" },
+      { icon: Store, labelKey: "links.suppliers", path: "/fournisseurs" },
+      { icon: ClipboardList, labelKey: "links.orders", path: "/commandes" },
+    ],
+  },
+  {
+    id: "hr",
+    titleKey: "groups.hr",
+    items: [
+      { icon: Wallet, labelKey: "links.payroll", path: "/paie" },
+      { icon: UserCog, labelKey: "links.employees", path: "/employes" },
+    ],
+  },
+  {
+    id: "governance",
+    titleKey: "groups.governance",
+    items: [
+      { icon: BarChart3, labelKey: "links.analytics", path: "/analyses" },
+      { icon: PieChart, labelKey: "links.partners", path: "/associes" },
     ],
   },
 ];
@@ -112,9 +112,9 @@ const systemGroup: NavGroup = {
   id: "system",
   titleKey: "groups.system",
   items: [
-    { icon: RiSettings3Line, labelKey: "links.settings", path: "/settings" },
-    { icon: RiHistoryLine, labelKey: "links.history", path: "/historique" },
-    { icon: RiPlugLine, labelKey: "links.integrations", path: "/integrations" },
+    { icon: Settings, labelKey: "links.settings", path: "/settings" },
+    { icon: History, labelKey: "links.history", path: "/historique" },
+    { icon: Plug, labelKey: "links.integrations", path: "/integrations" },
   ],
 };
 
@@ -173,8 +173,17 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
           });
         }
       };
+      // The visible search trigger lives in the Header now (a sibling
+      // component, not a child), so it opens this dialog via a plain
+      // window event instead of prop-drilling this state up through
+      // AppLayout just for one click handler.
+      const handleOpenEvent = () => setIsCommandPaletteOpen(true);
       window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
+      window.addEventListener("open-command-palette", handleOpenEvent);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("open-command-palette", handleOpenEvent);
+      };
     }, []);
 
     const getBadgeCount = (labelKey: string): number | undefined => {
@@ -221,6 +230,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
       closeCommandPalette(false);
     };
 
+    // One shared pill style for every nav item — top-level (topItem) and
+    // grouped items alike, collapsed rail included — rather than a separate
+    // indented "tree" treatment for grouped items. A blue-tinted pill for
+    // the active route (10% brand-blue rule: the accent shows up only here,
+    // not as a heavy filled block) and a quiet slate hover for everything
+    // else. The active icon already reads blue for free — lucide icons
+    // inherit `currentColor`, and the active className sets text-blue-600.
     const renderNavItem = (item: NavItem) => {
       const label = t(item.labelKey);
       const count = getBadgeCount(item.labelKey);
@@ -231,29 +247,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             onClick={() => handleNavigate(item.path)}
             title={collapsed ? label : undefined}
             className={cn(
-              "group w-full flex items-center py-3 text-sm transition-all duration-200 rounded-xl active:scale-[0.98]",
-              // gap-3 must itself be conditional — a flex `gap` still reserves
-              // space between the icon and the label span even while that
-              // span is animated down to w-0, which is what was nudging the
-              // icon off-center in the collapsed circle.
-              collapsed ? "justify-center px-0 gap-0" : "px-4 gap-3",
+              "group w-full flex items-center gap-2.5 rounded-xl py-2 text-[13px] transition-all active:scale-[0.98]",
+              collapsed ? "justify-center px-0" : "px-3",
               active
-                ? cn(
-                    // Soft accent-tint pill (Crimson/Coral Red rebrand spec:
-                    // bg-[#FDF1F2] text-[#EB3B48] — same tokens as
-                    // sidebar-accent/sidebar-accent-foreground) instead of a
-                    // solid full-saturation fill, so the active item reads
-                    // as a gentle highlight rather than a loud block.
-                    "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
-                    !collapsed && (isRtl ? "-translate-x-1" : "translate-x-1")
-                  )
-                : cn(
-                    "text-sidebar-foreground/60 hover:text-sidebar-primary hover:bg-sidebar-accent/60",
-                    !collapsed && (isRtl ? "hover:-translate-x-1" : "hover:translate-x-1")
-                  )
+                ? "bg-blue-50 text-blue-600 font-semibold shadow-xs dark:bg-sidebar-accent dark:text-sidebar-accent-foreground"
+                : "text-slate-600 font-normal hover:text-slate-900 hover:bg-slate-100/70 dark:text-sidebar-foreground/75 dark:hover:text-sidebar-primary dark:hover:bg-accent-soft"
             )}
           >
-            <item.icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0" />
+            <item.icon className="w-4 h-4 stroke-[1.75] shrink-0" />
             {/* Always mounted (not conditionally rendered) so the collapse
                 itself animates — width/opacity fade, not an instant pop. */}
             <span
@@ -262,13 +263,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
                 collapsed ? "w-0 opacity-0" : "flex-1 opacity-100"
               )}
             >
-              <span className="flex-1 text-start font-medium truncate whitespace-nowrap">{label}</span>
+              <span className="flex-1 text-start truncate whitespace-nowrap">{label}</span>
               {count !== undefined && count > 0 && (
                 <span
                   className={cn(
                     "text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full transition-all duration-200 shrink-0",
                     active
-                      ? "bg-sidebar-accent-foreground/15 text-sidebar-accent-foreground"
+                      ? "bg-blue-600/15 text-blue-600 dark:bg-sidebar-accent-foreground/15 dark:text-sidebar-accent-foreground"
                       : item.labelKey === "links.history"
                         ? "bg-primary/15 text-primary"
                         : "bg-muted/80 text-muted-foreground group-hover:bg-sidebar-accent group-hover:text-foreground"
@@ -283,86 +284,50 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
       );
     };
 
-    // Sub-items inside a collapsible group render with the tree-hierarchy
-    // treatment (indent + left guide line on the group's <ul>) instead of
-    // renderNavItem's pill style — used only inside navGroups/systemGroup,
-    // never for topItem. Active state is a flat, symmetrical rounded pill —
-    // deliberately no left border/edge accent of its own (that artifact,
-    // stacked on top of the group's already-present guide line, read as a
-    // stray red tail rather than a clean highlight).
-    const renderSubNavItem = (item: NavItem) => {
-      const label = t(item.labelKey);
-      const count = getBadgeCount(item.labelKey);
-      const active = isActive(item.path);
-      return (
-        <li key={item.path}>
-          <button
-            onClick={() => handleNavigate(item.path)}
-            className={cn(
-              "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs transition-colors",
-              active
-                ? "bg-[#FDF1F2] dark:bg-[#EB3B48]/10 text-[#EB3B48] font-semibold"
-                : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-100/70 dark:hover:bg-neutral-800/50"
-            )}
-          >
-            <item.icon className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-start truncate">{label}</span>
-            {count !== undefined && count > 0 && (
-              <span
-                className={cn(
-                  "text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full shrink-0",
-                  active ? "bg-[#EB3B48]/15 text-[#EB3B48]" : "bg-muted/80 text-muted-foreground"
-                )}
-              >
-                {count}
-              </span>
-            )}
-          </button>
-        </li>
-      );
-    };
-
     // One collapsible group's header + items — shared between the scrollable
     // navGroups list and the pinned systemGroup footer, so both stay
-    // pixel-identical instead of two hand-duplicated render blocks.
+    // pixel-identical instead of two hand-duplicated render blocks. Every
+    // item (grouped or not) renders through the same renderNavItem pill —
+    // no separate indented "tree" treatment for grouped items.
     const renderGroup = (group: NavGroup, iconOnly: boolean) => {
       const groupCollapsed = !iconOnly && collapsedGroups.has(group.id);
       return (
-        <div key={group.id} className="mt-2">
+        <div key={group.id} className="mt-1">
           {!iconOnly && (
             <button
               type="button"
               onClick={() => toggleGroup(group.id)}
               aria-expanded={!groupCollapsed}
-              className="w-full flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors duration-150"
+              className="w-full flex items-center gap-1.5 px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-500 dark:hover:text-neutral-300 transition-colors duration-150"
             >
               <span className="flex-1 text-start">{t(group.titleKey)}</span>
-              <RiArrowDownSLine
+              <ChevronDown
                 className={cn(
-                  "w-3.5 h-3.5 opacity-70 transition-transform duration-200",
+                  "w-3.5 h-3.5 stroke-[1.75] opacity-70 transition-transform duration-200",
                   groupCollapsed && "-rotate-90"
                 )}
               />
             </button>
           )}
           {!groupCollapsed && (
-            iconOnly ? (
-              <ul className="space-y-1 animate-fade-in duration-200">
-                {group.items.map((item) => renderNavItem(item))}
-              </ul>
-            ) : (
-              // Tree guide line — indented sub-items hang off a left border
-              // so an open group visually reads as a branch of its header,
-              // per the tree-hierarchy spec.
-              <ul className="space-y-1 animate-fade-in duration-200 ms-3 ps-3 border-s border-neutral-200 dark:border-neutral-800">
-                {group.items.map((item) => renderSubNavItem(item))}
-              </ul>
-            )
+            <ul className="space-y-1 animate-fade-in duration-200">
+              {group.items.map((item) => renderNavItem(item))}
+            </ul>
           )}
         </div>
       );
     };
 
+    // A plain function, not a component defined via JSX usage below — a
+    // function component declared inside another component's render body
+    // gets a fresh type reference on every render, which makes React treat
+    // it as a completely different component and fully unmount+remount
+    // the whole subtree instead of reconciling it in place. That silently
+    // broke every CSS transition inside it (freshly-mounted DOM nodes have
+    // no "before" state to animate from) — including the collapse/expand
+    // fades already meant to handle this. Calling it as SidebarContent({...})
+    // instead of <SidebarContent ... /> keeps its output as part of
+    // Sidebar's own element tree, so it reconciles instead of remounting.
     const SidebarContent = ({ iconOnly = false }: { iconOnly?: boolean }) => (
       <>
         {/* Reserves clearance above the logo for the macOS traffic lights
@@ -371,48 +336,48 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             an invisible overlay with no native drag surface of its own. */}
         <div data-tauri-drag-region className="h-9 w-full shrink-0" />
 
-        {/* Logo & Version */}
-        <div className={cn("py-5", iconOnly ? "px-3 flex justify-center" : "px-6")}>
-          {iconOnly ? (
-            <img src={logoIcon} alt="Sordi" title="Sordi" className="h-6 w-6 rounded-lg" />
-          ) : (
-            <div className="flex items-center gap-2.5">
+        {/* Wordmark & Version — fades/collapses away in the icon-only rail
+            (same "always mounted, animate width/opacity" treatment
+            renderNavItem uses) instead of hard-swapping visibility, so it
+            doesn't pop instantly while the <aside> is still 300ms into its
+            own width transition. */}
+        <div
+          className={cn(
+            "flex items-center py-5 transition-all duration-300 ease-in-out",
+            iconOnly ? "px-3 justify-center gap-0" : "px-6 gap-2.5"
+          )}
+        >
+          <div
+            className={cn(
+              // grid-template-columns 1fr/0fr (not width/max-width) — a
+              // flex item with no fixed size can't animate to/from its
+              // "auto" width, it just snaps; max-width didn't animate here
+              // either (browser applied it in under one frame). A grid
+              // track size genuinely interpolates between two fr values.
+              "grid overflow-hidden transition-[grid-template-columns,opacity] duration-300 ease-in-out",
+              iconOnly ? "grid-cols-[0fr] opacity-0" : "grid-cols-[1fr] opacity-100"
+            )}
+          >
+            <div className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap min-w-0">
               <img
                 src={logoHorizontal}
                 alt="Sordi"
-                className="h-6 w-auto object-contain dark:invert"
+                className="h-6 w-auto object-contain dark:invert shrink-0"
               />
-              <span className="text-[11px] font-semibold text-muted-foreground/60 select-none tracking-tight">
-                v1.0.3
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 select-none dark:bg-muted dark:text-muted-foreground">
+                v1.0.4
               </span>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Company / workspace switcher */}
-        <WorkspaceSwitcher iconOnly={iconOnly} />
-
-        {/* Search / command palette trigger */}
-        <div className="px-3 pb-3 pt-2">
-          <button
-            onClick={() => setIsCommandPaletteOpen(true)}
-            title={iconOnly ? t("search.shortcutHint") : undefined}
-            className={cn(
-              "w-full flex items-center gap-2 py-2.5 text-sm rounded-xl border border-sidebar-border bg-sidebar-foreground/[0.03] text-sidebar-foreground/45 hover:bg-sidebar-accent/60 hover:border-sidebar-primary/35 hover:text-sidebar-foreground/60 transition-all duration-150",
-              iconOnly ? "justify-center px-0" : "px-3"
-            )}
-          >
-            <RiSearchLine className="w-[15px] h-[15px] shrink-0" />
-            {!iconOnly && (
-              <>
-                <span className="flex-1 text-start font-medium">{t("search.placeholder")}</span>
-                <span className="text-[10.5px] font-bold px-1.5 py-0.5 rounded-full bg-sidebar-foreground/10 text-sidebar-foreground/50">
-                  ⌘K
-                </span>
-              </>
-            )}
-          </button>
-        </div>
+        {/* Company switcher and search moved to the top Header bar (next to
+            the notification/new-invoice icons) — freeing this vertical
+            space for nav categories, which is the part that actually
+            benefits from more room as more groups get added. The command
+            palette itself (state, dialog, ⌘K listener) stays owned here;
+            the Header's search icon just dispatches an event to open it,
+            see the "open-command-palette" listener below. */}
 
         {/* Navigation */}
         <nav className="flex-1 px-3 pb-4 overflow-y-auto scrollbar-hide flex flex-col">
@@ -420,7 +385,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
               it gets a plain label instead of the collapsible group header
               the multi-item groups below use (nothing to collapse). */}
           {!iconOnly && (
-            <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               {t("groups.overview")}
             </p>
           )}
@@ -431,17 +396,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
           {navGroups.map((group) => renderGroup(group, iconOnly))}
 
           {/* Système — pinned below all scrollable groups, never collapses
-              out of view, directly above the profile card. */}
-          <div className="mt-auto pt-3 border-t border-sidebar-border/60">
+              out of view. Account identity/workspace/settings/sign-out
+              moved to the Header's WorkspaceAccountMenu, so this is now
+              the last thing in the sidebar — purely navigation, nothing
+              else competing for the footer. */}
+          <div className="mt-auto pt-3 pb-2 border-t border-sidebar-border/60">
             {renderGroup(systemGroup, iconOnly)}
           </div>
         </nav>
-
-        {/* Account — a single card opening a popover with language, theme,
-            settings and logout, instead of the email/logout footer rows. */}
-        <div className="p-4 border-t border-sidebar-border/50">
-          <AccountPopover iconOnly={iconOnly} />
-        </div>
       </>
     );
 
@@ -452,7 +414,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
           className="fixed top-4 start-4 z-50 lg:hidden w-11 h-11 bg-card rounded-full shadow-card flex items-center justify-center transition-all hover:bg-secondary"
           onClick={() => setIsMobileOpen(!isMobileOpen)}
         >
-          {isMobileOpen ? <RiCloseLine className="w-5 h-5" /> : <RiMenuLine className="w-5 h-5" />}
+          {isMobileOpen ? <X className="w-5 h-5 stroke-[1.75]" /> : <Menu className="w-5 h-5 stroke-[1.75]" />}
         </button>
 
         {/* Mobile Overlay */}
@@ -467,25 +429,40 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
         <aside
           ref={ref}
           className={cn(
-            "relative shrink-0 bg-sidebar flex-col h-screen hidden lg:flex rounded-e-2xl sticky top-0 transition-all duration-300 ease-in-out",
+            // z-20: without an explicit z-index here, the sidebar loses to
+            // later-painted siblings that create their own stacking context
+            // (framer-motion's page-transition wrapper, any transformed
+            // card) and the collapse/expand toggle button bleeding past
+            // this element's own edge renders BEHIND them instead of on top.
+            // Clean, bright translucent surface — barely-there blur over
+            // the flat canvas, hairline border instead of a glowing frame.
+            // Dark mode keeps the original solid surface.
+            "relative z-20 shrink-0 flex-col h-screen hidden lg:flex rounded-e-2xl sticky top-0 transition-all duration-300 ease-in-out bg-white/70 backdrop-blur-xl border-e border-slate-200/50 dark:bg-sidebar dark:backdrop-blur-none dark:border-transparent",
             collapsed ? "w-16" : "w-64",
             className
           )}
         >
-          <SidebarContent iconOnly={collapsed} />
+          {SidebarContent({ iconOnly: collapsed })}
 
           {onToggleCollapsed && (
             <button
               onClick={onToggleCollapsed}
               title={collapsed ? t("expandMenu") : t("collapseMenu")}
-              className="absolute -end-3 top-[3.75rem] z-30 w-6 h-6 rounded-full bg-card border border-border shadow-card flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/40 transition-all duration-200"
+              aria-label={collapsed ? t("expandMenu") : t("collapseMenu")}
+              // Vertically centered on the sidebar edge (not pinned to the
+              // header row) — a fixed, predictable spot that doesn't compete
+              // with the logo/wordmark above it or drift as that header's
+              // content changes width. Minimal pill, seamlessly aligned with
+              // the sidebar's own hairline border rather than a bold filled
+              // accent button.
+              className="absolute -end-3 top-1/2 -translate-y-1/2 z-30 w-6 h-6 rounded-full bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 active:scale-95 transition-all duration-200 dark:bg-card dark:border-border"
             >
               {/* One icon, rotated — not an icon swap — so the click reads as a hinge, not a flicker.
                   Mirrored in RTL first (the sidebar now sits on the opposite edge), then the
                   collapse rotation applies on top of that base orientation. */}
               <ChevronLeft
                 className={cn(
-                  "w-3.5 h-3.5 transition-transform duration-300",
+                  "w-3.5 h-3.5 stroke-[1.75] transition-transform duration-300",
                   isRtl && "-scale-x-100",
                   collapsed && "rotate-180"
                 )}
@@ -497,11 +474,11 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
         {/* Mobile Sidebar */}
         <aside
           className={cn(
-            "fixed top-0 start-0 w-64 bg-sidebar flex flex-col h-screen z-50 lg:hidden transition-transform duration-300 ease-out rounded-e-2xl",
+            "fixed top-0 start-0 w-64 flex flex-col h-screen z-50 lg:hidden transition-transform duration-300 ease-out rounded-e-2xl bg-white/70 backdrop-blur-xl border-e border-slate-200/50 dark:bg-sidebar dark:backdrop-blur-none dark:border-transparent",
             isMobileOpen ? "translate-x-0" : isRtl ? "translate-x-full" : "-translate-x-full"
           )}
         >
-          <SidebarContent />
+          {SidebarContent({})}
         </aside>
 
         {/* Command palette shell — search logic wired up in a future task */}
@@ -524,7 +501,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
               <CommandGroup heading={t("search.pages")}>
                 {matchedPages.map((item) => (
                   <CommandItem key={item.path} value={`page-${item.path}`} onSelect={() => handleSelectSearchResult(item.path)}>
-                    <item.icon className="w-4 h-4 me-2 shrink-0 opacity-70" />
+                    <item.icon className="w-4 h-4 stroke-[1.75] me-2 shrink-0 opacity-70" />
                     {t(item.labelKey)}
                   </CommandItem>
                 ))}

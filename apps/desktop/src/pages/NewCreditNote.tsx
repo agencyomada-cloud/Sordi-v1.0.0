@@ -99,7 +99,7 @@ export default function NewCreditNotePage() {
         timbre_exempt: p.timbre_exempt ?? false,
       })));
     }
-  }, [originalInvoice, products, originalInvoiceId]);
+  }, [originalInvoice, products, originalInvoiceId, items.length]);
 
   // Handle manual selection of original invoice from dropdown
   // We need to fetch that invoice's details to populate items
@@ -237,7 +237,7 @@ export default function NewCreditNotePage() {
         };
       }),
     }));
-  }, [clientId, invoiceDate, dueDate, items, notes, headerNote, paymentMethod, clients, products, selectedInvoiceId, selectedInvoiceData, originalInvoice, settings]);
+  }, [clientId, invoiceDate, dueDate, items, notes, headerNote, paymentMethod, clients, products, selectedInvoiceId, selectedInvoiceData, originalInvoice, settings, discountType, discountRate, discountAmount]);
 
   const handleDraftInvoiceChange = (updatedInvoice: any) => {
     setDraftInvoice(updatedInvoice);

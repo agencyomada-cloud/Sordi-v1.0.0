@@ -6,6 +6,7 @@ import {
   RiCashLine as Banknote,
   RiBuildingLine as Building2,
   RiReceiptLine as Receipt,
+  RiPencilLine as Pencil,
   RiMore2Fill as MoreVertical,
   RiFilter3Line as Filter,
   RiCloseLine as X,
@@ -20,11 +21,12 @@ import { fr } from "date-fns/locale";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 
-import { Input, Button, Label, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@sordi/ui";
+import { Input, Button, Label, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, type StatusBadgeTone } from "@sordi/ui";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MetricStrip } from "@/components/ui/metric-strip";
 import { cn } from "@/lib/utils";
-import { usePayments, useCreatePayment, useDeletePayment, useRestorePayment, usePaymentAttachments, useAddPaymentAttachment, useDeletePaymentAttachment } from "@/hooks/usePayments";
+import { INVOICE_STATUS_PILL_BASE, INVOICE_STATUS_PILL_CLASSES, INVOICE_STATUS_DOT_CLASSES } from "@/lib/invoiceStatus";
+import { usePayments, useCreatePayment, useUpdatePayment, useDeletePayment, useRestorePayment, usePaymentAttachments, useAddPaymentAttachment, useDeletePaymentAttachment } from "@/hooks/usePayments";
 import { useInvoices, useUpdateInvoiceStatus } from "@/hooks/useInvoices";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useAppDataDir, resolveAppDataAbsolutePath, resolveAppDataFileUrl } from "@/hooks/useAppDataDir";
@@ -113,6 +115,15 @@ export default function PaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(!!preselectedInvoice);
   const [historyInvoiceId, setHistoryInvoiceId] = useState<string | null>(null);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({
+    amount: "",
+    payment_date: "",
+    payment_method: "cheque",
+    cheque_number: "",
+    bank_name: "",
+    value_date: "",
+  });
 
   // Filters
   const [dateStart, setDateStart] = useState("");
@@ -145,6 +156,7 @@ export default function PaymentsPage() {
   const { data: appDataDirPath } = useAppDataDir();
 
   const createPayment = useCreatePayment();
+  const updatePayment = useUpdatePayment();
   const deletePayment = useDeletePayment();
   const restorePayment = useRestorePayment();
   const updateInvoiceStatus = useUpdateInvoiceStatus();
@@ -166,7 +178,8 @@ export default function PaymentsPage() {
       return {
         ...invoice,
         calculated_paid: calculatedPaid,
-        calculated_balance: (invoice.total_ttc || 0) - calculatedPaid
+        calculated_balance: (invoice.total_ttc || 0) - calculatedPaid,
+        payment_count: invoicePayments.length,
       };
     }).sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
   }, [invoices, payments]);
@@ -329,6 +342,36 @@ export default function PaymentsPage() {
     });
   };
 
+  const openEditPaymentDialog = (payment: Payment) => {
+    setEditingPayment(payment);
+    setEditForm({
+      amount: String(payment.amount),
+      payment_date: payment.payment_date,
+      payment_method: payment.payment_method || "cheque",
+      cheque_number: payment.cheque_number || "",
+      bank_name: payment.bank_name || "",
+      value_date: payment.value_date || "",
+    });
+  };
+
+  const handleEditPaymentSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment) return;
+    updatePayment.mutate(
+      {
+        id: editingPayment.id,
+        amount: parseFloat(editForm.amount),
+        payment_date: editForm.payment_date,
+        payment_method: editForm.payment_method,
+        cheque_number: editForm.payment_method === "cheque" ? editForm.cheque_number || undefined : undefined,
+        bank_name: editForm.payment_method === "cheque" ? editForm.bank_name || undefined : undefined,
+        value_date: editForm.payment_method === "cheque" ? editForm.value_date || undefined : undefined,
+        employee_id: editingPayment.employee_id || undefined,
+      },
+      { onSuccess: () => setEditingPayment(null) }
+    );
+  };
+
   const handleOpenAttachment = async (relativePath: string) => {
     if (!appDataDirPath) return;
     try {
@@ -377,9 +420,29 @@ export default function PaymentsPage() {
   const statusOptions = [
     { value: "draft", label: "Brouillon" },
     { value: "issued", label: "Émise" },
+    { value: "partial", label: "Partiel" },
     { value: "paid", label: "Payée" },
+    { value: "overdue", label: "En retard" },
     { value: "cancelled", label: "Annulée" },
   ];
+
+  // This table computes calculated_paid/calculated_balance fresh from the
+  // payments ledger (see enrichedInvoices above) rather than trusting
+  // invoices.amount_paid/status, specifically because the two CAN drift.
+  // The badge has to agree with the Payé/Solde columns it sits next to, so
+  // it derives from those same calculated amounts too — draft/cancelled/
+  // overdue are the only cases taken straight from the stored status, since
+  // those aren't things the payment amounts alone could tell us.
+  const getPaymentStatusInfo = (invoice: { status?: string | null; calculated_paid?: number; calculated_balance?: number }): { label: string; variant: StatusBadgeTone } => {
+    if (invoice.status === "cancelled") return { label: "Annulée", variant: "neutral" };
+    if (invoice.status === "draft") return { label: "Brouillon", variant: "neutral" };
+    if (invoice.status === "overdue") return { label: "En retard", variant: "error" };
+    const paid = invoice.calculated_paid || 0;
+    const balance = invoice.calculated_balance || 0;
+    if (paid === 0) return { label: "Émise", variant: "neutral" };
+    if (balance > 0) return { label: "Partielle", variant: "warning" };
+    return { label: "Payée", variant: "success" };
+  };
 
   return (
     <>
@@ -475,12 +538,12 @@ export default function PaymentsPage() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>N° Facture</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="hidden md:table-cell">Échéance</TableHead>
-                <TableHead className="text-right">Montant TTC</TableHead>
-                <TableHead className="text-right">Payé</TableHead>
-                <TableHead className="text-right">Solde</TableHead>
+                <TableHead className="whitespace-nowrap">Client / Projet</TableHead>
+                <TableHead className="whitespace-nowrap">Date</TableHead>
+                <TableHead className="hidden md:table-cell whitespace-nowrap">Échéance</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Montant TTC</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Payé</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Solde</TableHead>
                 <TableHead className="w-40">Statut</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
@@ -507,6 +570,7 @@ export default function PaymentsPage() {
                   const total = invoice.total_ttc || 0;
                   const balance = invoice.calculated_balance || 0;
                   const isCancelled = invoice.status === "cancelled";
+                  const statusInfo = getPaymentStatusInfo(invoice);
 
                   const rowActions = (
                     <>
@@ -515,6 +579,9 @@ export default function PaymentsPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
                         <Receipt className="w-4 h-4 mr-2" /> Voir la facture
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                        <Pencil className="w-4 h-4 mr-2" /> Modifier la facture
                       </DropdownMenuItem>
                       {paid > 0 && (
                         <>
@@ -542,28 +609,68 @@ export default function PaymentsPage() {
                   return (
                     <ContextMenu key={invoice.id}>
                       <ContextMenuTrigger asChild>
-                        <TableRow className="group" dimmed={isCancelled}>
-                          <TableCell className="font-semibold">{invoice.invoice_number}</TableCell>
-                          <TableCell className="text-muted-foreground">{formatDate(invoice.invoice_date)}</TableCell>
-                          <TableCell className="text-muted-foreground hidden md:table-cell">{formatDate(invoice.due_date)}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
+                        <TableRow className="group cursor-pointer" dimmed={isCancelled} onDoubleClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                          <TableCell className="whitespace-nowrap">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-sm text-foreground truncate">
+                                  {invoice.clients?.name || "Client inconnu"}
+                                </div>
+                                {invoice.projects?.name && (
+                                  <div className="text-xs text-slate-500 font-normal truncate">
+                                    {invoice.projects.name}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-secondary text-muted-foreground">
+                                N° {invoice.invoice_number}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(invoice.invoice_date)}</TableCell>
+                          <TableCell className="text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatDate(invoice.due_date)}</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
                             {formatCurrency(total)}
                           </TableCell>
-                          <TableCell className={cn("text-right font-medium tabular-nums", isCancelled ? "text-muted-foreground" : "text-stat-positive")}>
+                          <TableCell className={cn("text-right font-medium tabular-nums whitespace-nowrap", isCancelled ? "text-muted-foreground" : "text-stat-positive")}>
                             {formatCurrency(paid)}
+                            {/* This column is one cumulative total per invoice, not one row
+                                per payment — a second (or later) tranche changes this number
+                                but adds no new row, which reads as "the payment vanished"
+                                unless something here says a split payment happened. */}
+                            {invoice.payment_count > 1 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setHistoryInvoiceId(invoice.id); }}
+                                className="block ms-auto text-[10px] font-normal text-muted-foreground hover:text-foreground hover:underline transition-colors"
+                              >
+                                {invoice.payment_count} versements
+                              </button>
+                            )}
                           </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">
+                          <TableCell className="text-right font-medium tabular-nums whitespace-nowrap">
                             <span className={isCancelled ? "text-muted-foreground" : balance > 0 ? "text-destructive" : "text-muted-foreground"}>
                               {formatCurrency(balance)}
                             </span>
                           </TableCell>
                           <TableCell>
+                            {/* Same tinted-pill CSS as the Factures table,
+                                but the label/tone here is derived from
+                                calculated_paid/calculated_balance (computed
+                                fresh from the payments ledger, see
+                                enrichedInvoices above) rather than the raw
+                                stored status — otherwise this badge could
+                                say "Payée" right next to a Solde column
+                                showing a balance still owed, whenever the
+                                two happen to drift. The Select itself still
+                                drives real status changes (and the
+                                mark-as-paid auto-payment automation). */}
                             <Select
-                              value={invoice.status || 'sent'}
+                              value={invoice.status || 'issued'}
                               onValueChange={(val) => handleStatusChange(invoice.id, val)}
                             >
-                              <SelectTrigger className="h-9 bg-secondary/30">
-                                <SelectValue />
+                              <SelectTrigger className={cn(INVOICE_STATUS_PILL_BASE, INVOICE_STATUS_PILL_CLASSES[statusInfo.variant], "h-9")}>
+                                <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", INVOICE_STATUS_DOT_CLASSES[statusInfo.variant])} />
+                                <span>{statusInfo.label}</span>
                               </SelectTrigger>
                               <SelectContent>
                                 {statusOptions.map(opt => (
@@ -592,6 +699,9 @@ export default function PaymentsPage() {
                         </ContextMenuItem>
                         <ContextMenuItem onClick={() => navigate(`/invoices/${invoice.id}`)}>
                           <Receipt className="w-4 h-4 mr-2" /> Voir la facture
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                          <Pencil className="w-4 h-4 mr-2" /> Modifier la facture
                         </ContextMenuItem>
                         {paid > 0 && (
                           <>
@@ -650,12 +760,20 @@ export default function PaymentsPage() {
                           {p.notes ? ` · ${p.notes}` : ""}
                         </p>
                       </div>
-                      <button
-                        onClick={() => handleDeletePayment(p)}
-                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => openEditPaymentDialog(p)}
+                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePayment(p)}
+                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </button>
+                      </div>
                     </div>
                     <PaymentAttachmentsList paymentId={p.id} appDataDirPath={appDataDirPath} />
                   </div>
@@ -668,6 +786,94 @@ export default function PaymentsPage() {
               Fermer
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Payment Dialog — amount/date/method only, never the invoice
+          it's attached to; saving recomputes that invoice's amount_paid/
+          balance_due/status server-side (update_payment calls the same
+          update_invoice_payment_status create/delete already use). */}
+      <Dialog open={!!editingPayment} onOpenChange={(open) => !open && setEditingPayment(null)}>
+        <DialogContent className="sm:max-w-[440px] rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Modifier le paiement</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditPaymentSubmit} className="space-y-4 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Montant</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <DatePicker
+                  value={editForm.payment_date}
+                  onChange={(v) => setEditForm({ ...editForm, payment_date: v })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Mode de paiement</Label>
+              <Select
+                value={editForm.payment_method}
+                onValueChange={(value) => setEditForm({ ...editForm, payment_method: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cheque">Chèque</SelectItem>
+                  <SelectItem value="cash">Espèces</SelectItem>
+                  <SelectItem value="transfer">Virement</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editForm.payment_method === "cheque" && (
+              <div className="grid grid-cols-2 gap-4 bg-muted/50 p-4 rounded-xl">
+                <div className="space-y-2">
+                  <Label className="text-xs">N° Chèque</Label>
+                  <Input
+                    value={editForm.cheque_number}
+                    onChange={(e) => setEditForm({ ...editForm, cheque_number: e.target.value })}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Banque</Label>
+                  <Input
+                    value={editForm.bank_name}
+                    onChange={(e) => setEditForm({ ...editForm, bank_name: e.target.value })}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label className="text-xs">Date de valeur</Label>
+                  <DatePicker
+                    value={editForm.value_date}
+                    onChange={(v) => setEditForm({ ...editForm, value_date: v })}
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setEditingPayment(null)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={updatePayment.isPending}>
+                {updatePayment.isPending ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

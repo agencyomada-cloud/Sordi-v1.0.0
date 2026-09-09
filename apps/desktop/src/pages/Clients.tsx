@@ -19,9 +19,12 @@ import { exportToCSV, parseCSV, validateClientImport } from "@/lib/csvUtils";
 import { computeClientStatus } from "@/lib/clientOverview";
 import { ClientStatusBadge } from "@/components/ClientStatusBadge";
 import { toast } from "sonner";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 export default function ClientsPage() {
   const navigate = useNavigate();
+  const { executeSecuredAction } = useSecureSession();
   const [searchQuery, setSearchQuery] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -62,14 +65,16 @@ export default function ClientsPage() {
     );
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!clientToDelete) return;
-    deleteClient.mutate(clientToDelete, {
-      onSuccess: () => {
-        setDeleteDialogOpen(false);
-        setClientToDelete(null);
-      },
-    });
+    await executeSecuredAction(() => {
+      deleteClient.mutate(clientToDelete, {
+        onSuccess: () => {
+          setDeleteDialogOpen(false);
+          setClientToDelete(null);
+        },
+      });
+    }, "Autoriser la suppression du client");
   };
 
   const handleExport = () => {
@@ -153,6 +158,7 @@ export default function ClientsPage() {
       }
 
       let successCount = 0;
+      const failedClients: string[] = [];
       for (const clientData of valid) {
         try {
           const clientToCreate: Omit<CreateClientData, "company_id"> = {
@@ -185,12 +191,21 @@ export default function ClientsPage() {
               onError: reject,
             });
           });
-        } catch {
-          // Continue with next client
+        } catch (err) {
+          const label = clientData.name || clientData.code || "(sans nom)";
+          failedClients.push(label);
+          console.error(`Failed to import client "${label}":`, err);
         }
       }
 
-      toast.success(`${successCount} clients importés`);
+      if (successCount > 0) {
+        toast.success(`${successCount} clients importés`);
+      }
+      if (failedClients.length > 0) {
+        toast.error(
+          `${failedClients.length} client(s) n'ont pas pu être importés : ${failedClients.slice(0, 5).join(", ")}${failedClients.length > 5 ? "…" : ""}`
+        );
+      }
       refetch();
     } catch (error) {
       toast.error("Erreur lors de l'import");
@@ -208,10 +223,10 @@ export default function ClientsPage() {
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Clients</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos clients</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clients & Relations</h1>
+              <p className="text-xs text-slate-500 mt-1">Gérez vos clients</p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -226,22 +241,22 @@ export default function ClientsPage() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isImporting}
-                className="w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
+                className="w-10 h-10 rounded-xl border border-slate-200/70 bg-white flex items-center justify-center hover:bg-slate-50 transition-all active:scale-[0.96]"
                 title="Importer des clients"
               >
-                <Upload className="w-4 h-4 text-muted-foreground" />
+                <Upload className="w-4 h-4 text-slate-500" />
               </button>
 
               <button
                 onClick={handleExport}
                 disabled={!clients || clients.length === 0}
-                className="w-10 h-10 rounded-full bg-card shadow-card flex items-center justify-center hover:bg-secondary transition-all active:scale-[0.96]"
+                className="w-10 h-10 rounded-xl border border-slate-200/70 bg-white flex items-center justify-center hover:bg-slate-50 transition-all active:scale-[0.96]"
                 title="Exporter les clients"
               >
-                <Download className="w-4 h-4 text-muted-foreground" />
+                <Download className="w-4 h-4 text-slate-500" />
               </button>
 
-              <Button className="gap-2" onClick={() => navigate("/clients/new")}>
+              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/clients/new")}>
                 <Plus className="w-4 h-4" />
                 Nouveau client
               </Button>
@@ -369,22 +384,15 @@ export default function ClientsPage() {
           </div>
       </main>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce client ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Supprimer le client"
+        itemIdentifier={clients?.find((c) => c.id === clientToDelete)?.name || "Client"}
+        description="Cette action est irréversible. Toutes les données associées à ce client (factures, devis, historique) seront définitivement supprimées."
+        isLoading={deleteClient.isPending}
+        onConfirm={handleDelete}
+      />
     </>
   );
 }

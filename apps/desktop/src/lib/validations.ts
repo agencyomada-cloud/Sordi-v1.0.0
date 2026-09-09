@@ -93,6 +93,10 @@ export const paymentSchema = z.object({
   employee_id: z.string().uuid().optional().or(z.literal('')),
 });
 
+// Same shape as paymentSchema minus invoice_id — an edit never re-links a
+// payment to a different invoice.
+export const updatePaymentSchema = paymentSchema.omit({ invoice_id: true });
+
 // Expense schema
 export const expenseSchema = z.object({
   category: z.string().trim().min(1, { message: "La catégorie est requise" }).max(100),

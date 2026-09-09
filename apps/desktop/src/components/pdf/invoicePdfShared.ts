@@ -77,10 +77,12 @@ export interface PDFInvoice {
   vehicle_number?: string;
   delivery_location?: string;
   payment_method?: string;
+  stamp_size?: number;
 }
 
 export interface PDFSettings {
   company_name?: string;
+  legal_name?: string;
   company_address?: string;
   company_activity?: string;
   company_phone?: string;

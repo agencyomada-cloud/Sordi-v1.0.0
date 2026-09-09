@@ -16,11 +16,11 @@ import {
   RiLoader4Line as Loader2,
   RiFileCopyLine as Copy,
 } from "@remixicon/react";
-import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, statusBadgeVariants, StatusDot, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
+import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
 import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
-import { getInvoiceStatusConfig } from "@/lib/invoiceStatus";
+import { getInvoiceStatusConfig, INVOICE_STATUS_PILL_BASE, INVOICE_STATUS_PILL_CLASSES, INVOICE_STATUS_DOT_CLASSES } from "@/lib/invoiceStatus";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
@@ -29,6 +29,8 @@ import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftInvoiceInput } from "@/lib/emailDrafter";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 const tabs = [
   { label: "Toutes", status: undefined, type: undefined },
@@ -59,6 +61,7 @@ export default function InvoicesPage() {
   const { data: settings } = useSettings();
   const { data: licenseStatus } = useLicenseStatus();
   const updateStatus = useUpdateInvoiceStatus();
+  const { executeSecuredAction } = useSecureSession();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
@@ -69,6 +72,7 @@ export default function InvoicesPage() {
   const [emailTarget, setEmailTarget] = useState<any | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkMarkingPaid, setIsBulkMarkingPaid] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
@@ -97,14 +101,11 @@ export default function InvoicesPage() {
 
   const handleDelete = async () => {
     if (invoiceToDelete) {
-      // useDeleteInvoice's own onSuccess/onError already shows the correct
-      // toast based on the real result — an unconditional toast.success
-      // here fired even when the delete failed (e.g. blocked by a
-      // dependent payment/delivery note), showing a fake "supprimée" toast
-      // right alongside the real error toast.
-      deleteInvoice.mutate(invoiceToDelete);
-      setDeleteDialogOpen(false);
-      setInvoiceToDelete(null);
+      await executeSecuredAction(() => {
+        deleteInvoice.mutate(invoiceToDelete);
+        setDeleteDialogOpen(false);
+        setInvoiceToDelete(null);
+      }, "Autoriser la suppression de la facture");
     }
   };
 
@@ -207,12 +208,12 @@ export default function InvoicesPage() {
       // Wait for the off-screen preview to render before rasterizing it
       await new Promise((r) => setTimeout(r, 500));
 
-      await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
-        toast.success("PDF téléchargé avec succès", {
+      await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob }) => {
+        toast.success("Facture PDF générée", {
           id: loadingId,
-          description: `Enregistré sous : ${path || fileName}`,
+          description: "Le fichier a été enregistré avec succès.",
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
-          duration: 6000,
+          duration: 5000,
         });
       });
     } catch (error) {
@@ -251,8 +252,10 @@ export default function InvoicesPage() {
   const clearSelection = () => setSelectedInvoices([]);
 
   const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id);
-    toast.success("ID copié dans le presse-papiers");
+    navigator.clipboard.writeText(id).then(
+      () => toast.success("ID copié dans le presse-papiers"),
+      () => toast.error("Impossible de copier l'ID")
+    );
   };
 
   const handleBulkMarkPaid = async () => {
@@ -309,14 +312,19 @@ export default function InvoicesPage() {
   };
 
   const handleBulkDelete = async () => {
-    const results = await Promise.allSettled(selectedInvoices.map((id) => deleteInvoice.mutateAsync(id)));
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed === 0) {
-      toast.success(`${results.length} facture${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
-    } else {
-      toast.error(`${failed} facture(s) sur ${results.length} n'ont pas pu être supprimées`);
+    setIsBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(selectedInvoices.map((id) => deleteInvoice.mutateAsync(id)));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} facture${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} facture(s) sur ${results.length} n'ont pas pu être supprimées`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkDeleting(false);
     }
-    clearSelection();
   };
 
   return (
@@ -329,13 +337,13 @@ export default function InvoicesPage() {
       <main className="flex-1 p-8 pt-4 min-w-0">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-3xl text-foreground tracking-tight">Factures</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos factures et avoirs</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Facturation & Créances</h1>
+              <p className="text-xs text-slate-500 mt-1">Gérez vos factures, proformas et avoirs</p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button variant="outline" onClick={() => navigate("/invoices/credit-note/new")}>
                 <MinusCircle className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Avoir</span>
@@ -344,7 +352,7 @@ export default function InvoicesPage() {
                 <Plus className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Proforma</span>
               </Button>
-              <Button onClick={() => navigate("/invoices/new")}>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/invoices/new")}>
                 <Plus className="w-4 h-4 mr-2" />
                 Nouvelle facture
               </Button>
@@ -354,7 +362,12 @@ export default function InvoicesPage() {
           {/* Tabs and Search — rest directly on the page canvas, no card
               wrapper; a single hairline divider closes off the filter row
               instead of a full bordered/shadowed box. */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/40 animate-fade-in-up animation-delay-100">
+          {/* xl, not md — the filter tabs need their own full-width row to
+              show all of them; sharing a row with the sort-select+search at
+              md's 768px squeezed the (overflow-x-auto) tabs strip down to
+              where the last tab was visually cut off mid-word with no
+              indication it was scrollable. */}
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-border/40 animate-fade-in-up animation-delay-100">
             <div className="flex items-center gap-2 overflow-x-auto">
               {tabs.map((tab, index) => (
                 <Button
@@ -524,10 +537,10 @@ export default function InvoicesPage() {
                             <TooltipContent side="top">{invoice.clients?.name}</TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="text-muted-foreground hidden md:table-cell">
+                        <TableCell className="text-muted-foreground hidden md:table-cell whitespace-nowrap">
                           {formatDate(invoice.invoice_date)}
                         </TableCell>
-                        <TableCell numeric className={cn(isCreditNote && "text-destructive")}>
+                        <TableCell numeric className={cn("whitespace-nowrap", isCreditNote && "text-destructive")}>
                           {isCreditNote ? "-" : ""}{formatCurrency(invoice.total_ttc)}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -536,7 +549,8 @@ export default function InvoicesPage() {
                               <DropdownMenuTrigger asChild>
                                 <button
                                   className={cn(
-                                    statusBadgeVariants(),
+                                    INVOICE_STATUS_PILL_BASE,
+                                    INVOICE_STATUS_PILL_CLASSES[statusConfig.variant],
                                     "cursor-pointer hover:opacity-80 transition-opacity"
                                   )}
                                   onClick={(e) => {
@@ -544,7 +558,7 @@ export default function InvoicesPage() {
                                     e.preventDefault();
                                   }}
                                 >
-                                  <StatusDot tone={statusConfig.variant} />
+                                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", INVOICE_STATUS_DOT_CLASSES[statusConfig.variant])} />
                                   {statusConfig.label}
                                 </button>
                               </DropdownMenuTrigger>
@@ -608,18 +622,22 @@ export default function InvoicesPage() {
                                   <Eye className="mr-2 h-4 w-4" />
                                   Voir détails
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Modifier la facture
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleOpenEmailModal(invoice.id)}>
                                   <MailIcon className="mr-2 h-4 w-4" />
                                   Envoyer par email
                                 </DropdownMenuItem>
-                                {invoice.status !== "paid" && (
-                                  <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Modifier
-                                  </DropdownMenuItem>
-                                )}
-                                {!isCreditNote && invoice.status !== "paid" && (
-                                  <DropdownMenuItem onClick={() => convertProforma.mutate(invoice.id)}>
+                                {isProforma && invoice.status !== "converted" && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      convertProforma.mutate(invoice.id, {
+                                        onSuccess: (created) => navigate(`/invoices/${created.id}`),
+                                      })
+                                    }
+                                  >
                                     <ArrowRightLeft className="w-4 h-4 mr-2" />
                                     Convertir en Facture
                                   </DropdownMenuItem>
@@ -661,39 +679,30 @@ export default function InvoicesPage() {
           </div>
       </main>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer cette facture ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Supprimer la facture"
+        itemIdentifier={invoices?.find((i) => i.id === invoiceToDelete)?.invoice_number || "Facture"}
+        description={(() => {
+          const invoice = invoices?.find((i) => i.id === invoiceToDelete);
+          if (invoice && (invoice.amount_paid || 0) > 0) {
+            return `Cette facture a des paiements enregistrés totalisant ${invoice.amount_paid.toLocaleString("fr-FR")} DA — ils seront supprimés définitivement avec la facture. Cette action est irréversible.`;
+          }
+          return "Cette action est irréversible.";
+        })()}
+        isLoading={deleteInvoice.isPending}
+        onConfirm={handleDelete}
+      />
 
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer {selectedInvoices.length} facture{selectedInvoices.length > 1 ? "s" : ""} ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible et supprimera définitivement {selectedInvoices.length > 1 ? "ces factures" : "cette facture"}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+        title={`Supprimer ${selectedInvoices.length} facture${selectedInvoices.length > 1 ? "s" : ""} ?`}
+        description={`Cette action est irréversible et supprimera définitivement ${selectedInvoices.length > 1 ? "ces factures" : "cette facture"}.`}
+        isLoading={isBulkDeleting}
+        onConfirm={handleBulkDelete}
+      />
 
       {emailTarget && (
         <SendDocumentEmailModal

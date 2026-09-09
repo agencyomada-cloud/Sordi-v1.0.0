@@ -10,6 +10,7 @@ export interface Settings {
     // names here so the many PDF/HTML document renderers that already
     // consume `settings.company_*` keep working unchanged.
     company_name?: string;
+    legal_name?: string;
     company_address?: string;
     company_rc?: string;
     company_nif?: string;

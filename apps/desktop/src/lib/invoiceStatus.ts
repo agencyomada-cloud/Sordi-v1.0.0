@@ -20,9 +20,37 @@ export const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { label: string; varia
   partial: { label: "Partielle", variant: "warning" },
   overdue: { label: "En retard", variant: "error" },
   cancelled: { label: "Annulée", variant: "neutral" },
+  converted: { label: "Convertie", variant: "info" },
 };
 
 const FALLBACK_STATUS_CONFIG = { label: "Statut inconnu", variant: "neutral" as StatusBadgeTone };
+
+/**
+ * Tinted status-pill treatment for the Invoices and Payments *tables*
+ * specifically — a full colored capsule (background + border), matching the
+ * same tinted-pill classes `@sordi/ui`'s `StatusBadge` now uses everywhere
+ * else in the app.
+ */
+export const INVOICE_STATUS_PILL_CLASSES: Record<StatusBadgeTone, string> = {
+  success: "bg-emerald-50 text-emerald-700 border-emerald-200/60 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+  warning: "bg-amber-50 text-amber-700 border-amber-200/60 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+  error: "bg-rose-50 text-rose-700 border-rose-200/60 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
+  neutral: "bg-slate-100 text-slate-700 border-slate-200/60 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700",
+  info: "bg-blue-50 text-blue-700 border-blue-200/60 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20",
+};
+
+export const INVOICE_STATUS_DOT_CLASSES: Record<StatusBadgeTone, string> = {
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  error: "bg-rose-500",
+  neutral: "bg-slate-400",
+  info: "bg-blue-500",
+};
+
+/** Compose the full pill className (border + tinted background/text for the
+ *  given tone) — pair with a `<span className={cn("h-1.5 w-1.5 rounded-full
+ *  shrink-0", INVOICE_STATUS_DOT_CLASSES[tone])} />` dot as the first child. */
+export const INVOICE_STATUS_PILL_BASE = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border";
 
 // "unpaid" isn't a real InvoiceStatus value, but some seed/legacy invoice
 // records carry it anyway — treat it as a synonym for "issued" (sent,

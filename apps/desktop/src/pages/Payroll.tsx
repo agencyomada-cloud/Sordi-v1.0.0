@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   RiUploadCloud2Line as Upload,
   RiWalletLine as WalletIcon,
@@ -40,6 +41,7 @@ import {
   Input,
   Label,
   Checkbox,
+  Textarea,
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -50,6 +52,9 @@ import {
   AlertDialogTitle,
   TableLoading,
   EmptyState,
+  Tracker,
+  type TrackerBlockProps,
+  type TrackerColor,
 } from "@sordi/ui";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
@@ -63,10 +68,13 @@ import {
   useImportPunchRecords,
   useUnmappedDeviceCodes,
   useRunPayroll,
+  useEmployeeDailyAttendance,
 } from "@/hooks/usePayroll";
 import { useFreelancePayments, useSetFreelancerPaymentStatus, useAssignFreelancePayment, useProjects } from "@/hooks/useProjects";
 import { useSettings } from "@/hooks/useSettings";
-import { db, type PunchImportRow, type PayrollRun, type UpdatePayrollRunData } from "@/lib/database";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { db, type PunchImportRow, type PayrollRun, type UpdatePayrollRunData, type Employee } from "@/lib/database";
 import { exportToCSV } from "@/lib/csvUtils";
 import { generatePayrollPDF, generateBulletinPaiePDF } from "@/lib/pdfGenerator";
 import { AnimatedNumber } from "@/components/ui/animated-number";
@@ -105,20 +113,165 @@ function monthsInPeriod(anchorMonth: string, periodType: PeriodType): string[] {
   return months;
 }
 
-/** Parses the ZKTeco-style TSV attlog export: tab-separated, no header,
- *  col1 = device employee ID, col2 = "YYYY-MM-DD HH:MM:SS" timestamp.
- *  Columns 3-6 (status/verify-mode/work-code/reserved) are ignored — the
- *  "any punch = present" logic only needs employee + timestamp. */
-function parsePunchTsv(text: string): PunchImportRow[] {
-  return text
+/** Converts a device/spreadsheet timestamp into the canonical
+ *  "YYYY-MM-DD HH:MM:SS" shape that attendance/salary queries match against
+ *  (a strict "2026-09%" prefix + strict %Y-%m-%d parsing server-side) —
+ *  returns null if the value can't be confidently parsed rather than
+ *  passing something through that would silently never match any month.
+ *  Handles:
+ *  - "YYYY-MM-DD[ T]HH:MM[:SS]" (already canonical / ISO)
+ *  - "DD/MM/YYYY HH:MM[:SS]" (the common French/Algerian device export format)
+ *  - date-only values (assumes midnight)
+ *  - a bare Excel date serial number (days since 1899-12-30, optionally with
+ *    a fractional time-of-day) — happens when the device's CSV was actually
+ *    opened/re-saved in Excel and its date column got auto-numbered. */
+function normalizePunchTimestamp(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  let m = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, y, mo, d, h, mi, s] = m;
+    return `${y}-${mo}-${d} ${h}:${mi}:${s ?? "00"}`;
+  }
+
+  m = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, d, mo, y, h, mi, s] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")} ${h.padStart(2, "0")}:${mi}:${s ?? "00"}`;
+  }
+
+  m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]} 00:00:00`;
+
+  m = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")} 00:00:00`;
+
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    const serial = Number(value);
+    // Sane range guard (~1954-2146) so a stray small integer (e.g. a badge
+    // number that leaked into the wrong column) isn't misread as a date.
+    if (serial > 20000 && serial < 90000) {
+      const epochMs = Date.UTC(1899, 11, 30);
+      const ms = epochMs + Math.round(serial * 86400) * 1000;
+      const d = new Date(ms);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+    }
+  }
+
+  return null;
+}
+
+/** Parses a biometric device attendance export into punch rows. Tolerant of
+ *  the real-world variations these exports show up in: tab, semicolon, or
+ *  comma delimited (a ZKTeco attlog .dat/.txt is tab-separated with no
+ *  header; a CSV re-saved from Excel is typically comma or semicolon with
+ *  quoted fields), col1 = device employee ID (Device User ID / AC-No /
+ *  Badge ID), col2 = a timestamp in any of the formats normalizePunchTimestamp
+ *  handles. Columns beyond that (status/verify-mode/work-code/reserved) are
+ *  ignored — the "any punch = present" logic only needs employee + timestamp.
+ *  Rows whose date can't be confidently parsed are dropped rather than sent
+ *  upstream with a garbage punch_time that would silently never match any
+ *  month's attendance/salary query. */
+function parsePunchFile(text: string): { rows: PunchImportRow[]; invalidCount: number } {
+  const lines = text
     .split(/\r\n|\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const cols = line.split("\t");
-      return { external_code: cols[0]?.trim() ?? "", punch_time: cols[1]?.trim() ?? "" };
-    })
-    .filter((row) => row.external_code && row.punch_time);
+    .filter(Boolean);
+
+  const rows: PunchImportRow[] = [];
+  let invalidCount = 0;
+
+  for (const line of lines) {
+    const delimiter = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+    const cols = line.split(delimiter).map((c) => c.trim().replace(/^"|"$/g, ""));
+    const externalCode = cols[0] ?? "";
+    const rawTimestamp = cols[1] ?? "";
+    if (!externalCode || !rawTimestamp) continue;
+
+    const punchTime = normalizePunchTimestamp(rawTimestamp);
+    if (!punchTime) {
+      invalidCount++;
+      continue;
+    }
+    rows.push({ external_code: externalCode, punch_time: punchTime });
+  }
+
+  return { rows, invalidCount };
+}
+
+const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
+  present: "Présent",
+  late: "En retard",
+  absent: "Absent",
+  weekend: "Repos",
+};
+
+const ATTENDANCE_STATUS_COLOR: Record<string, TrackerColor> = {
+  present: "emerald",
+  late: "amber",
+  absent: "rose",
+  weekend: "slate",
+};
+
+// The day tooltip's status line is plain slate-500 text (light frosted
+// card, matches the rest of the app's aesthetic) — the tone lives in this
+// small ring-accented dot instead of colored text.
+const ATTENDANCE_STATUS_DOT_COLOR: Record<string, string> = {
+  present: "bg-emerald-500 ring-emerald-500/20",
+  late: "bg-amber-500 ring-amber-500/20",
+  absent: "bg-rose-500 ring-rose-500/20",
+  weekend: "bg-slate-400 ring-slate-400/20",
+};
+
+/** One employee's Tracker strip for the filtered month — a separate
+ *  component (not inlined in a .map()) so each employee's daily-attendance
+ *  query is its own hook call, not a hooks-in-a-loop violation. */
+function EmployeeAttendanceRow({ employee, month }: { employee: Employee; month: string }) {
+  const { data: attendance, isLoading } = useEmployeeDailyAttendance(employee.id, month);
+
+  const trackerData: TrackerBlockProps[] = useMemo(() => {
+    if (!attendance) return [];
+    return attendance.days.map((day) => ({
+      key: day.date,
+      color: ATTENDANCE_STATUS_COLOR[day.status],
+      tooltip: (
+        <div>
+          <span className="font-semibold text-slate-900 block tracking-tight capitalize">
+            {new Date(`${day.date}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+          </span>
+          <span className="text-[10px] font-medium text-slate-500 mt-0.5 flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full ring-2 shrink-0", ATTENDANCE_STATUS_DOT_COLOR[day.status])} />
+            {ATTENDANCE_STATUS_LABEL[day.status]}
+            {day.arrival_time
+              ? ` · Arrivée: ${day.arrival_time.slice(0, 5)}${day.late_minutes ? ` (${day.late_minutes} min)` : ""}`
+              : ""}
+          </span>
+        </div>
+      ),
+    }));
+  }, [attendance]);
+
+  return (
+    <div className="py-3 first:pt-0 last:pb-0 border-b last:border-b-0 border-border/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <span className="text-sm font-medium truncate">{employee.name}</span>
+        {attendance && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <StatusBadge tone="success">Présent: {attendance.present_count}</StatusBadge>
+            <StatusBadge tone="warning">Retards: {attendance.late_count}</StatusBadge>
+            <StatusBadge tone="error">Absences: {attendance.absent_count}</StatusBadge>
+          </div>
+        )}
+      </div>
+      {isLoading || !attendance ? (
+        <div className="h-6 w-full rounded bg-secondary/40 animate-pulse" />
+      ) : (
+        <Tracker data={trackerData} className="h-6" />
+      )}
+    </div>
+  );
 }
 
 export default function PayrollPage() {
@@ -142,6 +295,9 @@ export default function PayrollPage() {
     primes: "",
     avance_deduction: "",
     net_a_payer: "",
+    notes: "",
+    paid: false,
+    paid_date: "",
   });
   const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const [periodType, setPeriodType] = useState<PeriodType>("month");
@@ -163,10 +319,12 @@ export default function PayrollPage() {
   const deleteRun = useDeletePayrollRun();
   const importPunches = useImportPunchRecords();
   const runPayroll = useRunPayroll();
+  const { executeSecuredAction } = useSecureSession();
   const { data: unmappedCodes } = useUnmappedDeviceCodes(month === "all" ? undefined : month);
 
   const employeeNameById = useMemo(() => new Map((employees ?? []).map((e) => [e.id, e.name])), [employees]);
   const employeeById = useMemo(() => new Map((employees ?? []).map((e) => [e.id, e])), [employees]);
+  const activeEmployees = useMemo(() => (employees ?? []).filter((e) => e.is_active), [employees]);
 
   const invalidateAfterBulkRun = () => {
     queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
@@ -175,49 +333,51 @@ export default function PayrollPage() {
   };
 
   const handleBulkGenerate = async () => {
-    const salariedEmployees = (employees ?? []).filter((e) => e.contract_type === "Temps plein");
-    if (salariedEmployees.length === 0) {
-      toast.error("Aucun employé Temps plein trouvé");
-      return;
-    }
-
-    setIsBulkRunning(true);
-    let generated = 0;
-    let skippedNoSalary = 0;
-    let skippedPaid = 0;
-    let failed = 0;
-
-    for (const emp of salariedEmployees) {
-      const existingRun = monthRuns?.find((r) => r.employee_id === emp.id);
-      if (existingRun?.paid) {
-        skippedPaid++;
-        continue;
+    await executeSecuredAction(async () => {
+      const salariedEmployees = (employees ?? []).filter((e) => e.contract_type === "Temps plein");
+      if (salariedEmployees.length === 0) {
+        toast.error("Aucun employé Temps plein trouvé");
+        return;
       }
-      if (emp.base_salary == null) {
-        skippedNoSalary++;
-        continue;
+
+      setIsBulkRunning(true);
+      let generated = 0;
+      let skippedNoSalary = 0;
+      let skippedPaid = 0;
+      let failed = 0;
+
+      for (const emp of salariedEmployees) {
+        const existingRun = monthRuns?.find((r) => r.employee_id === emp.id);
+        if (existingRun?.paid) {
+          skippedPaid++;
+          continue;
+        }
+        if (emp.base_salary == null) {
+          skippedNoSalary++;
+          continue;
+        }
+        try {
+          await db.payroll.run(emp.id, month);
+          generated++;
+        } catch {
+          failed++;
+        }
       }
-      try {
-        await db.payroll.run(emp.id, month);
-        generated++;
-      } catch {
-        failed++;
+
+      setIsBulkRunning(false);
+      invalidateAfterBulkRun();
+
+      const parts: string[] = [`${generated} bulletin${generated > 1 ? "s" : ""} généré${generated > 1 ? "s" : ""}`];
+      if (skippedNoSalary > 0) parts.push(`${skippedNoSalary} ignoré${skippedNoSalary > 1 ? "s" : ""} (pas de salaire de base)`);
+      if (skippedPaid > 0) parts.push(`${skippedPaid} déjà payé${skippedPaid > 1 ? "s" : ""} (ignoré${skippedPaid > 1 ? "s" : ""})`);
+      if (failed > 0) parts.push(`${failed} échec${failed > 1 ? "s" : ""}`);
+
+      if (generated > 0) {
+        toast.success(`Bulletins générés pour ${month}`, { description: parts.slice(1).join(", ") || undefined });
+      } else {
+        toast.error(`Aucun bulletin généré pour ${month}`, { description: parts.slice(1).join(", ") || undefined });
       }
-    }
-
-    setIsBulkRunning(false);
-    invalidateAfterBulkRun();
-
-    const parts: string[] = [`${generated} bulletin${generated > 1 ? "s" : ""} généré${generated > 1 ? "s" : ""}`];
-    if (skippedNoSalary > 0) parts.push(`${skippedNoSalary} ignoré${skippedNoSalary > 1 ? "s" : ""} (pas de salaire de base)`);
-    if (skippedPaid > 0) parts.push(`${skippedPaid} déjà payé${skippedPaid > 1 ? "s" : ""} (ignoré${skippedPaid > 1 ? "s" : ""})`);
-    if (failed > 0) parts.push(`${failed} échec${failed > 1 ? "s" : ""}`);
-
-    if (generated > 0) {
-      toast.success(`Bulletins générés pour ${month}`, { description: parts.slice(1).join(", ") || undefined });
-    } else {
-      toast.error(`Aucun bulletin généré pour ${month}`, { description: parts.slice(1).join(", ") || undefined });
-    }
+    }, "Autoriser la génération des bulletins de paie");
   };
 
   const singleEmployeeMonthRun =
@@ -237,17 +397,56 @@ export default function PayrollPage() {
     return years;
   }, []);
 
+  // After a successful punch import, refresh the "Net à payer" of any
+  // bulletin already generated for the currently selected month — otherwise
+  // an employee's payroll run stays frozen at whatever attendance existed
+  // when it was first generated, even though the underlying punches (and
+  // therefore present/late/absent counts) just changed. Deliberately scoped
+  // to runs that (a) belong to the month currently open on screen and (b)
+  // aren't marked paid yet — mirrors the same paid-lock safety rule
+  // "Générer tous les bulletins" already applies, so this never silently
+  // overwrites a bulletin that's already been settled. It never generates a
+  // brand-new bulletin for an employee who doesn't have one yet — that
+  // remains the explicit "Générer tous les bulletins" action.
+  const recalcSelectedMonthPayroll = async () => {
+    if (month === "all" || !monthRuns) return;
+    const refreshable = monthRuns.filter((r) => !r.paid);
+    if (refreshable.length === 0) return;
+
+    let refreshed = 0;
+    for (const run of refreshable) {
+      try {
+        await db.payroll.run(run.employee_id, month);
+        refreshed++;
+      } catch {
+        // Best-effort — a single employee's recalculation failing (e.g. no
+        // base_salary anymore) shouldn't block the others.
+      }
+    }
+
+    if (refreshed > 0) {
+      queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
+      toast.success(`${refreshed} bulletin${refreshed > 1 ? "s" : ""} recalculé${refreshed > 1 ? "s" : ""} pour ${month}`);
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
-      const rows = parsePunchTsv(text);
+      const { rows, invalidCount } = parsePunchFile(text);
       if (rows.length === 0) {
-        toast.error("Aucun pointage valide trouvé dans le fichier");
+        toast.error("Aucun pointage valide trouvé dans le fichier", {
+          description: invalidCount > 0 ? `${invalidCount} ligne${invalidCount > 1 ? "s" : ""} avec une date illisible` : undefined,
+        });
         return;
       }
-      importPunches.mutate(rows);
+      if (invalidCount > 0) {
+        toast.warning(`${invalidCount} ligne${invalidCount > 1 ? "s" : ""} ignorée${invalidCount > 1 ? "s" : ""} (date illisible)`);
+      }
+      importPunches.mutate(rows, { onSuccess: () => { void recalcSelectedMonthPayroll(); } });
     } catch (err) {
       toast.error("Erreur lors de la lecture du fichier");
       console.error(err);
@@ -276,6 +475,9 @@ export default function PayrollPage() {
       primes: String(run.primes),
       avance_deduction: String(run.avance_deduction),
       net_a_payer: String(run.net_a_payer),
+      notes: run.notes || "",
+      paid: run.paid,
+      paid_date: run.paid_date || new Date().toISOString().slice(0, 10),
     });
   };
 
@@ -309,13 +511,32 @@ export default function PayrollPage() {
       primes: parseFloat(editForm.primes) || 0,
       avance_deduction: parseFloat(editForm.avance_deduction) || 0,
       net_a_payer: parseFloat(editForm.net_a_payer) || 0,
+      notes: editForm.notes || null,
     };
-    updateRun.mutate(data, { onSuccess: () => setEditingRun(null) });
+    // paid/paid_date stay a separate backend command by design (see
+    // update_payroll_run's own doc comment) — this button just fires both
+    // mutations together so the edit dialog reads as one coherent save,
+    // only touching the paid state when it actually changed.
+    const paidChanged = editForm.paid !== editingRun.paid || (editForm.paid && editForm.paid_date !== editingRun.paid_date);
+    updateRun.mutate(data, {
+      onSuccess: () => {
+        if (paidChanged) {
+          updatePaid.mutate(
+            { id: editingRun.id, paid: editForm.paid, paidDate: editForm.paid ? editForm.paid_date : null },
+            { onSuccess: () => setEditingRun(null) }
+          );
+        } else {
+          setEditingRun(null);
+        }
+      },
+    });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingRunId) return;
-    deleteRun.mutate(deletingRunId, { onSuccess: () => setDeletingRunId(null) });
+    await executeSecuredAction(() => {
+      deleteRun.mutate(deletingRunId, { onSuccess: () => setDeletingRunId(null) });
+    }, "Autoriser la suppression du bulletin de paie");
   };
 
   // Global exports pull every month in the selected period (not just the
@@ -421,10 +642,15 @@ export default function PayrollPage() {
     <>
         <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1400px] mx-auto w-full">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            {/* xl, not md — the controls on the right (month + year selects,
+                import button, generate-bulletins button) need much more
+                room than md's 768px breakpoint leaves once they're sharing
+                a row with the title, which squeezed the subtitle into an
+                ugly multi-line wrap at the app's minimum window width. */}
+            <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-foreground tracking-tight">Paie</h1>
-                <p className="text-muted-foreground mt-1">Pointages, bulletins de paie et avances</p>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Équipe & Salaires</h1>
+                <p className="text-xs text-slate-500 mt-1">Pointages, bulletins de paie et avances</p>
               </div>
               <div className="flex items-center gap-3">
                 {activeTab === "salaries" && (
@@ -458,12 +684,12 @@ export default function PayrollPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <input type="file" ref={fileInputRef} onChange={handleImport} accept=".txt,.tsv,.dat" className="hidden" />
+                    <input type="file" ref={fileInputRef} onChange={handleImport} accept=".txt,.tsv,.dat,.csv" className="hidden" />
                     <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()} disabled={importPunches.isPending}>
                       <Upload className="w-4 h-4" />
                       {importPunches.isPending ? "Import…" : "Importer les pointages"}
                     </Button>
-                    <Button className="gap-2" onClick={handleBulkGenerate} disabled={isBulkRunning}>
+                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleBulkGenerate} disabled={isBulkRunning}>
                       <RunIcon className="w-4 h-4" />
                       {isBulkRunning ? "Génération…" : `Générer tous les bulletins (${month})`}
                     </Button>
@@ -554,6 +780,23 @@ export default function PayrollPage() {
               </Card>
             )}
 
+            {/* Pointage & Présences — a Tracker strip per active employee
+                across the filtered month's days, backed by
+                get_employee_daily_attendance (day-by-day, not the monthly
+                absence-count summary the payroll runs table below uses). */}
+            {activeEmployees.length > 0 && (
+              <Card className="mb-6">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Pointage & Présences ({month})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {activeEmployees.map((emp) => (
+                    <EmployeeAttendanceRow key={emp.id} employee={emp} month={month} />
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Filter & export toolbar — the anchor month/year picked in the
                 header above still drives the table below (always one
                 month); "Période" here only widens how many trailing months
@@ -618,7 +861,7 @@ export default function PayrollPage() {
                   <Button
                     size="sm"
                     className="gap-2 shrink-0"
-                    onClick={() => runPayroll.mutate({ employeeId: employeeFilter, month })}
+                    onClick={() => executeSecuredAction(() => runPayroll.mutate({ employeeId: employeeFilter, month }), "Autoriser la génération du bulletin")}
                     disabled={runPayroll.isPending}
                   >
                     <RunIcon className="w-4 h-4" />
@@ -673,6 +916,7 @@ export default function PayrollPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              disabled={updatePaid.isPending}
                               onClick={() =>
                                 updatePaid.mutate({ id: run.id, paid: true, paidDate: new Date().toISOString().slice(0, 10) })
                               }
@@ -768,6 +1012,12 @@ export default function PayrollPage() {
                     <StatusBadge tone="warning">En attente</StatusBadge>
                   )}
                 </div>
+                {selectedRun.notes && (
+                  <div className="py-2 border-t border-border/50 pt-3">
+                    <span className="text-muted-foreground text-xs">Notes</span>
+                    <p className="mt-1">{selectedRun.notes}</p>
+                  </div>
+                )}
               </div>
               {!selectedRun.paid && (
                 <DialogFooter>
@@ -791,8 +1041,9 @@ export default function PayrollPage() {
 
       {/* Manual override — every calculated field, editable, so a one-off
           correction doesn't have to go through run_payroll's automatic
-          recompute. Payment status stays out of this form on purpose: it's
-          exclusively "Marquer payé" 's job, so there's one place that toggles it. */}
+          recompute. Paid/paid_date/notes save via this same button but still
+          go through their own backend commands under the hood (see
+          handleSaveEdit) — update_payroll_run itself doesn't touch them. */}
       <Dialog open={!!editingRun} onOpenChange={(open) => !open && setEditingRun(null)}>
         <DialogContent>
           {editingRun && (
@@ -869,7 +1120,32 @@ export default function PayrollPage() {
                   />
                 </div>
               </div>
-              <DialogFooter className="sm:justify-between">
+
+              <div className="flex items-center gap-2 mt-4">
+                <Checkbox
+                  id="payroll-edit-paid"
+                  checked={editForm.paid}
+                  onCheckedChange={(v) => setEditForm((f) => ({ ...f, paid: !!v }))}
+                />
+                <Label htmlFor="payroll-edit-paid" className="cursor-pointer">Payé</Label>
+              </div>
+              {editForm.paid && (
+                <div className="space-y-1.5 mt-2">
+                  <Label>Date de paiement</Label>
+                  <DatePicker value={editForm.paid_date} onChange={(v) => setEditForm((f) => ({ ...f, paid_date: v }))} />
+                </div>
+              )}
+              <div className="space-y-1.5 mt-4">
+                <Label>Notes</Label>
+                <Textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Ex. Réglé par virement, avance sur prime de fin d'année…"
+                  rows={2}
+                />
+              </div>
+
+              <DialogFooter className="sm:justify-between mt-4">
                 <Button variant="ghost" className="gap-2" onClick={recalculateNet}>
                   <RecalcIcon className="w-4 h-4" />
                   Recalculer
@@ -888,23 +1164,19 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingRunId} onOpenChange={(open) => !open && setDeletingRunId(null)}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce bulletin de paie ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible. Le bulletin sera supprimé et pourra être régénéré via "Générer le bulletin".
-              Les avances déduites par ce bulletin redeviennent disponibles pour un futur calcul.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground rounded-xl">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={!!deletingRunId}
+        onOpenChange={(open) => !open && setDeletingRunId(null)}
+        title="Supprimer le bulletin de paie"
+        itemIdentifier={(() => {
+          const run = monthRuns?.find((r) => r.id === deletingRunId);
+          const emp = run ? employeeNameById.get(run.employee_id) : null;
+          return emp ? `Bulletin — ${emp}` : "Bulletin de paie";
+        })()}
+        description="Cette action est irréversible. Le bulletin sera supprimé et pourra être régénéré via 'Générer le bulletin'. Les avances déduites par ce bulletin redeviennent disponibles pour un futur calcul."
+        isLoading={deleteRun.isPending}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }

@@ -25,6 +25,8 @@ import { useLicenseStatus } from "@/hooks/useLicense";
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftOrderInput } from "@/lib/emailDrafter";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "neutral" | "success" | "warning" | "error" }> = {
   draft: { label: "Brouillon", variant: "neutral" },
@@ -41,6 +43,7 @@ const getOrderStatusConfig = (status: string | null | undefined) =>
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const { executeSecuredAction } = useSecureSession();
   const { data: orders, isLoading } = useOrders();
   const deleteOrder = useDeleteOrder();
   const updateOrderStatus = useUpdateOrderStatus();
@@ -50,6 +53,7 @@ export default function OrdersPage() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isBulkConfirming, setIsBulkConfirming] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const filteredOrders = orders?.filter(order => {
     const q = searchQuery.toLowerCase().trim();
@@ -67,17 +71,18 @@ export default function OrdersPage() {
     }).format(amount) + " DA";
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      deleteOrder.mutate(deleteId, {
-        onSuccess: () => {
-          toast.success("Commande supprimée avec succès");
-          setDeleteId(null);
-        },
-        onError: () => {
-          toast.error("Erreur lors de la suppression");
-        }
-      });
+      await executeSecuredAction(() => {
+        deleteOrder.mutate(deleteId, {
+          onSuccess: () => {
+            setDeleteId(null);
+          },
+          onError: () => {
+            toast.error("Erreur lors de la suppression");
+          }
+        });
+      }, "Autoriser la suppression de la commande");
     }
   };
 
@@ -227,21 +232,26 @@ export default function OrdersPage() {
   };
 
   const handleBulkDelete = async () => {
-    const results = await Promise.allSettled(selectedOrders.map((id) => deleteOrder.mutateAsync(id)));
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed === 0) {
-      toast.success(`${results.length} commande${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
-    } else {
-      toast.error(`${failed} commande(s) sur ${results.length} n'ont pas pu être supprimées`);
+    setIsBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(selectedOrders.map((id) => deleteOrder.mutateAsync(id)));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} commande${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} commande(s) sur ${results.length} n'ont pas pu être supprimées`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkDeleting(false);
     }
-    clearSelection();
   };
 
   return (
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl text-foreground tracking-tight">Bons de Commande</h1>
               <p className="text-muted-foreground mt-1">
@@ -364,10 +374,10 @@ export default function OrdersPage() {
                             <TooltipContent side="top">{order.clients?.name || "-"}</TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground">
+                        <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
                           {format(new Date(order.order_date), "dd MMM yyyy", { locale: fr })}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">
+                        <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap">
                           {order.delivery_date
                             ? format(new Date(order.delivery_date), "dd MMM yyyy", { locale: fr })
                             : "-"}
@@ -439,39 +449,24 @@ export default function OrdersPage() {
           </div>
       </main>
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer le bon de commande ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        title="Supprimer le bon de commande"
+        itemIdentifier={orders?.find((o) => o.id === deleteId)?.order_number || "Commande"}
+        description="Cette action est irréversible. La commande sera définitivement supprimée."
+        isLoading={deleteOrder.isPending}
+        onConfirm={handleDelete}
+      />
 
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer {selectedOrders.length} commande{selectedOrders.length > 1 ? "s" : ""} ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible et supprimera définitivement {selectedOrders.length > 1 ? "ces commandes" : "cette commande"}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+        title={`Supprimer ${selectedOrders.length} commande${selectedOrders.length > 1 ? "s" : ""} ?`}
+        description={`Cette action est irréversible et supprimera définitivement ${selectedOrders.length > 1 ? "ces commandes" : "cette commande"}.`}
+        isLoading={isBulkDeleting}
+        onConfirm={handleBulkDelete}
+      />
 
       {emailTarget && (
         <SendDocumentEmailModal

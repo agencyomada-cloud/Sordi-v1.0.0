@@ -97,15 +97,15 @@ export default function SuppliersPage() {
       <main className="flex-1 p-8 pt-4">
         <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 animate-fade-in-down">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">Fournisseurs</h1>
-              <p className="text-muted-foreground mt-1">Gérez vos fournisseurs et prestataires</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Fournisseurs & Prestataires</h1>
+              <p className="text-xs text-slate-500 mt-1">Gérez vos fournisseurs et prestataires</p>
             </div>
 
             <div className="flex items-center gap-3">
               <Button
-                className="gap-2 bg-[#EB3B48] hover:bg-[#D82F3C] text-white font-medium shadow-sm transition-colors"
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
                 onClick={openCreateDialog}
               >
                 <Plus className="w-4 h-4" />

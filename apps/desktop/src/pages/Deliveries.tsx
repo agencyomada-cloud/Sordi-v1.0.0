@@ -29,6 +29,8 @@ import { generateDeliveryNotePDF, generateDeliveryNotePDFBlob, buildDeliveryNote
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftDeliveryInput } from "@/lib/emailDrafter";
+import { useSecureSession } from "@/hooks/useSecureSession";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 
 const STATUS_CONFIG: Record<DeliveryNoteStatus, { label: string; variant: "neutral" | "warning" | "success" }> = {
   draft: { label: "Brouillon", variant: "neutral" },
@@ -51,12 +53,14 @@ export default function DeliveriesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const setDeliveryStatus = useSetDeliveryStatus();
   const deleteDeliveryNote = useDeleteDeliveryNote();
+  const { executeSecuredAction } = useSecureSession();
   const [emailNoteId, setEmailNoteId] = useState<string | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [selectedDeliveries, setSelectedDeliveries] = useState<string[]>([]);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [isBulkMarkingSigned, setIsBulkMarkingSigned] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const filteredNotes = deliveryNotes?.filter(note => {
     const q = searchQuery.toLowerCase().trim();
@@ -120,11 +124,13 @@ export default function DeliveriesPage() {
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
-    deleteDeliveryNote.mutate(deleteId, {
-      onSuccess: () => setDeleteId(null),
-    });
+    await executeSecuredAction(() => {
+      deleteDeliveryNote.mutate(deleteId, {
+        onSuccess: () => setDeleteId(null),
+      });
+    }, "Autoriser la suppression du bon de livraison");
   };
 
   const toggleAll = () => {
@@ -200,14 +206,19 @@ export default function DeliveriesPage() {
   };
 
   const handleBulkDelete = async () => {
-    const results = await Promise.allSettled(selectedDeliveries.map((id) => deleteDeliveryNote.mutateAsync(id)));
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed === 0) {
-      toast.success(`${results.length} bon${results.length > 1 ? "s" : ""} supprimé${results.length > 1 ? "s" : ""}`);
-    } else {
-      toast.error(`${failed} bon(s) sur ${results.length} n'ont pas pu être supprimés`);
+    setIsBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(selectedDeliveries.map((id) => deleteDeliveryNote.mutateAsync(id)));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === 0) {
+        toast.success(`${results.length} bon${results.length > 1 ? "s" : ""} supprimé${results.length > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`${failed} bon(s) sur ${results.length} n'ont pas pu être supprimés`);
+      }
+      clearSelection();
+    } finally {
+      setIsBulkDeleting(false);
     }
-    clearSelection();
   };
 
   const emailNote = deliveryNotes?.find(n => n.id === emailNoteId);
@@ -217,7 +228,7 @@ export default function DeliveriesPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl text-foreground tracking-tight">Bons de livraison</h1>
               <p className="text-muted-foreground mt-1">
@@ -443,39 +454,24 @@ export default function DeliveriesPage() {
           </div>
       </main>
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer le bon de livraison ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        title="Supprimer le bon de livraison"
+        itemIdentifier={deliveryNotes?.find((d) => d.id === deleteId)?.delivery_number || "Bon de livraison"}
+        description="Cette action est irréversible. Le bon de livraison sera définitivement supprimé."
+        isLoading={deleteDeliveryNote.isPending}
+        onConfirm={handleDelete}
+      />
 
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-3xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer {selectedDeliveries.length} bon{selectedDeliveries.length > 1 ? "s" : ""} de livraison ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible et supprimera définitivement {selectedDeliveries.length > 1 ? "ces bons de livraison" : "ce bon de livraison"}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full">Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground rounded-full">
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConfirmationModal
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+        title={`Supprimer ${selectedDeliveries.length} bon${selectedDeliveries.length > 1 ? "s" : ""} de livraison ?`}
+        description={`Cette action est irréversible et supprimera définitivement ${selectedDeliveries.length > 1 ? "ces bons de livraison" : "ce bon de livraison"}.`}
+        isLoading={isBulkDeleting}
+        onConfirm={handleBulkDelete}
+      />
 
       {emailPdfData && (
         <SendDocumentEmailModal

@@ -1,7 +1,9 @@
 pub mod database;
+mod biometric;
 mod commands;
 mod license;
 mod pdf_service;
+mod widget;
 #[cfg(test)]
 mod seed_test_data;
 
@@ -14,6 +16,23 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
+    .plugin(
+      tauri_plugin_window_state::Builder::default()
+        // Only the widget's position/size is meant to persist across
+        // restarts — the main window's sizing stays exactly what
+        // tauri.conf.json declares.
+        .with_denylist(&["main"])
+        // Exclude VISIBLE: the plugin's default flags restore/re-show a
+        // window based on whether it was visible when the app last closed,
+        // which made the widget pop open on every launch after it had been
+        // toggled on once. The widget should only ever open via its own
+        // header icon toggle — position/size still persist, visibility
+        // never does.
+        .with_state_flags(
+          tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE,
+        )
+        .build(),
+    )
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -23,11 +42,26 @@ pub fn run() {
         )?;
       }
       
-      // Initialize database
+      // Initialize database — a debug build (`tauri dev`) always uses its
+      // own database-dev.db and NEVER reads or copies the real
+      // database.db, so a dev session can never see (or risk writing) real
+      // agency data. A release build always uses database.db. When
+      // database-dev.db doesn't exist yet, init_database() below creates it
+      // from scratch (structural migrations only, no data), and a minimal,
+      // clearly-fake dataset is seeded once right after so the UI has
+      // something to render instead of every screen showing an empty state.
       let app_dir = app.path().app_data_dir().expect("failed to get app data dir");
       std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
-      let db_path = app_dir.join("database.db");
+      let db_path = if cfg!(debug_assertions) {
+        app_dir.join("database-dev.db")
+      } else {
+        app_dir.join("database.db")
+      };
+      let is_fresh_dev_db = cfg!(debug_assertions) && !db_path.exists();
       let db = init_database(db_path.to_str().unwrap()).expect("failed to initialize database");
+      if is_fresh_dev_db {
+        database::seed_minimal_dev_mock_data(&db).expect("failed to seed minimal dev mock data");
+      }
 
       app.manage(Mutex::new(db));
       license::init(&app_dir);
@@ -77,9 +111,11 @@ pub fn run() {
       commands::update_invoice_header,
       commands::delete_invoice,
       commands::convert_to_real_invoice,
+      commands::convert_proforma_to_invoice,
       // Payments
       commands::get_payments,
       commands::create_payment,
+      commands::update_payment,
       commands::delete_payment,
       commands::add_payment_attachment,
       commands::get_payment_attachments,
@@ -105,6 +141,7 @@ pub fn run() {
       // Expenses
       commands::get_expenses,
       commands::create_expense,
+      commands::update_expense,
       commands::delete_expense,
       // Letterhead
       commands::get_letterhead_image,
@@ -147,6 +184,7 @@ pub fn run() {
       commands::get_employee_task_workload,
       // HR / Payroll (omada-agency branch only)
       commands::get_employee_absence_stats,
+      commands::get_employee_daily_attendance,
       commands::import_punch_records,
       commands::get_unmapped_device_codes,
       commands::create_employee_advance,
@@ -154,17 +192,21 @@ pub fn run() {
       commands::get_employee_advance_totals,
       commands::set_employee_advance_deducted,
       commands::save_pdf_backup,
+      commands::backup_database,
       commands::run_payroll,
       commands::get_payroll_runs,
       commands::update_payroll_paid,
       commands::update_payroll_run,
       commands::delete_payroll_run,
       commands::get_payroll_dashboard_stats,
+      commands::get_employee_hr_stats,
+      commands::get_employee_payroll_summaries,
       // Projects (omada-agency branch only)
       commands::get_projects,
       commands::get_project,
       commands::create_project,
       commands::update_project,
+      commands::update_project_status,
       commands::delete_project,
       commands::update_freelancer_payment_status,
       commands::assign_freelance_payment,
@@ -205,6 +247,8 @@ pub fn run() {
       commands::has_password_set,
       commands::check_password,
       commands::set_password,
+      biometric::authenticate_biometric,
+      widget::toggle_widget_window,
       // Licensing
       commands::get_license_status,
       commands::activate_license,

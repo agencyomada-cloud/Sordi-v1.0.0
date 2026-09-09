@@ -152,7 +152,7 @@ export default function History() {
         <>
                 <main className="flex-1 p-8 pt-4 space-y-8">
                     {/* Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-3xl font-bold text-foreground tracking-tight">Historique</h1>
                             <p className="text-muted-foreground mt-1">Suivez toutes les activités et changements</p>

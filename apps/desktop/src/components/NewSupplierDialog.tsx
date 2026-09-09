@@ -228,7 +228,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
             <Button
               type="submit"
               disabled={isSaving}
-              className="rounded-full px-8 bg-[#EB3B48] hover:bg-[#D82F3C] text-white font-medium shadow-sm transition-colors"
+              className="rounded-full px-8 bg-primary hover:bg-primary-hover text-primary-foreground font-medium shadow-sm transition-colors"
             >
               {isSaving ? "Enregistrement..." : isEditing ? "Enregistrer" : "Créer le fournisseur"}
             </Button>

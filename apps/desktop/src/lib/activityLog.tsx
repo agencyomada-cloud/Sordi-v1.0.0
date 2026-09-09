@@ -6,6 +6,10 @@ import {
   RiDatabase2Line as Database,
   RiReceiptLine as Receipt,
   RiHistoryLine as HistoryIcon,
+  RiFileShield2Line as ContractIcon,
+  RiFileList3Line as OrderIcon,
+  RiBankCardLine as PaymentIcon,
+  RiStore2Line as SupplierIcon,
 } from "@remixicon/react";
 
 /**
@@ -47,6 +51,14 @@ export function getEntityConfig(type: string) {
       return { label: "Paramètres", color: "bg-muted text-muted-foreground", icon: <Settings className="w-4 h-4" /> };
     case "EXPENSE":
       return { label: "Dépense", color: "bg-destructive/10 text-destructive", icon: <Receipt className="w-4 h-4" /> };
+    case "CONTRACT":
+      return { label: "Contrat", color: "bg-indigo-500/10 text-indigo-500", icon: <ContractIcon className="w-4 h-4" /> };
+    case "ORDER":
+      return { label: "Commande", color: "bg-cyan-500/10 text-cyan-500", icon: <OrderIcon className="w-4 h-4" /> };
+    case "PAYMENT":
+      return { label: "Paiement", color: "bg-teal-500/10 text-teal-500", icon: <PaymentIcon className="w-4 h-4" /> };
+    case "SUPPLIER":
+      return { label: "Fournisseur", color: "bg-orange-500/10 text-orange-500", icon: <SupplierIcon className="w-4 h-4" /> };
     default:
       return { label: type, color: "bg-muted text-muted-foreground", icon: <HistoryIcon className="w-4 h-4" /> };
   }
@@ -62,6 +74,10 @@ export function getEntityRoute(entityType: string, entityId: string | null): str
     case "PRODUCT": return "/products";
     case "EXPENSE": return "/expenses";
     case "SETTINGS": return "/settings";
+    case "CONTRACT": return "/contracts";
+    case "ORDER": return `/orders/${entityId}`;
+    case "PAYMENT": return "/payments";
+    case "SUPPLIER": return "/fournisseurs";
     default: return "/history";
   }
 }

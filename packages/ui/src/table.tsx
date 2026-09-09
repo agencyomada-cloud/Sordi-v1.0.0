@@ -18,7 +18,7 @@ const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttribut
       // sticky + backdrop-blur is inert (harmless) unless a caller wraps
       // Table in its own scrollable max-height container — where it now
       // stays pinned with a translucent, blurred backdrop over scrolled rows.
-      className={cn("[&_tr]:border-b border-border/40 sticky top-0 z-10 backdrop-blur-sm bg-background/80", className)}
+      className={cn("[&_tr]:border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm bg-slate-50/70 dark:bg-background/80 dark:border-border/40", className)}
       {...props}
     />
   ),
@@ -54,7 +54,7 @@ const TableRow = React.forwardRef<
     // trailing quick-actions stay hidden until the row is hovered without
     // every table having to remember to add it.
     className={cn(
-      "group border-b border-border/30 transition-colors duration-200 data-[state=selected]:bg-muted hover:bg-muted/30",
+      "group border-b border-slate-100/80 transition-colors duration-200 text-sm text-slate-700 data-[state=selected]:bg-muted hover:bg-slate-50/50 dark:border-border/30 dark:text-foreground dark:hover:bg-muted/30",
       dimmed && "opacity-60 saturate-50",
       className
     )}
@@ -77,8 +77,8 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
       className={cn(
         // Compact, high-density row height (was h-14) with a crisp
         // uppercase micro-label — the Binance/Linear dense-table look.
-        "h-11 px-5 text-left align-middle font-semibold text-muted-foreground text-[10px] uppercase tracking-wider [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right",
+        "py-3 px-4 text-left align-middle font-semibold text-slate-400 text-[11px] uppercase tracking-wider [&:has([role=checkbox])]:pr-0 dark:text-muted-foreground",
+        numeric && "text-right whitespace-nowrap",
         className,
       )}
       {...props}
@@ -92,8 +92,11 @@ const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<
     <td
       ref={ref}
       className={cn(
-        "px-5 py-3 align-middle [&:has([role=checkbox])]:pr-0",
-        numeric && "text-right font-mono tabular-nums tracking-tight",
+        "px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0",
+        // A numeric/currency cell should never wrap — a truncated table
+        // column otherwise breaks a figure like "1 061 600,00 DA" across
+        // two or three lines instead of just letting the column widen.
+        numeric && "text-right font-mono tabular-nums tracking-tight whitespace-nowrap",
         className
       )}
       {...props}

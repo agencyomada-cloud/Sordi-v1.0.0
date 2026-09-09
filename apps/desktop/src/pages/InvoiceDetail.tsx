@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   RiArrowLeftLine as ArrowLeft,
@@ -13,16 +13,42 @@ import {
   RiTruckLine as Truck,
   RiLoader4Line as Loader2,
   RiMailSendLine as MailSend,
-  RiMore2Fill as MoreVertical
+  RiMore2Fill as MoreVertical,
+  RiFileCopyLine as Copy,
+  RiDeleteBinLine as Trash2,
 } from "@remixicon/react";
 import { toast } from "sonner";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, statusBadgeVariants, StatusDot, Skeleton, EmptyState } from "@sordi/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  statusBadgeVariants,
+  Skeleton,
+  EmptyState,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@sordi/ui";
 import { RiFolderChartLine as FolderIcon, RiFileSearchLine as NotFoundIcon } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/database";
-import { useInvoice, useConvertProforma } from "@/hooks/useInvoices";
+import { useInvoice, useInvoices, useConvertProforma, useCreateInvoice, useDeleteInvoice } from "@/hooks/useInvoices";
 import { useSetPageHeader } from "@/hooks/usePageHeader";
 import { useSettings } from "@/hooks/useSettings";
+import { useSecureSession } from "@/hooks/useSecureSession";
 import { useLicenseStatus } from "@/hooks/useLicense";
 import { useProjects, useAssignInvoiceToProject } from "@/hooks/useProjects";
 import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, openSavedFile } from "@/lib/pdfGenerator";
@@ -30,25 +56,46 @@ import { InvoicePreview } from "@/components/invoice/InvoicePreview";
 import { InvoicePrintView } from "@/components/invoice/InvoicePrintView";
 import { PDFViewerModal } from "@/components/pdf/PDFViewerModal";
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
+import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import type { DraftInvoiceInput } from "@/lib/emailDrafter";
 import { getInvoiceStatusConfig } from "@/lib/invoiceStatus";
 
 
 const EditableHeader = ({ invoice, onUpdate }: { invoice: any, onUpdate: (title: string, number: string) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(invoice.custom_title || (invoice.invoice_type === "credit_note" ? "Avoir" : "Facture"));
+  // The fallback-substituted value, not the raw field — comparing against
+  // the raw `invoice.custom_title` (often null/empty) made handleSave
+  // think *every* open-then-close of the editor was a real edit, silently
+  // writing the literal word "Facture"/"Avoir" into custom_title even
+  // when the user changed nothing.
+  const originalTitle = invoice.custom_title || (invoice.invoice_type === "credit_note" ? "Avoir" : "Facture");
+  const [title, setTitle] = useState(originalTitle);
   const [number, setNumber] = useState(invoice.invoice_number);
 
+  // Resync when the underlying invoice changes — navigating from one
+  // invoice's detail page to another reuses this same mounted component,
+  // and without this the inputs would show the *previous* invoice's
+  // title/number the next time edit mode is opened.
+  useEffect(() => {
+    setTitle(originalTitle);
+    setNumber(invoice.invoice_number);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice.id, originalTitle, invoice.invoice_number]);
+
   const handleSave = () => {
-    if (title !== invoice.custom_title || number !== invoice.invoice_number) {
+    if (title !== originalTitle || number !== invoice.invoice_number) {
       onUpdate(title, number);
     }
     setIsEditing(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      handleSave();
+      // Blur instead of calling handleSave directly — unmounting the
+      // input on setIsEditing(false) fires a native blur anyway, so
+      // calling handleSave from both here and onBlur double-saved (and
+      // could double-toast) on every Enter press.
+      e.currentTarget.blur();
     }
   };
 
@@ -94,12 +141,75 @@ export default function InvoiceDetailPage() {
   const { data: projects } = useProjects();
   const assignInvoiceToProject = useAssignInvoiceToProject();
   const convertProforma = useConvertProforma();
+  const createInvoice = useCreateInvoice();
+  const deleteInvoice = useDeleteInvoice();
+  const { executeSecuredAction } = useSecureSession();
+  // Only fetched to check for a linked avoir — "Télécharger Avoir" only
+  // shows up when one actually exists for this invoice.
+  const { data: creditNotes } = useInvoices(undefined, "credit_note");
+  const linkedCreditNote = creditNotes?.find((cn: any) => cn.original_invoice_id === id);
   const [showPreview, setShowPreview] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const deleteConfirmOpen = isDeleteDialogOpen;
+  const setDeleteConfirmOpen = setIsDeleteDialogOpen;
+
+  const handleDuplicate = async () => {
+    if (!invoice) return;
+    try {
+      createInvoice.mutate(
+        {
+          client_id: invoice.client_id,
+          invoice_date: new Date().toISOString().split("T")[0],
+          due_date: invoice.due_date || undefined,
+          notes: invoice.notes || undefined,
+          header_note: invoice.header_note || undefined,
+          payment_method: invoice.payment_method || undefined,
+          tax_mode: invoice.tax_mode,
+          project_id: invoice.project_id || undefined,
+          items: (invoice.invoice_items || []).map((item: any) => ({
+            product_id: item.product_id || undefined,
+            product_name: item.product_name || item.products?.name || undefined,
+            product_code: item.product_code || item.products?.code || undefined,
+            product_description: item.product_description || item.products?.description || undefined,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            tva_rate: item.tva_rate === undefined ? 19.0 : item.tva_rate,
+            timbre_exempt: item.timbre_exempt ?? false,
+          })),
+        },
+        {
+          onSuccess: (created) => {
+            toast.success("Facture dupliquée avec succès");
+            navigate(`/invoices/${created.id}/edit`);
+          },
+          onError: (error: any) => {
+            toast.error("Erreur lors de la duplication de la facture", {
+              description: error?.message,
+            });
+          },
+        }
+      );
+    } catch (error: any) {
+      toast.error("Erreur lors de la duplication de la facture", {
+        description: error?.message,
+      });
+    }
+  };
+  const handleDuplicateToInvoice = handleDuplicate;
+
+  const handleConfirmDelete = async () => {
+    if (!id) return;
+    await executeSecuredAction(() => {
+      deleteInvoice.mutate(id, {
+        onSuccess: () => navigate("/invoices"),
+      });
+    }, "Autoriser la suppression de la facture");
+  };
 
   const listLabel =
     invoice?.invoice_type === "credit_note" ? "Avoirs" : invoice?.invoice_type === "proforma" ? "Proformas" : "Facturation";
@@ -131,11 +241,11 @@ export default function InvoiceDetailPage() {
 
     setIsGenerating(true);
     try {
-      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
-        toast.success("PDF téléchargé avec succès", {
-          description: `Enregistré sous : ${path || fileName}`,
+      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob }) => {
+        toast.success("Facture PDF générée", {
+          description: "Le fichier a été enregistré avec succès.",
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
-          duration: 6000,
+          duration: 5000,
         });
       });
     } catch (error) {
@@ -251,8 +361,7 @@ export default function InvoiceDetailPage() {
                       }
                     }}
                   />
-                  <span className={statusBadgeVariants()}>
-                    <StatusDot tone={getInvoiceStatusConfig(invoice.status).variant} />
+                  <span className={statusBadgeVariants({ tone: getInvoiceStatusConfig(invoice.status).variant })}>
                     {getInvoiceStatusConfig(invoice.status).label}
                   </span>
                 </div>
@@ -315,6 +424,15 @@ export default function InvoiceDetailPage() {
               <Button
                 variant="outline"
                 className="rounded-full"
+                onClick={() => navigate(`/invoices/${id}/edit`)}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                <span>Modifier</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="rounded-full"
                 onClick={handlePrint}
                 disabled={isGenerating}
               >
@@ -346,6 +464,21 @@ export default function InvoiceDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => navigate(`/invoices/${id}/edit`)}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    <span>Modifier</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDuplicate} disabled={createInvoice.isPending}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    <span>{createInvoice.isPending ? "Duplication..." : "Dupliquer"}</span>
+                  </DropdownMenuItem>
+                  {linkedCreditNote && (
+                    <DropdownMenuItem onClick={() => navigate(`/invoices/${linkedCreditNote.id}`)}>
+                      <Download className="w-4 h-4 mr-2" />
+                      <span>Télécharger Avoir</span>
+                    </DropdownMenuItem>
+                  )}
+
                   {!isCreditNote && invoice.status !== "paid" && (
                     <>
                       <DropdownMenuSeparator />
@@ -381,11 +514,15 @@ export default function InvoiceDetailPage() {
                     </>
                   )}
 
-                  {invoice.invoice_type === "proforma" && (
+                  {invoice.invoice_type === "proforma" && invoice.status !== "converted" && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => convertProforma.mutate(invoice.id)}
+                        onClick={() =>
+                          convertProforma.mutate(invoice.id, {
+                            onSuccess: (created) => navigate(`/invoices/${created.id}`),
+                          })
+                        }
                         disabled={convertProforma.isPending}
                       >
                         <ArrowRightLeft className="w-4 h-4 mr-2" />
@@ -393,20 +530,34 @@ export default function InvoiceDetailPage() {
                       </DropdownMenuItem>
                     </>
                   )}
-
-                  {invoice.status !== "paid" && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        <span>Modifier</span>
-                      </DropdownMenuItem>
-                    </>
+                  {invoice.invoice_type === "proforma" && invoice.converted_to_invoice_id && (
+                    <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.converted_to_invoice_id}`)}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      <span>Voir la facture générée</span>
+                    </DropdownMenuItem>
                   )}
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setDeleteConfirmOpen(true)} className="text-destructive focus:text-destructive">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    <span>Supprimer</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
+
+          <DeleteConfirmationModal
+            open={deleteConfirmOpen}
+            onOpenChange={setDeleteConfirmOpen}
+            title="Supprimer la facture"
+            itemIdentifier={invoice.invoice_number || "Facture"}
+            description={(invoice.amount_paid || 0) > 0
+              ? `Cette facture a des paiements enregistrés totalisant ${invoice.amount_paid.toLocaleString("fr-FR")} DA — ils seront supprimés définitivement avec la facture. Cette action est irréversible.`
+              : "Cette action est irréversible."}
+            isLoading={deleteInvoice.isPending}
+            onConfirm={handleConfirmDelete}
+          />
 
           {/* Toggle between Preview and Detail View */}
           <div className={showPreview ? "block" : "fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]"}>
@@ -430,7 +581,7 @@ export default function InvoiceDetailPage() {
                   {(invoice.discount > 0 || (invoice.discount_type === 'percent' && invoice.discount_value > 0) || (invoice.discount_type === 'amount' && invoice.discount_value > 0)) && (
                     <div className="bg-destructive/10 rounded-2xl p-4">
                       <p className="text-sm text-destructive">
-                        Remise {invoice.discount_type === 'percent' ? `(${invoice.discount_value}%)` : ''}
+                        Remise {invoice.discount_type === 'percent' && invoice.discount_value ? `(${invoice.discount_value}%)` : ''}
                       </p>
                       <p className="text-xl font-bold text-destructive">
                         -{formatCurrency(invoice.discount || (invoice.discount_type === 'amount' ? invoice.discount_value : 0))}
@@ -481,7 +632,7 @@ export default function InvoiceDetailPage() {
                               <div className="text-xs mt-1 text-muted-foreground/80">{item.products.description}</div>
                             )}
                           </td>
-                          <td className="px-5 py-4 text-right align-top">{item.quantity.toFixed(3)}</td>
+                          <td className="px-5 py-4 text-right align-top">{(item.quantity ?? 0).toFixed(3)}</td>
                           <td className="px-5 py-4 text-right align-top">{formatCurrency(item.unit_price)}</td>
                           <td className="px-5 py-4 text-right font-medium align-top">{formatCurrency(item.quantity * item.unit_price)}</td>
                         </tr>

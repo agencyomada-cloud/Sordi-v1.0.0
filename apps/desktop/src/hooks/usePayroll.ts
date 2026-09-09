@@ -21,6 +21,7 @@ export function useImportPunchRecords() {
     mutationFn: (rows: PunchImportRow[]) => db.attendance.import(activeCompanyId, rows),
     onSuccess: (summary) => {
       queryClient.invalidateQueries({ queryKey: ["employee-absence-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-daily-attendance"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["unmapped-device-codes"] });
 
@@ -28,6 +29,9 @@ export function useImportPunchRecords() {
       parts.push(`${summary.imported} pointage${summary.imported > 1 ? "s" : ""} importé${summary.imported > 1 ? "s" : ""}`);
       if (summary.skipped_duplicates > 0) {
         parts.push(`${summary.skipped_duplicates} déjà importé${summary.skipped_duplicates > 1 ? "s" : ""}`);
+      }
+      if (summary.invalid_format > 0) {
+        parts.push(`${summary.invalid_format} rejeté${summary.invalid_format > 1 ? "s" : ""} (date illisible)`);
       }
       const title = parts.join(", ");
       const description =
@@ -50,6 +54,14 @@ export function useEmployeeAbsenceStats(employeeId: string | undefined, month: s
   return useQuery({
     queryKey: ["employee-absence-stats", employeeId, month],
     queryFn: () => db.payroll.getAbsenceStats(employeeId!, month),
+    enabled: !!employeeId && !!month,
+  });
+}
+
+export function useEmployeeDailyAttendance(employeeId: string | undefined, month: string) {
+  return useQuery({
+    queryKey: ["employee-daily-attendance", employeeId, month],
+    queryFn: () => db.payroll.getDailyAttendance(employeeId!, month),
     enabled: !!employeeId && !!month,
   });
 }
@@ -122,6 +134,8 @@ export function useRunPayroll() {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["employee-advances", run.employee_id] });
+      queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
       toast.success("Bulletin de paie calculé");
     },
     onError: (error: unknown) => {
@@ -139,6 +153,8 @@ export function useUpdatePayrollPaid() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
     },
     onError: (error: unknown) => {
       const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
@@ -154,6 +170,8 @@ export function useUpdatePayrollRun() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
       toast.success("Bulletin de paie modifié");
     },
     onError: (error: unknown) => {
@@ -171,6 +189,8 @@ export function useDeletePayrollRun() {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
       queryClient.invalidateQueries({ queryKey: ["payroll-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["employee-advances"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
       toast.success("Bulletin de paie supprimé");
     },
     onError: (error: unknown) => {

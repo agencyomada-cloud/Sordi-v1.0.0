@@ -78,7 +78,6 @@ export default function NewClientPage() {
     if (savedDraft) {
       try {
         setFormData(JSON.parse(savedDraft));
-        toast.info("Brouillon restauré");
       } catch {
         // ignore corrupt draft
       }
@@ -123,6 +122,11 @@ export default function NewClientPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.name.trim()) {
+      toast.error("Le nom du client est requis");
+      return;
+    }
 
     if (isEditing && id) {
       updateClient.mutate({ id, ...formData }, {

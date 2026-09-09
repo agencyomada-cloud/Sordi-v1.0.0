@@ -147,7 +147,7 @@ export default function OrderDetailPage() {
   return (
         <main className="flex-1 p-8 pt-4">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -177,7 +177,7 @@ export default function OrderDetailPage() {
                 <Edit className="w-4 h-4 mr-2" />
                 Modifier
               </Button>
-              <Button variant="outline" onClick={handlePrint}>
+              <Button variant="outline" onClick={handlePrint} disabled={isGenerating}>
                 <Printer className="w-4 h-4 mr-2" />
                 Imprimer
               </Button>

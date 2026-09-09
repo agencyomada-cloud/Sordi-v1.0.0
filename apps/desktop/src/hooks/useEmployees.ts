@@ -17,6 +17,8 @@ export const useEmployees = () => {
         mutationFn: (data: Omit<CreateEmployeeData, "company_id">) => db.employees.create({ ...data, company_id: activeCompanyId }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["employees"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
             toast.success("Employé ajouté avec succès");
         },
         onError: (error: any) => {
@@ -29,6 +31,8 @@ export const useEmployees = () => {
             db.employees.update(id, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["employees"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
             toast.success("Employé mis à jour avec succès");
         },
         onError: (error: any) => {
@@ -40,6 +44,8 @@ export const useEmployees = () => {
         mutationFn: (id: string) => db.employees.delete(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["employees"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-hr-stats"] });
+            queryClient.invalidateQueries({ queryKey: ["employee-payroll-summaries"] });
             toast.success("Employé supprimé avec succès");
         },
         onError: (error: any) => {
@@ -54,6 +60,24 @@ export const useEmployees = () => {
         deleteEmployee: deleteMutation,
     };
 };
+
+export function useEmployeeHrStats(year: string) {
+    const { activeCompanyId, isReady } = useWorkspace();
+    return useQuery({
+        queryKey: ["employee-hr-stats", activeCompanyId, year],
+        queryFn: () => db.payroll.getHrStats(activeCompanyId, year),
+        enabled: isReady,
+    });
+}
+
+export function useEmployeePayrollSummaries() {
+    const { activeCompanyId, isReady } = useWorkspace();
+    return useQuery({
+        queryKey: ["employee-payroll-summaries", activeCompanyId],
+        queryFn: () => db.payroll.getEmployeeSummaries(activeCompanyId),
+        enabled: isReady,
+    });
+}
 
 export function useEmployeeTaskWorkload() {
     const { activeCompanyId, isReady } = useWorkspace();

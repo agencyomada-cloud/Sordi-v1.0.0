@@ -1,6 +1,6 @@
 [package]
 name = "sordi"
-version = "1.0.3"
+version = "1.0.4"
 description = "Sordi"
 authors = ["you"]
 license = ""
@@ -21,7 +21,7 @@ tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.9.5", features = ["protocol-asset"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "protocol-asset"] }
 tauri-plugin-log = "2"
 # Native "pick a file" dialog (employee photo/document upload) and "open with
 # OS default app" (the documents list's "Ouvrir" button) — neither existed
@@ -30,6 +30,10 @@ tauri-plugin-log = "2"
 # absolute filesystem path or a way to launch the OS viewer.
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+# Persists the widget window's position/size across app restarts (main
+# window is excluded via a denylist — its sizing is deliberately fixed by
+# tauri.conf.json's own minWidth/minHeight, not user-resizable).
+tauri-plugin-window-state = "2"
 # Employee photo resize/re-encode on upload (pure-Rust codecs, no system
 # image library dependency).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
@@ -50,6 +54,18 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Document email dispatch (send_email_with_pdf) — rustls-tls again to match
 # reqwest's choice above rather than pulling in a native OpenSSL dependency.
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
+
+# Native Touch ID / biometric authentication for the login screen.
+# tauri-plugin-biometric only targets Android/iOS (the mobile bridge), not a
+# regular windowed macOS app, so this talks to Apple's LocalAuthentication
+# framework directly through the objc2 bindings. macOS-only: on Windows/
+# Linux, authenticate_biometric compiles to a stub that just returns an
+# error, so the rest of the app is unaffected.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-local-authentication = "0.3"
+block2 = "0.6"
 
 [dev-dependencies]
 # "test" feature gates the tauri::test module (mock_builder, MockRuntime,

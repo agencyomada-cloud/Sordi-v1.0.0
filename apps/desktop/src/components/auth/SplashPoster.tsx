@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { BlueprintCanvas } from "./BlueprintCanvas";
-import { FloatingCardComposition } from "./FloatingCardComposition";
 
-// Boot-time status copy — cycles once from "booting" to "ready" while the
-// splash is up, giving the hairline progress bar something concrete to
-// narrate instead of being a bare decorative sliver.
+// Boot-time status copy — cycles once while the splash is up, giving the
+// hairline progress bar something concrete to narrate.
 const STATUS_STEPS = [
-  { label: "Initialisation du système local...", progress: 18 },
-  { label: "Chargement des données...", progress: 62 },
+  { label: "Initialisation de la base locale...", progress: 22 },
+  { label: "Vérification du coffre-fort...", progress: 68 },
   { label: "Prêt", progress: 100 },
 ];
 
@@ -38,39 +36,37 @@ export function SplashPoster({ durationMs }: SplashPosterProps) {
     <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
       <BlueprintCanvas origin="center" />
 
-      {/* Logo, then the card grid below it — stacked instead of overlapping,
-          since the grid's cards now fill their own layout with no empty
-          center to float the logo over. */}
-      <div className="relative flex w-full max-w-xl flex-col items-center gap-10">
+      {/* Centerpiece — the brand mark alone, breathing behind a soft ambient
+          glow. No preview cards, no chart snippets: just the mark. */}
+      <div className="relative flex items-center justify-center">
+        <div className="absolute -z-10 h-48 w-48 rounded-full bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 blur-3xl animate-pulse duration-1000" />
         <motion.img
           src="/brand/sordi-logo.svg"
           alt="Sordi"
-          className="relative z-20 h-11 w-auto dark:invert"
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1, y: [-3, 3, -3] }}
+          className="relative z-10 h-11 w-auto"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: [0.98, 1.02, 0.98] }}
           transition={{
-            opacity: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-            scale: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-            y: { duration: 6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 0.3 },
+            opacity: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+            scale: { duration: 2.6, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: 0.3 },
           }}
         />
-
-        <div className="relative h-56 w-full">
-          <FloatingCardComposition className="absolute inset-0" />
-        </div>
       </div>
 
-      {/* Bottom status */}
-      <div className="absolute bottom-14 flex w-56 flex-col items-center gap-2.5">
-        <p className="font-mono text-[11px] tracking-tight text-slate-500 dark:text-slate-400">{step.label}</p>
-        <div className="h-px w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+      {/* Precision loading indicator — an ultra-thin Apple-style progress
+          track with monospace micro status feedback underneath. The track
+          stays a precise 180px; the status line gets its own wider row so
+          the longer status strings don't wrap. */}
+      <div className="absolute bottom-16 flex flex-col items-center gap-3">
+        <div className="h-[2px] w-[180px] overflow-hidden rounded-full bg-slate-200">
           <motion.div
-            className="h-full bg-[#EB3B48]"
+            className="h-full bg-primary"
             initial={{ width: "0%" }}
             animate={{ width: `${step.progress}%` }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           />
         </div>
+        <p className="whitespace-nowrap font-mono text-[11px] tracking-tight text-slate-400">{step.label}</p>
       </div>
     </div>
   );

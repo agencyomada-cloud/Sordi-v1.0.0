@@ -247,7 +247,7 @@ export function ContractModal({ open, onOpenChange, initialProjectId, initialCli
         <DialogContent className="max-w-xl rounded-3xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileTextIcon className="w-5 h-5 text-[#EB3B48]" />
+              <FileTextIcon className="w-5 h-5 text-primary" />
               Nouveau Contrat
             </DialogTitle>
           </DialogHeader>
@@ -302,8 +302,8 @@ export function ContractModal({ open, onOpenChange, initialProjectId, initialCli
                       className={cn(
                         "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
                         active
-                          ? "border-[#EB3B48] bg-[#EB3B48] text-white"
-                          : "border-border text-muted-foreground hover:border-[#EB3B48]/40 hover:text-foreground"
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       )}
                     >
                       {active && <CheckIcon className="w-3 h-3" />}
@@ -347,15 +347,15 @@ export function ContractModal({ open, onOpenChange, initialProjectId, initialCli
                     className={cn(
                       "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-all",
                       paymentSplit === split.key
-                        ? "border-[#EB3B48] bg-[#FDF1F2] dark:bg-[#EB3B48]/10 font-semibold"
-                        : "border-border hover:border-[#EB3B48]/40 hover:bg-secondary/40"
+                        ? "border-primary bg-accent-soft font-semibold"
+                        : "border-border hover:border-primary/40 hover:bg-secondary/40"
                     )}
                   >
                     <span className="flex items-center gap-2">
                       <span
                         className={cn(
                           "w-4 h-4 rounded-full border shrink-0 flex items-center justify-center",
-                          paymentSplit === split.key ? "border-[#EB3B48] bg-[#EB3B48]" : "border-muted-foreground/40"
+                          paymentSplit === split.key ? "border-primary bg-primary" : "border-muted-foreground/40"
                         )}
                       >
                         {paymentSplit === split.key && <CheckIcon className="w-2.5 h-2.5 text-white" />}
@@ -459,7 +459,7 @@ export function ContractModal({ open, onOpenChange, initialProjectId, initialCli
                 type="submit"
                 disabled={!canGenerate || createContract.isPending}
                 onClick={handleSave}
-                className="bg-[#EB3B48] hover:bg-[#D9303D] text-white font-medium px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+                className="bg-primary hover:bg-primary-hover text-primary-foreground font-medium px-5 py-2.5 rounded-xl transition-colors shadow-sm"
               >
                 {createContract.isPending ? "Enregistrement..." : "Enregistrer le contrat"}
               </Button>

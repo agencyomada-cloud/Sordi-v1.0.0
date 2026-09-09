@@ -70,26 +70,46 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
+  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
+  // 595.28 / 793.700787 = 0.75 pt/px
+  const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
+  // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
+  // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
+  // range (80-400), making the control look broken above that point.
+  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
+  const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
+  const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
 
   const styles = StyleSheet.create({
     page: {
       width: 595.28,
       height: 841.89,
-      padding: 42,
+      paddingTop: 38,
+      paddingLeft: 38,
+      paddingRight: 38,
+      // The legal-info footer is a `fixed`, absolutely-positioned overlay
+      // (bottom: 32, its own content runs ~70-75pt tall) that normal-flow
+      // content doesn't know about — without this, a long invoice's content
+      // could flow all the way to the page's bottom edge and render
+      // underneath the footer instead of spilling onto a new page. This
+      // padding reserves that zone so react-pdf's own pagination kicks in
+      // before content reaches it.
+      paddingBottom: 110,
       fontFamily,
       fontSize: 9,
       color: '#1a1a1a',
       backgroundColor: '#ffffff',
     },
 
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
     logoImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
     companyName: { fontSize: 12, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#111111' },
     headerRight: { alignItems: 'flex-end' },
     docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', letterSpacing: -0.3, color: '#111111', textTransform: 'uppercase' },
     docNumber: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#9ca3af', marginTop: 5 },
 
-    metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28 },
+    metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18 },
     metaBlock: { width: '46%' },
     metaLabel: { fontFamily, fontWeight: 'bold', fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
     clientName: { fontSize: 11, fontFamily, fontWeight: 'bold', color: '#111111', textTransform: 'uppercase', marginBottom: 2 },
@@ -100,7 +120,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111111' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 4, textAlign: 'right' },
 
-    table: { marginBottom: 22 },
+    table: { marginBottom: 16 },
     tableHeaderRow: {
       flexDirection: 'row',
       borderTopWidth: 1,
@@ -119,7 +139,14 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     cellText: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#111111' },
     cellUnit: { fontFamily, fontSize: 8, color: '#9ca3af', textTransform: 'uppercase' },
 
-    totalsContainer: { alignItems: 'flex-end', marginBottom: 24 },
+    // Notes + totals share one row (notesRow) so they read as a single
+    // balanced line instead of notes sitting full-width above the totals.
+    notesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+    notesBlock: { width: '46%', padding: 8, backgroundColor: '#f9fafb', borderWidth: 0.75, borderColor: '#e5e7eb' },
+    notesLabel: { fontFamily, fontSize: 7.5, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
+    notesText: { fontSize: 8.5, color: '#374151', lineHeight: 1.4 },
+
+    totalsContainer: { alignItems: 'flex-end', marginBottom: 16 },
     totalsBox: { width: '46%' },
     totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
     totalsLabel: { fontSize: 8.5, color: '#6b7280' },
@@ -128,29 +155,24 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#111111' },
     ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: accent },
 
-    wordsBlock: { marginBottom: 26 },
+    wordsBlock: { maxWidth: 280, paddingRight: 16 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 },
     wordsValue: { fontSize: 8.5, color: '#374151', lineHeight: 1.4, textTransform: 'uppercase' },
 
-    signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 },
+    signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
     paymentText: { fontSize: 8.5, color: '#374151' },
-    signBox: { alignItems: 'center', width: 140 },
+    signBox: { alignItems: 'flex-end' },
     // The signature is signed directly on top of the stamp, like a real
-    // paper document — both images are absolutely centered in a fixed-size
-    // box instead of stacked in a column.
+    // paper document — both images are centered in the box.
     signatureBox: {
-      minWidth: 130,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 10,
       position: 'relative',
     },
     signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
     signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
     signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
-    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain' },
 
     footer: { position: 'absolute', left: 42, right: 42, bottom: 32, paddingTop: 10, borderTopWidth: 0.75, borderColor: '#e5e7eb' },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -176,12 +198,13 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
       <Page size="A4" style={styles.page}>
 
         <View style={styles.header}>
-          <View>
+          <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
             {settings?.logo_data ? (
               <Image src={settings.logo_data} style={styles.logoImage} />
-            ) : settings?.company_name ? (
-              <Text style={styles.companyName}>{settings.company_name}</Text>
             ) : null}
+            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#0f172a', textTransform: 'uppercase', marginTop: 4 }}>
+              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+            </Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.docTitle}>{data.docTitle}</Text>
@@ -212,7 +235,13 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
               <Text style={styles.metaRowLabel}>Numéro</Text>
               <Text style={styles.metaRowValue}>{data.docNumber || "-"}</Text>
             </View>
-            {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
+            {!data.isCreditNote && invoice.due_date && (
+              <View style={styles.metaRow}>
+                <Text style={styles.metaRowLabel}>Échéance</Text>
+                <Text style={styles.metaRowValue}>{invoice.due_date}</Text>
+              </View>
+            )}
+            {flags.showPaymentMethod && !data.isCreditNote && (
               <View style={styles.metaRow}>
                 <Text style={styles.metaRowLabel}>Mode de paiement</Text>
                 <Text style={styles.metaRowValue}>{invoice.payment_method || "Chèque"}</Text>
@@ -254,72 +283,118 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
           })}
         </View>
 
-        <View style={styles.totalsContainer}>
-          <View style={styles.totalsBox}>
-            <View style={styles.totalsRow}>
-              <Text style={styles.totalsLabel}>Total HT</Text>
-              <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
+        {(() => {
+          const hasNotes = invoice.notes && invoice.notes.trim() !== "";
+          const totalsBox = (
+            <View style={styles.totalsBox}>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Total HT</Text>
+                <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
+              </View>
+              {flags.showTva && (
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>TVA (19%)</Text>
+                  <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+                </View>
+              )}
+              {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
+                  <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
+                </View>
+              )}
+              {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
+                <View style={styles.totalsRow}>
+                  <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
+                  <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
+                </View>
+              )}
+              <View style={styles.ttcRow}>
+                <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
+                <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
+              </View>
+              {flags.taxExemptionLegend && (
+                <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
+                  {flags.taxExemptionLegend}
+                </Text>
+              )}
             </View>
-            {flags.showTva && (
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>TVA (19%)</Text>
-                <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+          );
+
+          if (hasNotes) {
+            return (
+              <View style={styles.notesRow} wrap={false}>
+                <View style={styles.notesBlock}>
+                  <Text style={styles.notesLabel}>Notes</Text>
+                  <Text style={styles.notesText}>{invoice.notes}</Text>
+                </View>
+                {totalsBox}
               </View>
-            )}
-            {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
-                <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
-              </View>
-            )}
-            {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
-              <View style={styles.totalsRow}>
-                <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
-                <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
-              </View>
-            )}
-            <View style={styles.ttcRow}>
-              <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
-              <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
+            );
+          }
+
+          return (
+            <View style={styles.totalsContainer}>
+              {totalsBox}
             </View>
-            {flags.taxExemptionLegend && (
-              <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
-                {flags.taxExemptionLegend}
-              </Text>
-            )}
-          </View>
-        </View>
+          );
+        })()}
 
-        {flags.showMontantEnLettres && (
-          <View style={styles.wordsBlock}>
-            <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
-            <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
-          </View>
-        )}
-
-        <View style={styles.signRow}>
-          <Text style={styles.paymentText} />
-          <View style={styles.signBox}>
-            {(settings?.stamp_data || settings?.signature_data) && (
+        {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
+        <View style={styles.signRow} wrap={false}>
+          {flags.showMontantEnLettres ? (
+            <View style={styles.wordsBlock}>
+              <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
+              <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+            </View>
+          ) : (
+            <View />
+          )}
+          <View style={[styles.signBox, { width: stampWidth, minWidth: stampWidth }]}>
+            {mainStampUrl && (
               <>
                 <Text style={styles.signLabel}>Cachet et signature</Text>
-                <View style={styles.signLine} />
+                <View style={[styles.signLine, { width: stampWidth }]} />
               </>
             )}
-            <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 28, 220), Math.min(settings?.signature_size || 36, 220), 28) + 20 }]}>
-              {!settings?.stamp_data && !settings?.signature_data ? (
+            <View style={[styles.signatureBox, { width: stampWidth, height: stampHeight }]}>
+              {!mainStampUrl ? (
                 <View style={styles.signatureBoxEmpty}>
                   <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
                 </View>
-              ) : (
+              ) : hasBoth ? (
                 <>
-                  {settings?.stamp_data && (
-                    <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 28, 220) }]} />
-                  )}
-                  {settings?.signature_data && (
-                    <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 36, 220) }]} />
-                  )}
+                  <Image
+                    src={settings!.stamp_data!}
+                    style={{
+                      width: stampWidth,
+                      height: stampHeight,
+                      objectFit: 'contain',
+                      opacity: 0.88,
+                      transform: 'rotate(-2deg)',
+                    }}
+                  />
+                  <Image
+                    src={settings!.signature_data!}
+                    style={{
+                      position: 'absolute',
+                      width: Math.round(stampWidth * 0.85),
+                      height: Math.round(stampHeight * 0.65),
+                      objectFit: 'contain',
+                    }}
+                  />
                 </>
+              ) : (
+                <Image
+                  src={mainStampUrl}
+                  style={{
+                    width: stampWidth,
+                    height: stampHeight,
+                    objectFit: 'contain',
+                    opacity: 0.88,
+                    transform: 'rotate(-2deg)',
+                  }}
+                />
               )}
             </View>
           </View>
@@ -336,7 +411,12 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
                 ))}
               </View>
               {settings?.company_address && <Text style={[styles.footerItem, { marginTop: 4 }]}>{settings.company_address}</Text>}
-              {settings?.company_rib && <Text style={[styles.footerItem, { marginTop: 2 }]}>RIB {settings.company_rib}</Text>}
+              {settings?.company_rib && (
+                <Text style={[styles.footerItem, { marginTop: 2 }]}>
+                  RIB {settings.company_rib}
+                  {settings?.company_bank_agency ? ` — ${settings.company_bank_agency}` : ""}
+                </Text>
+              )}
             </View>
 
             <View style={styles.footerContact}>

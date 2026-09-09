@@ -213,7 +213,10 @@ const Partners = () => {
   return (
     <main className="flex-1 p-8 pt-4">
       <div className="max-w-[1600px] mx-auto w-full">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        {/* xl, not md — this title is long and the controls (year select +
+            2 buttons) need real room; sharing a row at md's 768px squeezed
+            the title into a 3-line wrap at the app's minimum window width. */}
+        <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-foreground tracking-tight">Associés &amp; Répartition des Bénéfices</h1>
             <p className="text-muted-foreground mt-1">Gérez la structure du capital et les prélèvements des associés</p>

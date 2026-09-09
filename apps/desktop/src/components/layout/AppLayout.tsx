@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -11,9 +11,12 @@ const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
 
 function loadCollapsed(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+    // AgentOps-blue direction defaults to the icon-only rail (matching the
+    // reference's narrow w-16 sidebar); explicit user choice always wins.
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    return stored === null ? true : stored === "true";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -25,6 +28,7 @@ function loadCollapsed(): boolean {
 export function AppLayout() {
   const [isCollapsed, setIsCollapsed] = useState(loadCollapsed);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const toggleCollapsed = () => {
     setIsCollapsed((prev) => {
@@ -40,25 +44,35 @@ export function AppLayout() {
 
   return (
     <PageHeaderProvider>
-      <div className="flex min-h-screen bg-background">
+      {/* Flat, bright, ultra-clean canvas — body already sets the same
+          #F8FAFC tone, this just keeps the layout wrapper opaque so no
+          transparent void ever shows through to the OS layer. */}
+      <div className="flex min-h-screen bg-[#F8FAFC]">
         <Sidebar collapsed={isCollapsed} onToggleCollapsed={toggleCollapsed} />
         <div className="flex-1 flex flex-col min-w-0">
           <Header />
           {/* Keyed by pathname so both the enter animation and the error
               boundary's reset happen together on every navigation — a
               crashed page doesn't leave a stale boundary (or a stale
-              animation state) behind when you navigate away from it. */}
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="flex-1 flex flex-col min-h-0"
-          >
-            <RouteErrorBoundary>
-              <Outlet />
-            </RouteErrorBoundary>
-          </motion.div>
+              animation state) behind when you navigate away from it.
+              AnimatePresence lets the outgoing page fade out while the
+              incoming one fades in, instead of an abrupt cut; the eased
+              curve (a gentle "ease-out expo") reads as a soft settle
+              rather than a linear slide. */}
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.99 }}
+              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              className="flex-1 flex flex-col min-h-0"
+            >
+              <RouteErrorBoundary onGoHome={() => navigate("/")}>
+                <Outlet />
+              </RouteErrorBoundary>
+            </motion.div>
+          </AnimatePresence>
         </div>
         <OnboardingModal />
       </div>

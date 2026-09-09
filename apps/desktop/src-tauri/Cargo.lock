@@ -2883,6 +2883,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-local-authentication"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48e0b8b339e0d9d2ed4416b7f93f9d4daadff7d4dd797f89867cde11aeac607"
+dependencies = [
+ "block2",
+ "objc2",
+ "objc2-foundation",
+ "objc2-security",
+]
+
+[[package]]
 name = "objc2-quartz-core"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4327,15 +4339,19 @@ dependencies = [
 
 [[package]]
 name = "sordi"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "base64 0.21.7",
+ "block2",
  "chrono",
  "headless_chrome",
  "image",
  "jsonwebtoken",
  "lettre",
  "log",
+ "objc2",
+ "objc2-foundation",
+ "objc2-local-authentication",
  "reqwest",
  "rusqlite",
  "serde",
@@ -4346,6 +4362,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-opener",
+ "tauri-plugin-window-state",
  "uuid",
 ]
 
@@ -4772,6 +4789,21 @@ dependencies = [
  "url",
  "windows",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-window-state"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73736611e14142408d15353e21e3cca2f12a3cfb523ad0ce85999b6d2ef1a704"
+dependencies = [
+ "bitflags 2.10.0",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

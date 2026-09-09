@@ -206,7 +206,11 @@ export default function ProductsPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          {/* xl, not md — this is the longest title in the app; sharing a
+              row with the "Nouveau Service / Produit" button at md's 768px
+              wrapped the subtitle onto two lines at the app's minimum
+              window width. */}
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground tracking-tight">Catalogue des Services &amp; Offres Digitales</h1>
               <p className="text-muted-foreground mt-1">Gestion des prestations créatives, développement web, forfaits marketing et abonnements.</p>

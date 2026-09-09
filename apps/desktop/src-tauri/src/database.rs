@@ -3,10 +3,27 @@ use rusqlite::{Connection, Transaction, params};
 // Initialize database and create all tables
 pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(db_path)?;
-    
+
+    // Concurrency & durability tuning, set immediately on every connection
+    // open. This app serializes all access through one shared
+    // Mutex<Connection> (see lib.rs), so WAL's main benefit here is letting
+    // an external reader (e.g. a manual `sqlite3` inspection, or a backup
+    // tool) run concurrently with the app instead of blocking on it;
+    // busy_timeout=5000 absorbs any such brief contention with a retry
+    // instead of failing immediately with SQLITE_BUSY; synchronous=NORMAL
+    // is the standard, still-durable pairing with WAL (full fsync on every
+    // single commit is WAL's job to avoid, not journal mode's).
+    // journal_mode and busy_timeout both return the resulting value as a
+    // row even in assignment form (confirmed empirically — synchronous and
+    // foreign_keys do not), so execute() panics on them with
+    // ExecuteReturnedResults; query_row handles the row instead.
+    conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
+    conn.query_row("PRAGMA busy_timeout = 5000", [], |_| Ok(()))?;
+    conn.execute("PRAGMA synchronous = NORMAL", [])?;
+
     // Enable foreign keys
     conn.execute("PRAGMA foreign_keys = ON", [])?;
-    
+
     // Create tables
 
     // Multi-company / multi-workspace support — one row per registered
@@ -697,11 +714,17 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // Migration: Add project_id to invoices (omada-agency branch only)
     migrate_invoices_project_id_if_needed(&conn)?;
 
+    // Migration: Add converted_to_invoice_id to invoices (proforma -> invoice conversion link)
+    migrate_invoices_converted_to_invoice_id_if_needed(&conn)?;
+
     // Migration: Add project linkage + recurring metadata to expenses (omada-agency branch only)
     migrate_expenses_project_linkage_if_needed(&conn)?;
 
     // Migration: Add supplier linkage to expenses (Fournisseurs module)
     migrate_expenses_supplier_linkage_if_needed(&conn)?;
+
+    // Migration: Add payment-status flag to expenses (Charges & Dépenses page)
+    migrate_expenses_payment_status_if_needed(&conn)?;
 
     // Migration: Add payroll fields to employees (omada-agency branch only)
     migrate_employees_payroll_fields_if_needed(&conn)?;
@@ -710,11 +733,17 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // Migration: Add freelancer payment fields to projects (omada-agency branch only)
     migrate_projects_freelance_fields_if_needed(&conn)?;
 
+    // Migration: Add explicit operational lifecycle status to projects
+    migrate_projects_status_if_needed(&conn)?;
+
     // Migration: Add product_description to all items tables
     migrate_items_description_if_needed(&conn)?;
 
     // Migration: Add operator (Encaissé par) + attachment support to payments
     migrate_payments_attachments_and_operator_if_needed(&conn)?;
+
+    // Migration: Add a free-text notes field to payroll_runs
+    migrate_payroll_runs_notes_if_needed(&conn)?;
 
     // Fix existing NULL tva_rate values
     conn.execute("UPDATE invoice_items SET tva_rate = 19.0 WHERE tva_rate IS NULL", [])?;
@@ -731,6 +760,58 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     migrate_multi_company_if_needed(&conn)?;
 
     Ok(conn)
+}
+
+/// Inserts one clearly-fake client, product, and invoice into an otherwise
+/// empty database, so a brand-new `database-dev.db` doesn't leave every
+/// list/dashboard screen showing a blank/zero state. Called exactly once,
+/// by lib.rs, immediately after a dev database is created for the first
+/// time — never touches a database that already has any data (real or
+/// previously seeded), and is never called at all for a release build.
+pub fn seed_minimal_dev_mock_data(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // migrate_multi_company_if_needed() (just above) already created
+    // exactly one default company for this fresh database — reuse it
+    // rather than creating a second one.
+    let company_id: String = conn.query_row(
+        "SELECT id FROM companies ORDER BY created_at LIMIT 1",
+        [],
+        |row| row.get(0),
+    )?;
+
+    let client_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO clients (id, company_id, code, name, email, phone, address, city, is_active, created_at, updated_at)
+         VALUES (?1, ?2, 'DEV-CLI-001', 'Client Démo (données de test)', 'demo@example.com', '0555000000', '1 Rue de Test', 'Sétif', 1, ?3, ?3)",
+        params![client_id, company_id, now],
+    )?;
+
+    let product_id = uuid::Uuid::new_v4().to_string();
+    let unit_price: f64 = 50000.0;
+    conn.execute(
+        "INSERT INTO products (id, company_id, code, name, description, unit, unit_price, is_active, created_at, updated_at)
+         VALUES (?1, ?2, 'DEV-PRD-001', 'Prestation Démo (données de test)', 'Produit de test pour environnement de développement', 'Forfait / Projet', ?3, 1, ?4, ?4)",
+        params![product_id, company_id, unit_price, now],
+    )?;
+
+    let invoice_id = uuid::Uuid::new_v4().to_string();
+    let invoice_number = generate_invoice_number(conn)?;
+    let tva_amount = unit_price * 0.19;
+    let total_ttc = unit_price + tva_amount;
+    conn.execute(
+        "INSERT INTO invoices (id, company_id, invoice_number, client_id, invoice_date, subtotal_ht, tva_rate, tva_amount, timbre, total_ttc, amount_paid, balance_due, status, invoice_type, notes, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, date('now'), ?5, 19.0, ?6, 0, ?7, 0, ?7, 'issued', 'invoice', 'Facture de démonstration — environnement de développement uniquement, aucune donnée réelle.', ?8, ?8)",
+        params![invoice_id, company_id, invoice_number, client_id, unit_price, tva_amount, total_ttc, now],
+    )?;
+
+    conn.execute(
+        "INSERT INTO invoice_items (id, invoice_id, product_id, product_description, quantity, unit_price, amount, created_at)
+         VALUES (?1, ?2, ?3, 'Prestation Démo (données de test)', 1, ?4, ?4, ?5)",
+        params![uuid::Uuid::new_v4().to_string(), invoice_id, product_id, unit_price, now],
+    )?;
+
+    Ok(())
 }
 
 fn migrate_items_description_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -830,6 +911,25 @@ fn migrate_projects_freelance_fields_if_needed(conn: &Connection) -> Result<(), 
         }
         if !column_names.contains(&"date_paiement".to_string()) {
             conn.execute("ALTER TABLE projects ADD COLUMN date_paiement TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration: explicit, manually-set operational lifecycle status
+// (en_cours/termine/en_pause) for the Projets module — deliberately
+// separate from statut_paiement (freelancer payables) and from anything
+// derived from invoices/payments. Defaults every existing project to
+// 'en_cours' since none of them have ever had an explicit status before.
+fn migrate_projects_status_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(projects)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"status".to_string()) {
+            conn.execute("ALTER TABLE projects ADD COLUMN status TEXT DEFAULT 'en_cours'", [])?;
         }
     }
 
@@ -963,6 +1063,22 @@ fn migrate_payments_attachments_and_operator_if_needed(conn: &Connection) -> Res
     Ok(())
 }
 
+/// Free-text notes on a payroll run (e.g. "Réglé par virement, avance sur
+/// prime de fin d'année") — nullable, most existing rows predate this field.
+fn migrate_payroll_runs_notes_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(payroll_runs)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"notes".to_string()) {
+            conn.execute("ALTER TABLE payroll_runs ADD COLUMN notes TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
 fn migrate_invoices_project_id_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
     let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoices)")?
         .query_map([], |row| {
@@ -1000,6 +1116,26 @@ fn migrate_expenses_project_linkage_if_needed(conn: &Connection) -> Result<(), r
         }
         if !column_names.contains(&"recurrence_interval".to_string()) {
             conn.execute("ALTER TABLE expenses ADD COLUMN recurrence_interval TEXT", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Migration: add a payment-completion flag to expenses (Charges & Dépenses
+// page's new STATUT column) — defaults every existing row to "paid" (1),
+// since every expense recorded so far already represented cash that had
+// actually left the business (that's what the Dashboard's "Charges Réelles"
+// figure has always assumed); only newly-created "à payer" commitments
+// start out unpaid.
+fn migrate_expenses_payment_status_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(expenses)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"is_paid".to_string()) {
+            conn.execute("ALTER TABLE expenses ADD COLUMN is_paid INTEGER DEFAULT 1", [])?;
         }
     }
 
@@ -2217,8 +2353,11 @@ pub fn update_invoice_payment_status(conn: &Connection, invoice_id: &str) -> Res
         "unpaid"
     };
     
-    // Only update status if it's not 'draft'
-    let final_status = if current_status == "draft" {
+    // Only update status if it's not 'draft' or 'converted' — a converted
+    // proforma has no payments of its own to reconcile against, and this
+    // recompute would otherwise silently overwrite that status back to
+    // "unpaid" the next time the proforma's totals are recalculated.
+    let final_status = if current_status == "draft" || current_status == "converted" {
         current_status
     } else {
         new_status.to_string()
@@ -2350,6 +2489,24 @@ fn migrate_invoices_tax_mode_if_needed(conn: &Connection) -> Result<(), rusqlite
     if let Ok(column_names) = table_info {
         if !column_names.contains(&"tax_mode".to_string()) {
             conn.execute("ALTER TABLE invoices ADD COLUMN tax_mode TEXT NOT NULL DEFAULT 'standard'", [])?;
+        }
+    }
+
+    Ok(())
+}
+
+// Points a converted proforma at the invoice it became — the forward-looking
+// counterpart to original_invoice_id (which points a credit note back at its
+// source invoice). Nullable, no FK constraint, same as the other invoice
+// linkage columns in this table.
+fn migrate_invoices_converted_to_invoice_id_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(invoices)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect();
+
+    if let Ok(column_names) = table_info {
+        if !column_names.contains(&"converted_to_invoice_id".to_string()) {
+            conn.execute("ALTER TABLE invoices ADD COLUMN converted_to_invoice_id TEXT", [])?;
         }
     }
 

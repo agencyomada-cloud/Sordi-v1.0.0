@@ -56,6 +56,11 @@ export default function NewDeliveryPage() {
       return;
     }
 
+    if (validItems.some(item => (item.unit_price ?? 0) < 0)) {
+      toast.error("Le prix unitaire ne peut pas être négatif");
+      return;
+    }
+
     createDelivery.mutate({
       client_id: draftDelivery.client_id,
       delivery_date: draftDelivery.delivery_date,

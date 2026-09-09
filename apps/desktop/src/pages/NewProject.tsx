@@ -16,7 +16,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useProject, useCreateProject, useUpdateProject, type CreateProjectData } from "@/hooks/useProjects";
 import { useClients } from "@/hooks/useClients";
 import { useEmployees } from "@/hooks/useEmployees";
-import { SERVICE_CATEGORIES } from "@/lib/projectOverview";
+import { SERVICE_CATEGORIES, PROJECT_STATUS_OPTIONS } from "@/lib/projectOverview";
 import { toast } from "sonner";
 
 const emptyForm: Omit<CreateProjectData, "company_id"> = {
@@ -29,6 +29,7 @@ const emptyForm: Omit<CreateProjectData, "company_id"> = {
   planned_budget: 0,
   freelancer_id: null,
   montant_convenu: null,
+  status: "en_cours",
 };
 
 export default function NewProjectPage() {
@@ -58,6 +59,7 @@ export default function NewProjectPage() {
         planned_budget: existingProject.planned_budget,
         freelancer_id: existingProject.freelancer_id,
         montant_convenu: existingProject.montant_convenu,
+        status: existingProject.status,
       });
     }
   }, [existingProject]);
@@ -79,6 +81,10 @@ export default function NewProjectPage() {
     }
     if (!formData.name.trim()) {
       toast.error("Le nom du projet est requis");
+      return;
+    }
+    if (formData.planned_budget < 0) {
+      toast.error("Le budget prévu ne peut pas être négatif");
       return;
     }
 
@@ -119,6 +125,26 @@ export default function NewProjectPage() {
                   placeholder="Ex: Refonte identité visuelle"
                   required
                 />
+              </div>
+
+              {/* Explicit, manually-set operational status — independent of
+                  invoicing/payment collection (see "Budget prévu" note
+                  below and the Projets table's separate financial column). */}
+              <div className="space-y-1.5">
+                <Label htmlFor="status">Statut</Label>
+                <Select
+                  value={formData.status ?? "en_cours"}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, status: v as CreateProjectData["status"] }))}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROJECT_STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">

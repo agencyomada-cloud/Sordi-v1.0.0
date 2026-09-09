@@ -12,6 +12,8 @@ import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFo
 import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
+import { InteractiveStampZone } from "./InteractiveStampZone";
+
 interface Props {
   invoice: any;
   onInvoiceChange: (invoice: any) => void;
@@ -19,9 +21,22 @@ interface Props {
   products?: any[];
   settings: any;
   logic: EditableInvoiceLogic;
+  stampSize?: number;
+  onStampSizeChange?: (size: number) => void;
+  onStampSizeCommit?: (size: number) => void;
 }
 
-export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, products, settings, logic }: Props) {
+export function EditableInvoiceStructure({
+  invoice,
+  onInvoiceChange,
+  clients,
+  products,
+  settings,
+  logic,
+  stampSize,
+  onStampSizeChange,
+  onStampSizeCommit,
+}: Props) {
   const primaryColor = settings?.primary_color || "#476CFF";
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
@@ -51,11 +66,14 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
             style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
-              {settings?.logo_data && (
-                <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[5mm] pb-[5mm] pl-[5mm] pr-0 flex items-center justify-start">
-                  <img src={settings.logo_data} className="block w-full h-full object-contain object-left" alt={settings?.company_name || ""} />
-                </div>
-              )}
+              <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[3mm] pl-[5mm] flex flex-col items-start gap-1">
+                {settings?.logo_data && (
+                  <img src={settings.logo_data} className="h-9 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                )}
+                <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
+                  {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+                </span>
+              </div>
               {settings?.company_name && (
                 <div className="absolute right-0 bottom-0 w-[71.5mm] h-[7.8mm] flex items-center justify-center px-[5mm] text-[8.5pt] font-bold leading-none whitespace-nowrap text-white z-2 tracking-wide uppercase" style={{ backgroundColor: primaryColor }}>
                   {settings.company_name}
@@ -178,7 +196,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                           className="h-5 w-32 border-none bg-transparent p-0 justify-end hover:bg-transparent font-mono tabular-nums tracking-tight text-xs text-black"
                         />
                       </div>
-                      {!isProforma && !isCreditNote && (
+                      {!isCreditNote && (
                         <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
                           <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Échéance</span>
                           <DatePicker
@@ -189,7 +207,7 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                           />
                         </div>
                       )}
-                      {showPaymentMethod && !isProforma && !isCreditNote && (
+                      {showPaymentMethod && !isCreditNote && (
                         <div className="flex justify-between items-center border-b border-gray-100 pb-0.5">
                           <span className="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Mode de paiement</span>
                           <Select value={paymentMode} onValueChange={handlePaymentModeChange}>
@@ -264,59 +282,78 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                         )}
                       </tbody>
                     </table>
-                    {isFirstPage && (
-                      <div className="mt-3">
-                        <Textarea
-                          value={invoice.notes || ""}
-                          onChange={(e) => updateInvoiceField('notes', e.target.value)}
-                          placeholder="Ajouter des notes..."
-                          className="min-h-[40px] resize-none border border-gray-200 bg-gray-50 p-2 shadow-none focus-visible:ring-1 focus-visible:ring-gray-300 text-xs text-black font-normal w-full"
-                        />
-                      </div>
-                    )}
                   </div>
+
+                  {(() => {
+                    const notesBox = (
+                      <Textarea
+                        value={invoice.notes || ""}
+                        onChange={(e) => updateInvoiceField('notes', e.target.value)}
+                        placeholder="Ajouter des notes..."
+                        className="min-h-[40px] h-full resize-none border border-gray-200 bg-gray-50 p-2 shadow-none focus-visible:ring-1 focus-visible:ring-gray-300 text-xs text-black font-normal w-full"
+                      />
+                    );
+                    const totalsBox = (
+                      <div className="text-xs">
+                        <div className="flex justify-between py-1.5">
+                          <span className="text-gray-500">Total HT</span><span className="font-mono tabular-nums tracking-tight">{formatCurrency(subtotal)}</span>
+                        </div>
+                        {showTva && (
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-gray-500">TVA (19%)</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(tvaAmount)}</span>
+                          </div>
+                        )}
+                        {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
+                          <div className="flex justify-between py-1.5">
+                            <span className="text-gray-500">Timbre Fiscal</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(timbre)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center py-1.5">
+                          <div className="flex items-center gap-1 text-gray-500">
+                            <span>Remise</span>
+                            <Select value={discountType} onValueChange={(val: any) => { setDiscountType(val); val === 'percent' ? handleDiscountRateChange(0) : handleDiscountAmountChange(0); }}>
+                              <SelectTrigger className="h-5 w-auto text-[10px] p-0 px-1 border-none shadow-none"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="percent">%</SelectItem><SelectItem value="amount">DZD</SelectItem></SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="font-mono text-red-700 mr-1">-</span>
+                            <Input type="number" value={discountType === 'percent' ? discountRate : discountAmount} onChange={(e) => discountType === 'percent' ? handleDiscountRateChange(parseFloat(e.target.value) || 0) : handleDiscountAmountChange(parseFloat(e.target.value) || 0)} className="h-6 w-16 text-right bg-transparent border-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-red-700" />
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-300">
+                          <span className="text-sm font-semibold text-black">{grandTotalLabel}</span><span className="text-base font-bold font-mono tabular-nums tracking-tight text-black">{formatCurrency(netTotal)}</span>
+                        </div>
+                        {isTaxExempt && !isProforma && (
+                          <div className="text-right text-[9px] text-gray-500 mt-1">
+                            Régime d'exonération / Facturation sans TVA — Montant Net à Payer HT - TVA non applicable
+                          </div>
+                        )}
+                      </div>
+                    );
+
+                    // Notes (page 1) and totals (last page) share one row
+                    // only when they're the same page — the common
+                    // single-page case. A multi-page invoice keeps them on
+                    // their own separate pages, same as before.
+                    if (isFirstPage && isLastPage) {
+                      return (
+                        <div className="flex justify-between items-start gap-6 mb-4" style={{ breakInside: 'avoid' }}>
+                          <div className="w-[42%]">{notesBox}</div>
+                          <div className="w-[42%]">{totalsBox}</div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        {isFirstPage && <div className="mt-3 mb-4">{notesBox}</div>}
+                        {isLastPage && <div className="flex justify-end mb-4"><div className="w-[42%]">{totalsBox}</div></div>}
+                      </>
+                    );
+                  })()}
 
                   {isLastPage && (
                     <>
-                      <div className="flex justify-end mb-4">
-                        <div className="w-[42%] text-xs">
-                          <div className="flex justify-between py-1.5">
-                            <span className="text-gray-500">Total HT</span><span className="font-mono tabular-nums tracking-tight">{formatCurrency(subtotal)}</span>
-                          </div>
-                          {showTva && (
-                            <div className="flex justify-between py-1.5">
-                              <span className="text-gray-500">TVA (19%)</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(tvaAmount)}</span>
-                            </div>
-                          )}
-                          {showTimbre && (timbre > 0 || (paymentMode?.toLowerCase().includes("espèce") && timbre !== 0)) && (
-                            <div className="flex justify-between py-1.5">
-                              <span className="text-gray-500">Timbre Fiscal</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(timbre)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center py-1.5">
-                            <div className="flex items-center gap-1 text-gray-500">
-                              <span>Remise</span>
-                              <Select value={discountType} onValueChange={(val: any) => { setDiscountType(val); val === 'percent' ? handleDiscountRateChange(0) : handleDiscountAmountChange(0); }}>
-                                <SelectTrigger className="h-5 w-auto text-[10px] p-0 px-1 border-none shadow-none"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="percent">%</SelectItem><SelectItem value="amount">DZD</SelectItem></SelectContent>
-                              </Select>
-                            </div>
-                            <div className="flex items-center">
-                              <span className="font-mono text-red-700 mr-1">-</span>
-                              <Input type="number" value={discountType === 'percent' ? discountRate : discountAmount} onChange={(e) => discountType === 'percent' ? handleDiscountRateChange(parseFloat(e.target.value) || 0) : handleDiscountAmountChange(parseFloat(e.target.value) || 0)} className="h-6 w-16 text-right bg-transparent border-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-red-700" />
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-300">
-                            <span className="text-sm font-semibold text-black">{grandTotalLabel}</span><span className="text-base font-bold font-mono tabular-nums tracking-tight text-black">{formatCurrency(netTotal)}</span>
-                          </div>
-                          {isTaxExempt && !isProforma && (
-                            <div className="text-right text-[9px] text-gray-500 mt-1">
-                              Régime d'exonération / Facturation sans TVA — Montant Net à Payer HT - TVA non applicable
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
                       <div className="mb-4">
                         {showMontantEnLettres && (
                           <div className="mb-3">
@@ -331,40 +368,14 @@ export function EditableInvoiceStructure({ invoice, onInvoiceChange, clients, pr
                             alongside Date/Numéro — this row just anchors the
                             signature block to the right, same as before. */}
                         <div className="flex justify-end items-start">
-                          <div className="mr-8 flex flex-col items-center gap-1">
-                            {/* Signature is signed directly on top of the
-                                stamp, like a real paper document — an
-                                absolute overlay, not a stacked column. */}
-                            {(settings?.stamp_data || settings?.signature_data) && (
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cachet et Signature</div>
-                            )}
-                            <div
-                              className="min-w-44 relative flex items-center justify-center border-none px-4 py-3"
-                              style={{ height: `${Math.max(settings?.stamp_size || 64, settings?.signature_size || 64, 64) + 40}px` }}
-                            >
-                              {!settings?.stamp_data && !settings?.signature_data ? (
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
-                              ) : (
-                                <>
-                                  {settings?.stamp_data && (
-                                    <img
-                                      src={settings.stamp_data}
-                                      alt="Cachet"
-                                      style={{ height: `${settings.stamp_size || 64}px` }}
-                                      className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
-                                    />
-                                  )}
-                                  {settings?.signature_data && (
-                                    <img
-                                      src={settings.signature_data}
-                                      alt="Signature"
-                                      style={{ height: `${settings.signature_size || 64}px` }}
-                                      className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
-                                    />
-                                  )}
-                                </>
-                              )}
-                            </div>
+                          <div className="mr-8 flex flex-col items-center">
+                            <InteractiveStampZone
+                              settings={settings}
+                              stampSize={stampSize}
+                              onStampSizeChange={onStampSizeChange}
+                              onStampSizeCommit={onStampSizeCommit}
+                              showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
+                            />
                           </div>
                         </div>
                       </div>

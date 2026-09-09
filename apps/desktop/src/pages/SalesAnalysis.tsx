@@ -32,8 +32,8 @@ export default function SalesAnalysisPage() {
           <div className="max-w-[1600px] mx-auto space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-30">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">Analyses des Ventes</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Analyses & Rapports</h1>
+                <p className="text-xs text-slate-500 mt-1">
                   Ventilation détaillée des ventes cumulées, par produit et par client
                 </p>
               </div>

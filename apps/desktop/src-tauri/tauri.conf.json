@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Sordi",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.sordi.app",
   "build": {
     "frontendDist": "../dist",
@@ -10,6 +10,7 @@
     "beforeBuildCommand": "pnpm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Sordi",
@@ -23,6 +24,24 @@
         "hiddenTitle": true,
         "decorations": true,
         "trafficLightPosition": { "x": 18, "y": 22 }
+      },
+      {
+        "label": "widget",
+        "title": "sordi-widget",
+        "url": "/?view=widget",
+        "width": 340,
+        "height": 200,
+        "minWidth": 280,
+        "minHeight": 160,
+        "maxWidth": 520,
+        "maxHeight": 340,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": {

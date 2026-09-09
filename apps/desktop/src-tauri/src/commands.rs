@@ -410,6 +410,38 @@ pub struct CreateClientData {
     pub advance_payment: Option<f64>,
 }
 
+/// update_client's payload — deliberately NOT CreateClientData. company_id
+/// never changes on an edit (the UPDATE statement below doesn't touch that
+/// column at all), but CreateClientData requires it as a non-optional
+/// field; the frontend's edit form (NewClient.tsx) never sends it, so
+/// Tauri's IPC deserialization was rejecting every update with "missing
+/// field `company_id`" before this command's body ever ran — surfacing to
+/// the user as a generic "Erreur lors de la mise à jour du client" toast
+/// with no indication it was a payload-shape mismatch rather than a real
+/// constraint/SQL failure.
+#[derive(Deserialize)]
+pub struct UpdateClientData {
+    pub name: String,
+    pub code: Option<String>,
+    pub contact_person: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub city: Option<String>,
+    pub wilaya: Option<String>,
+    pub nif: Option<String>,
+    pub nis: Option<String>,
+    pub rc: Option<String>,
+    pub secondary_rc: Option<String>,
+    pub secondary_address: Option<String>,
+    pub ai: Option<String>,
+    pub activite: Option<String>,
+    pub credit_limit: Option<f64>,
+    pub payment_terms_days: Option<i64>,
+    pub notes: Option<String>,
+    pub initial_balance: Option<f64>,
+}
+
 const CLIENT_COLUMNS: &str = "id, company_id, code, name, contact_person, phone, email, address, city, wilaya, nif, nis, rc, secondary_rc, secondary_address, ai, credit_limit, payment_terms_days, notes, is_active, created_at, updated_at, initial_balance, advance_payment, activite";
 
 fn map_client_row(row: &rusqlite::Row) -> rusqlite::Result<Client> {
@@ -519,7 +551,7 @@ pub fn create_client(db: State<'_, Mutex<Connection>>, data: CreateClientData) -
 }
 
 #[tauri::command]
-pub fn update_client(db: State<'_, Mutex<Connection>>, id: String, data: CreateClientData) -> Result<Client, String> {
+pub fn update_client(db: State<'_, Mutex<Connection>>, id: String, data: UpdateClientData) -> Result<Client, String> {
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
@@ -811,6 +843,11 @@ pub struct Supplier {
 
 #[derive(Deserialize)]
 pub struct CreateSupplierData {
+    // Shared with update_supplier, whose UPDATE statement never touches this
+    // column — the frontend's update payload omits it (Omit<..., "company_id">),
+    // so it must tolerate being absent from that JSON instead of failing
+    // deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub name: String,
     pub category: Option<String>,
@@ -1027,6 +1064,11 @@ pub fn get_products(db: State<'_, Mutex<Connection>>, company_id: String) -> Res
 
 #[derive(Deserialize)]
 pub struct CreateProductData {
+    // Shared with update_product, whose UPDATE statement never touches this
+    // column — the frontend's update payload omits it (Omit<..., "company_id">),
+    // so it must tolerate being absent from that JSON instead of failing
+    // deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub code: String,
     pub name: String,
@@ -1208,6 +1250,9 @@ pub struct Invoice {
     /// math is entirely driven by each invoice_item's own tva_rate (see
     /// recalculate_invoice_totals), not by this field.
     pub tax_mode: String,
+    /// Set once a proforma has been converted — points at the invoice it
+    /// became. The forward-looking counterpart to original_invoice_id.
+    pub converted_to_invoice_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1233,6 +1278,11 @@ pub struct ProductInfo {
 
 #[derive(Deserialize)]
 pub struct CreateInvoiceData {
+    // Shared with update_invoice, whose UPDATE statement never touches this
+    // column — the frontend's update payload omits it (Omit<..., "company_id">),
+    // so it must tolerate being absent from that JSON instead of failing
+    // deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub client_id: String,
     pub invoice_date: String,
@@ -1328,6 +1378,7 @@ pub fn get_invoices(db: State<'_, Mutex<Connection>>, company_id: String, status
             payment_method: row.get("payment_method").ok(),
             project_id: row.get("project_id").ok(),
             tax_mode: row.get("tax_mode").unwrap_or_else(|_| "standard".to_string()),
+            converted_to_invoice_id: row.get("converted_to_invoice_id").ok(),
         })
     }).map_err(|e| e.to_string())?;
     
@@ -1376,6 +1427,7 @@ pub fn get_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<Optio
             payment_method: row.get("payment_method").ok(),
             project_id: row.get("project_id").ok(),
             tax_mode: row.get("tax_mode").unwrap_or_else(|_| "standard".to_string()),
+            converted_to_invoice_id: row.get("converted_to_invoice_id").ok(),
         })
     });
     
@@ -1392,12 +1444,19 @@ pub struct InvoiceWithClient {
     #[serde(flatten)]
     pub invoice: Invoice,
     pub clients: Option<ClientInfo>,
+    pub projects: Option<ProjectInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientInfo {
     pub name: String,
     pub email: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProjectInfo {
+    pub name: String,
+    pub service_categories: Option<String>,
 }
 
 #[tauri::command]
@@ -1410,9 +1469,10 @@ pub fn get_invoices_with_clients(db: State<'_, Mutex<Connection>>, company_id: S
             i.subtotal_ht, i.tva_rate, i.tva_amount, i.timbre, i.total_ttc, i.amount_paid,
             i.balance_due, i.status, i.invoice_type, i.original_invoice_id, i.notes,
             i.created_at, i.updated_at, i.header_note, i.discount, i.discount_type, i.discount_value, i.use_secondary_register, i.custom_title, i.payment_method, i.selected_secondary_rc, i.selected_secondary_address, i.project_id, i.tax_mode,
-            c.name, c.email
+            c.name, c.email, p.name, p.service_categories, i.converted_to_invoice_id
         FROM invoices i
         LEFT JOIN clients c ON i.client_id = c.id
+        LEFT JOIN projects p ON i.project_id = p.id
     ".to_string();
 
     let mut conditions = vec![format!("i.company_id = '{}'", company_id.replace("'", "''"))];
@@ -1463,20 +1523,30 @@ pub fn get_invoices_with_clients(db: State<'_, Mutex<Connection>>, company_id: S
             selected_secondary_address: row.get(28).ok(),
             project_id: row.get(29).ok(),
             tax_mode: row.get(30).unwrap_or_else(|_| "standard".to_string()),
+            converted_to_invoice_id: row.get(35).ok(),
         };
 
         let client_name: Option<String> = row.get(31).ok();
         let client_email: Option<String> = row.get(32).ok();
-        
+
         let client_info = if let Some(name) = client_name {
             Some(ClientInfo { name, email: client_email })
         } else {
             None
         };
 
+        let project_name: Option<String> = row.get(33).ok();
+        let project_service_categories: Option<String> = row.get(34).ok();
+
+        let project_info = project_name.map(|name| ProjectInfo {
+            name,
+            service_categories: project_service_categories,
+        });
+
         Ok(InvoiceWithClient {
             invoice,
             clients: client_info,
+            projects: project_info,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -1703,7 +1773,15 @@ pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: Create
     
     // 4. Recalculate totals
     recalculate_invoice_totals(&tx, &id).map_err(|e| e.to_string())?;
-    
+
+    // recalculate_invoice_totals only refreshes balance_due against the
+    // invoice's existing amount_paid — it doesn't touch `status`. Editing a
+    // previously "paid" invoice's items/totals (now allowed unconditionally
+    // from the UI) can leave a real balance again, so status has to be
+    // re-derived here too, the same way create/update/delete payment
+    // already keep it in sync via this same function.
+    update_invoice_payment_status(&tx, &id).map_err(|e| e.to_string())?;
+
     tx.commit().map_err(|e| e.to_string())?;
     
     let _ = log_activity(&conn, "UPDATE", "INVOICE", Some(&id), "Facture mise à jour");
@@ -1812,9 +1890,87 @@ pub fn convert_to_real_invoice(db: State<'_, Mutex<Connection>>, id: String) -> 
     ).map_err(|e| e.to_string())?;
     
     let _ = log_activity(&conn, "CONVERT", "INVOICE", Some(&id), &format!("Proforma converti en facture: {}", new_number));
-    
+
     drop(conn);
     get_invoice(db, id).map_err(|e| e.to_string())?.ok_or_else(|| "Failed to retrieve converted invoice".to_string())
+}
+
+/// Clones a proforma into a brand-new invoice (its own id, a real sequential
+/// invoice number, today's date) and marks the source proforma "converted"
+/// with a link to the invoice it became — unlike convert_to_real_invoice
+/// above, which mutates the proforma's own row in place, this preserves the
+/// proforma as a permanent, still-visible record of what was quoted.
+#[tauri::command]
+pub fn convert_proforma_to_invoice(db: State<'_, Mutex<Connection>>, id: String) -> Result<Invoice, String> {
+    crate::license::require_active_license()?;
+
+    // 1. Load the source proforma + its items with their own self-contained
+    //    locks, released before calling create_invoice below — that command
+    //    takes its own lock on the same mutex, and holding one across the
+    //    call would deadlock.
+    let proforma = get_invoice(db.clone(), id.clone())?
+        .ok_or_else(|| "Proforma introuvable".to_string())?;
+
+    if proforma.invoice_type != "proforma" {
+        return Err("Ce document n'est pas une facture proforma".to_string());
+    }
+    if proforma.status.as_deref() == Some("converted") {
+        return Err("Cette proforma a déjà été convertie".to_string());
+    }
+
+    let source_items = get_invoice_items(db.clone(), id.clone())?;
+
+    // 2. Clone into a new invoice — its own number and today's date,
+    //    independent from the proforma it came from.
+    let new_data = CreateInvoiceData {
+        company_id: proforma.company_id.clone().unwrap_or_default(),
+        client_id: proforma.client_id.clone(),
+        invoice_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+        due_date: proforma.due_date.clone(),
+        month_period: None,
+        notes: proforma.notes.clone(),
+        header_note: proforma.header_note.clone(),
+        invoice_type: Some("invoice".to_string()),
+        original_invoice_id: None,
+        discount: proforma.discount,
+        discount_type: proforma.discount_type.clone(),
+        discount_value: proforma.discount_value,
+        use_secondary_register: proforma.use_secondary_register,
+        selected_secondary_rc: proforma.selected_secondary_rc.clone(),
+        selected_secondary_address: proforma.selected_secondary_address.clone(),
+        custom_title: None,
+        invoice_number: None,
+        payment_method: proforma.payment_method.clone(),
+        status: Some("issued".to_string()),
+        amount_paid: None,
+        tax_mode: Some(proforma.tax_mode.clone()),
+        project_id: proforma.project_id.clone(),
+        items: source_items.into_iter().map(|item| InvoiceItemInput {
+            product_id: item.product_id,
+            product_name: item.products.as_ref().map(|p| p.name.clone()),
+            product_code: item.products.as_ref().map(|p| p.code.clone()),
+            product_description: item.products.as_ref().and_then(|p| p.description.clone()),
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            tva_rate: item.tva_rate,
+            timbre_exempt: item.timbre_exempt,
+        }).collect(),
+    };
+
+    let new_invoice = create_invoice(db.clone(), new_data)?;
+
+    // 3. Mark the source proforma converted and link it to the new invoice.
+    {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE invoices SET status = 'converted', converted_to_invoice_id = ?2, updated_at = ?3 WHERE id = ?1",
+            params![id, new_invoice.id, now],
+        ).map_err(|e| e.to_string())?;
+        let _ = log_activity(&conn, "CONVERT", "INVOICE", Some(&id), &format!("Proforma convertie en facture: {}", new_invoice.invoice_number));
+    }
+
+    Ok(new_invoice)
 }
 
 // ============= PAYMENTS =============
@@ -1911,6 +2067,47 @@ pub fn create_payment(db: State<'_, Mutex<Connection>>, data: CreatePaymentData)
 
     let mut stmt = conn.prepare(&format!("SELECT {} FROM payments WHERE id = ?1", PAYMENT_COLUMNS)).map_err(|e| e.to_string())?;
     stmt.query_row(params![id], map_payment_row).map_err(|e| e.to_string())
+}
+
+/// Amount/date/method (+ the cheque-specific fields) only — invoice_id and
+/// company_id are deliberately not editable here, a payment doesn't get
+/// re-linked to a different invoice via an edit form.
+#[derive(Deserialize)]
+pub struct UpdatePaymentData {
+    pub id: String,
+    pub payment_date: String,
+    pub amount: f64,
+    pub payment_method: Option<String>,
+    pub cheque_number: Option<String>,
+    pub bank_name: Option<String>,
+    pub value_date: Option<String>,
+    pub employee_id: Option<String>,
+}
+
+#[tauri::command]
+pub fn update_payment(db: State<'_, Mutex<Connection>>, data: UpdatePaymentData) -> Result<Payment, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    let invoice_id: String = conn
+        .query_row("SELECT invoice_id FROM payments WHERE id = ?1", params![data.id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE payments SET payment_date = ?2, amount = ?3, payment_method = ?4, cheque_number = ?5, bank_name = ?6, value_date = ?7, employee_id = ?8 WHERE id = ?1",
+        params![data.id, data.payment_date, data.amount, data.payment_method, data.cheque_number, data.bank_name, data.value_date, data.employee_id],
+    ).map_err(|e| e.to_string())?;
+
+    // Same amount can move to a different invoice's balance/status here as
+    // create_payment/delete_payment already do — this is what actually
+    // keeps amount_paid/balance_due/status in sync after an edit.
+    update_invoice_payment_status(&conn, &invoice_id).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PAYMENT", Some(&data.id), &format!("Paiement modifié: {} DA", data.amount));
+
+    let mut stmt = conn.prepare(&format!("SELECT {} FROM payments WHERE id = ?1", PAYMENT_COLUMNS)).map_err(|e| e.to_string())?;
+    stmt.query_row(params![data.id], map_payment_row).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2075,6 +2272,11 @@ pub struct Order {
 
 #[derive(Deserialize)]
 pub struct CreateOrderData {
+    // Shared with update_order, whose UPDATE statement never touches this
+    // column — the frontend's update payload omits it (Omit<..., "company_id">),
+    // so it must tolerate being absent from that JSON instead of failing
+    // deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub client_id: Option<String>,
     pub supplier_name: Option<String>,
@@ -2445,6 +2647,11 @@ pub struct DeliveryNote {
 
 #[derive(Deserialize)]
 pub struct CreateDeliveryNoteData {
+    // Shared with update_delivery_note, whose UPDATE statement never touches
+    // this column — the frontend's update payload omits it (Omit<...,
+    // "company_id">), so it must tolerate being absent from that JSON
+    // instead of failing deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub client_id: String,
     pub delivery_date: String,
@@ -2831,6 +3038,12 @@ pub struct Expense {
     pub supplier_name: Option<String>,
     pub is_recurring: Option<bool>,
     pub recurrence_interval: Option<String>,
+    /// Payment-completion flag for the Charges & Dépenses page's STATUT
+    /// column — true means the cash has actually been disbursed, false
+    /// means it's a recorded commitment still "à payer". Defaults to true
+    /// (see migrate_expenses_payment_status_if_needed) so every
+    /// pre-existing expense keeps reading as settled.
+    pub is_paid: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -2849,9 +3062,22 @@ pub struct CreateExpenseData {
     pub supplier_id: Option<String>,
     pub is_recurring: Option<bool>,
     pub recurrence_interval: Option<String>,
+    pub is_paid: Option<bool>,
 }
 
-const EXPENSE_SELECT: &str = "SELECT e.id, e.company_id, e.expense_date, e.category, e.description, e.amount, e.payment_method, e.reference, e.notes, e.month_period, e.project_id, p.name, e.supplier_id, s.name, e.is_recurring, e.recurrence_interval, e.created_at, e.updated_at FROM expenses e LEFT JOIN projects p ON e.project_id = p.id LEFT JOIN suppliers s ON e.supplier_id = s.id";
+#[derive(Deserialize)]
+pub struct UpdateExpenseData {
+    pub id: String,
+    pub expense_date: String,
+    pub category: String,
+    pub description: Option<String>,
+    pub amount: f64,
+    pub payment_method: Option<String>,
+    pub project_id: Option<String>,
+    pub is_paid: bool,
+}
+
+const EXPENSE_SELECT: &str = "SELECT e.id, e.company_id, e.expense_date, e.category, e.description, e.amount, e.payment_method, e.reference, e.notes, e.month_period, e.project_id, p.name, e.supplier_id, s.name, e.is_recurring, e.recurrence_interval, e.is_paid, e.created_at, e.updated_at FROM expenses e LEFT JOIN projects p ON e.project_id = p.id LEFT JOIN suppliers s ON e.supplier_id = s.id";
 
 fn map_expense_row(row: &rusqlite::Row) -> rusqlite::Result<Expense> {
     Ok(Expense {
@@ -2871,8 +3097,9 @@ fn map_expense_row(row: &rusqlite::Row) -> rusqlite::Result<Expense> {
         supplier_name: row.get(13)?,
         is_recurring: row.get::<_, Option<i64>>(14)?.map(|v| v != 0),
         recurrence_interval: row.get(15)?,
-        created_at: row.get(16)?,
-        updated_at: row.get(17)?,
+        is_paid: row.get::<_, Option<i64>>(16)?.map(|v| v != 0).unwrap_or(true),
+        created_at: row.get(17)?,
+        updated_at: row.get(18)?,
     })
 }
 
@@ -2919,13 +3146,33 @@ pub fn create_expense(db: State<'_, Mutex<Connection>>, data: CreateExpenseData)
         .and_then(|d| Some(format!("{}-{:02}", d.year(), d.month())));
 
     conn.execute(
-        "INSERT INTO expenses (id, company_id, expense_date, category, description, amount, payment_method, reference, notes, month_period, project_id, supplier_id, is_recurring, recurrence_interval, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-        params![id, data.company_id, data.expense_date, data.category, data.description, data.amount, data.payment_method, data.reference, data.notes, month_period, data.project_id, data.supplier_id, data.is_recurring.unwrap_or(false), data.recurrence_interval, now, now],
+        "INSERT INTO expenses (id, company_id, expense_date, category, description, amount, payment_method, reference, notes, month_period, project_id, supplier_id, is_recurring, recurrence_interval, is_paid, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        params![id, data.company_id, data.expense_date, data.category, data.description, data.amount, data.payment_method, data.reference, data.notes, month_period, data.project_id, data.supplier_id, data.is_recurring.unwrap_or(false), data.recurrence_interval, data.is_paid.unwrap_or(true), now, now],
     ).map_err(|e| e.to_string())?;
 
     let _ = log_activity(&conn, "CREATE", "EXPENSE", Some(&id), &format!("Dépense créée: {} DA", data.amount));
 
     get_expense_by_id(&conn, &id)
+}
+
+#[tauri::command]
+pub fn update_expense(db: State<'_, Mutex<Connection>>, data: UpdateExpenseData) -> Result<Expense, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let month_period = chrono::NaiveDate::parse_from_str(&data.expense_date, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| Some(format!("{}-{:02}", d.year(), d.month())));
+
+    conn.execute(
+        "UPDATE expenses SET expense_date = ?1, category = ?2, description = ?3, amount = ?4, payment_method = ?5, project_id = ?6, is_paid = ?7, month_period = ?8, updated_at = ?9 WHERE id = ?10",
+        params![data.expense_date, data.category, data.description, data.amount, data.payment_method, data.project_id, data.is_paid, month_period, now, data.id],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "EXPENSE", Some(&data.id), &format!("Dépense modifiée: {} DA", data.amount));
+
+    get_expense_by_id(&conn, &data.id)
 }
 
 #[tauri::command]
@@ -3402,14 +3649,26 @@ pub struct PaymentStats {
     pub unpaid: f64,
     pub initial_debt: f64,
     pub total_receivables: f64,
+    /// Count of invoices actually carrying that outstanding balance — same
+    /// all-time scope as total_receivables. Powers the Dashboard's
+    /// "Reste à Recouvrer" card subtext.
+    pub outstanding_invoice_count: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TimePointStats {
     pub label: String,
     pub revenue: f64,
+    /// Combined total (expenses_only + payroll_amount) — kept for existing
+    /// consumers of "the" per-period charges figure.
     pub expenses: f64,
     pub profit: f64,
+    /// `expenses` table only, no payroll folded in — the "Dépenses
+    /// opérationnelles" line in the chart tooltip breakdown.
+    pub expenses_only: f64,
+    /// Settled payroll for this period ("Masse salariale" in the tooltip).
+    /// Always 0.0 in daily_data — payroll has no day-level granularity.
+    pub payroll_amount: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -3810,6 +4069,14 @@ pub fn get_dashboard_stats(
     // 2. Filter Logic
     let mut invoice_date_filter = format!("strftime('%Y', invoice_date) = '{}' AND {}", target_year, company_filter);
     let mut expense_date_filter = format!("strftime('%Y', expense_date) = '{}' AND {}", target_year, company_filter);
+    // Cash-basis filter for the Flux de Trésorerie chart — scoped through
+    // the joined invoice's own company_id (payments.company_id exists too,
+    // but isn't guaranteed backfilled the way invoices.company_id is).
+    let mut payment_date_filter = format!(
+        "strftime('%Y', p.payment_date) = '{}' AND i.company_id = '{}'",
+        target_year,
+        company_id.replace('\'', "''")
+    );
 
     let is_daily_view = months.as_ref().map(|m| m.len() == 1).unwrap_or(false);
 
@@ -3822,6 +4089,7 @@ pub fn get_dashboard_stats(
 
             invoice_date_filter.push_str(&format!(" AND strftime('%m', invoice_date) IN ({})", months_str));
             expense_date_filter.push_str(&format!(" AND strftime('%m', expense_date) IN ({})", months_str));
+            payment_date_filter.push_str(&format!(" AND strftime('%m', p.payment_date) IN ({})", months_str));
         }
     }
 
@@ -3838,6 +4106,15 @@ pub fn get_dashboard_stats(
     ).unwrap_or(0.0);
     
     let total_receivables = total_invoiced - total_paid_all_time + initial_debt;
+
+    // How many distinct invoices actually carry that outstanding balance —
+    // same all-time, no-date-filter scope as total_receivables above, for
+    // the Dashboard's "Reste à Recouvrer" card subtext ("X factures avec
+    // solde restant").
+    let outstanding_invoice_count: i64 = conn.query_row(
+        &format!("SELECT COUNT(*) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND total_ttc > COALESCE(amount_paid, 0.0) AND {}", company_filter),
+        [], |row| row.get(0)
+    ).unwrap_or(0);
 
     // 4. Period Revenue: use amount_paid from invoices (captures both payment table records AND direct status changes)
     let revenue: f64 = conn.query_row(
@@ -3897,13 +4174,50 @@ pub fn get_dashboard_stats(
         |row| row.get(0)
     ).unwrap_or(0);
 
-    // True operating profitability — HT revenue (sales_cumulatives.total_ht
-    // above is already tax-exclusive: TVA/timbre are never counted here)
-    // minus manually logged charges. Deliberately separate from
-    // `revenue`/`expenses`/`profit` below, which stay cash-basis/TTC and
-    // keep feeding the existing chart + PeriodStats exactly as before.
+    // Settled payroll for the same year/month window — Charges Réelles and
+    // Trésorerie are meant to read as total real cash outflow, and salaries
+    // are real spending the `expenses` table never captures (payroll lives
+    // in its own table). Scoped to `paid = 1` only (a draft run isn't money
+    // out the door yet); payroll_runs has no company_id of its own, so it's
+    // scoped via its employee's company instead.
+    let mut payroll_period_filter = format!(
+        "pr.paid = 1 AND substr(pr.month, 1, 4) = '{}' AND e.company_id = '{}'",
+        target_year, company_id.replace('\'', "''")
+    );
+    if let Some(ref m_list) = months {
+        if !m_list.is_empty() {
+            let padded_months: Vec<String> = m_list.iter().map(|m| {
+                if m.len() == 1 { format!("0{}", m) } else { m.clone() }
+            }).collect();
+            let months_str = padded_months.iter().map(|m| format!("'{}'", m)).collect::<Vec<_>>().join(",");
+            payroll_period_filter.push_str(&format!(" AND substr(pr.month, 6, 2) IN ({})", months_str));
+        }
+    }
+    let paid_payroll: f64 = conn.query_row(
+        &format!(
+            "SELECT COALESCE(SUM(pr.net_a_payer), 0.0) FROM payroll_runs pr JOIN employees e ON e.id = pr.employee_id WHERE {}",
+            payroll_period_filter
+        ),
+        [],
+        |row| row.get(0)
+    ).unwrap_or(0.0);
+
+    // Cash-basis total charges the dashboard actually shows (Charges
+    // Réelles / Trésorerie below) — logged expenses plus settled payroll.
+    // Kept distinct from the bare `expenses` above, which net_profit_ht and
+    // expense_count still use on purpose: those describe the `expenses`
+    // table specifically (a row count, an HT operating margin against
+    // manually logged charges), not "all cash out".
+    let total_charges = expenses + paid_payroll;
+
+    // Bénéfice Net — unified with Charges Réelles/Trésorerie above: same
+    // `revenue - total_charges` formula, so all three cash-basis metrics on
+    // the dashboard move together instead of Bénéfice Net quietly excluding
+    // payroll while the other two counted it. `revenue_ht` is kept only as
+    // the denominator for margin_percentage_ht below (unchanged) and for
+    // the separate "Chiffre d'Affaires HT" metric cell elsewhere.
     let revenue_ht = sales_cumulatives.total_ht;
-    let net_profit_ht = revenue_ht - expenses;
+    let net_profit_ht = revenue - total_charges;
     let margin_percentage_ht = if revenue_ht > 0.0 { (net_profit_ht / revenue_ht) * 100.0 } else { 0.0 };
 
     // 6. Growth (using amount_paid from invoices)
@@ -3958,13 +4272,17 @@ pub fn get_dashboard_stats(
     let mut daily_data = Vec::new();
 
     if is_daily_view {
-        // Daily view: group invoices by invoice_date day, sum amount_paid
+        // Daily view: group actual cash receipts by the day they were
+        // collected (payments.payment_date), not by invoice_date — a
+        // payment can land in a different month than the invoice it
+        // settles, and this chart is meant to show real cash flow.
         let mut stmt = conn.prepare(&format!(
-            "SELECT strftime('%d', invoice_date) as day, SUM(COALESCE(amount_paid, 0.0)) as rev 
-             FROM invoices 
-             WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {} 
-             GROUP BY day ORDER BY day", 
-             invoice_date_filter
+            "SELECT strftime('%d', p.payment_date) as day, SUM(p.amount) as rev
+             FROM payments p
+             JOIN invoices i ON p.invoice_id = i.id
+             WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND {}
+             GROUP BY day ORDER BY day",
+             payment_date_filter
         )).map_err(|e| e.to_string())?;
         
         let daily_revenues: std::collections::HashMap<String, f64> = stmt.query_map([], |row| {
@@ -3988,10 +4306,12 @@ pub fn get_dashboard_stats(
             let rev = *daily_revenues.get(&day_key).unwrap_or(&0.0);
             let exp = *daily_expenses.get(&day_key).unwrap_or(&0.0);
             daily_data.push(TimePointStats {
-                label: i.to_string(), 
+                label: i.to_string(),
                 revenue: rev,
                 expenses: exp,
                 profit: rev - exp,
+                expenses_only: exp,
+                payroll_amount: 0.0,
             });
         }
     } else {
@@ -4009,28 +4329,65 @@ pub fn get_dashboard_stats(
                 }
             }
 
-            // Use amount_paid from invoices grouped by invoice_date month
-            let m_inv_filter = format!("strftime('%Y', invoice_date) = '{}' AND strftime('%m', invoice_date) = '{}' AND {}", target_year, m_str, company_filter);
+            // Cash actually collected this month — grouped by
+            // payments.payment_date, not by the invoice's own invoice_date,
+            // since a payment can (and often does) land in a later month
+            // than the invoice that was issued.
+            let m_pay_filter = format!(
+                "strftime('%Y', p.payment_date) = '{}' AND strftime('%m', p.payment_date) = '{}' AND i.company_id = '{}'",
+                target_year, m_str, company_id.replace('\'', "''")
+            );
             let m_exp_filter = format!("strftime('%Y', expense_date) = '{}' AND strftime('%m', expense_date) = '{}' AND {}", target_year, m_str, company_filter);
 
             let m_rev: f64 = conn.query_row(
-                &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) 
-                          FROM invoices 
-                          WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", m_inv_filter),
+                &format!(
+                    "SELECT COALESCE(SUM(p.amount), 0.0)
+                     FROM payments p
+                     JOIN invoices i ON p.invoice_id = i.id
+                     WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND {}",
+                    m_pay_filter
+                ),
                 [], |row| row.get(0)
             ).unwrap_or(0.0);
             
-            let m_exp: f64 = conn.query_row(
+            let m_exp_only: f64 = conn.query_row(
                 &format!("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE {}", m_exp_filter),
                 [], |row| row.get(0)
             ).unwrap_or(0.0);
+
+            // Same reasoning as the yearly total_charges above: fold in
+            // this month's settled payroll so the chart bars actually sum
+            // to the headline Charges Réelles/Trésorerie figures instead
+            // of quietly excluding salaries the yearly number now counts.
+            let m_payroll: f64 = conn.query_row(
+                &format!(
+                    "SELECT COALESCE(SUM(pr.net_a_payer), 0.0) FROM payroll_runs pr JOIN employees e ON e.id = pr.employee_id WHERE pr.paid = 1 AND pr.month = '{}-{}' AND e.company_id = '{}'",
+                    target_year, m_str, company_id.replace('\'', "''")
+                ),
+                [], |row| row.get(0)
+            ).unwrap_or(0.0);
+            let m_exp = m_exp_only + m_payroll;
 
             monthly_data.push(TimePointStats {
                 label: format!("{}-{}", target_year, m_str),
                 revenue: m_rev,
                 expenses: m_exp,
                 profit: m_rev - m_exp,
+                expenses_only: m_exp_only,
+                payroll_amount: m_payroll,
             });
+        }
+
+        // Manual-verification aid (per the request that asked for this) —
+        // one line per month so the year's numbers can be eyeballed against
+        // the DB before trusting the chart's rendering of them. Goes to the
+        // `tauri dev` process's own stdout/log file, not the browser console.
+        eprintln!("[dashboard] monthly breakdown for {}:", target_year);
+        for m in &monthly_data {
+            eprintln!(
+                "  {} | revenue={:.2} expenses_only={:.2} payroll={:.2} total_charges={:.2} profit={:.2}",
+                m.label, m.revenue, m.expenses_only, m.payroll_amount, m.expenses, m.profit
+            );
         }
     }
 
@@ -4081,14 +4438,15 @@ pub fn get_dashboard_stats(
         },
         yearly: PeriodStats {
             revenue,
-            expenses,
-            profit: revenue - expenses,
+            expenses: total_charges,
+            profit: revenue - total_charges,
         },
         payments: PaymentStats {
             paid: revenue,
             unpaid,
             initial_debt,
             total_receivables,
+            outstanding_invoice_count,
         },
         sales_cumulatives,
         monthly_data,
@@ -4390,15 +4748,35 @@ pub fn create_employee(db: State<'_, Mutex<Connection>>, data: CreateEmployeeDat
     })
 }
 
+/// Same shape as CreateEmployeeData minus company_id — the frontend never
+/// sends it on update (an employee doesn't change company), but
+/// CreateEmployeeData::company_id isn't Optional, so reusing that struct
+/// here made every update request fail deserialization with "missing field
+/// `company_id`" (the same bug class fixed earlier for update_client).
+#[derive(Deserialize)]
+pub struct UpdateEmployeeData {
+    pub name: String,
+    pub role: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub address: Option<String>,
+    pub base_salary: Option<f64>,
+    pub hire_date: Option<String>,
+    pub contract_type: Option<String>,
+    pub rib: Option<String>,
+    pub external_code: Option<String>,
+    pub is_active: Option<bool>,
+}
+
 #[tauri::command]
-pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: CreateEmployeeData) -> Result<Employee, String> {
+pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: UpdateEmployeeData) -> Result<Employee, String> {
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
-        "UPDATE employees SET name = ?2, role = ?3, email = ?4, phone = ?5, address = ?6, updated_at = ?7, base_salary = ?8, hire_date = ?9, contract_type = ?10, rib = ?11, external_code = ?12 WHERE id = ?1",
+        "UPDATE employees SET name = ?2, role = ?3, email = ?4, phone = ?5, address = ?6, updated_at = ?7, base_salary = ?8, hire_date = ?9, contract_type = ?10, rib = ?11, external_code = ?12, is_active = ?13 WHERE id = ?1",
         params![
             id,
             data.name,
@@ -4412,6 +4790,7 @@ pub fn update_employee(db: State<'_, Mutex<Connection>>, id: String, data: Creat
             data.contract_type,
             data.rib,
             data.external_code,
+            data.is_active.unwrap_or(true),
         ],
     ).map_err(|e| e.to_string())?;
 
@@ -4831,6 +5210,156 @@ pub fn get_employee_absence_stats(db: State<'_, Mutex<Connection>>, employee_id:
     })
 }
 
+/// Official shift start. No expected-arrival setting exists yet anywhere in
+/// the app, so this is a fixed placeholder — surface it as a Réglages field
+/// if the agency's actual start time differs.
+const SHIFT_START_MINUTES: i64 = 8 * 60 + 30; // 08:30
+
+/// Tolérance de retard: a first punch within this many minutes of
+/// SHIFT_START_MINUTES still counts as Présent — only strictly more than
+/// this many minutes late flips the day to En retard.
+const LATE_GRACE_PERIOD_MINUTES: i64 = 10;
+
+/// Parses "HH:MM:SS" (or "HH:MM") into minutes since midnight.
+fn time_to_minutes(time: &str) -> Option<i64> {
+    let mut parts = time.split(':');
+    let hours: i64 = parts.next()?.parse().ok()?;
+    let minutes: i64 = parts.next()?.parse().ok()?;
+    Some(hours * 60 + minutes)
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum DayAttendanceStatus {
+    Present,
+    Late,
+    Absent,
+    /// Also used for days with no meaningful attendance data (before hire,
+    /// or not yet elapsed in an in-progress month) — visually identical to
+    /// a day off, which is the right muted treatment for "nothing to show".
+    Weekend,
+}
+
+#[derive(Serialize)]
+pub struct DayAttendance {
+    pub date: String,
+    pub status: DayAttendanceStatus,
+    pub arrival_time: Option<String>,
+    /// Minutes past SHIFT_START_MINUTES — only set when status is Late (i.e.
+    /// strictly beyond the grace period), for display like "+17 min".
+    pub late_minutes: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct EmployeeDailyAttendance {
+    pub employee_id: String,
+    pub month: String,
+    pub days: Vec<DayAttendance>,
+    pub present_count: i64,
+    pub late_count: i64,
+    pub absent_count: i64,
+}
+
+/// Day-by-day attendance for one employee/month, for the Tracker strip.
+/// Mirrors compute_absence_stats's rules (Friday off, hire-date floor,
+/// never judging days beyond "today") but keeps the per-day detail instead
+/// of folding it into a single absence count.
+#[tauri::command]
+pub fn get_employee_daily_attendance(
+    db: State<'_, Mutex<Connection>>,
+    employee_id: String,
+    month: String,
+) -> Result<EmployeeDailyAttendance, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let hire_date: Option<String> = conn
+        .query_row("SELECT hire_date FROM employees WHERE id = ?1", params![employee_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    let (year, month_num) = parse_year_month(&month)?;
+    let last_day = days_in_month(year, month_num);
+
+    let today = chrono::Local::now().date_naive();
+    let mut through_day = last_day;
+    if today.year() == year && today.month() == month_num {
+        through_day = through_day.min(today.day());
+    }
+
+    let mut from_day: u32 = 1;
+    if let Some(hd) = hire_date.as_deref().and_then(parse_ymd) {
+        if hd.year() == year && hd.month() == month_num {
+            from_day = hd.day();
+        } else if hd.year() > year || (hd.year() == year && hd.month() > month_num) {
+            from_day = last_day + 1; // hired after this month entirely — no days count
+        }
+    }
+
+    let month_prefix = format!("{:04}-{:02}", year, month_num);
+    let mut stmt = conn
+        .prepare("SELECT punch_time FROM punch_records WHERE employee_id = ?1 AND punch_time LIKE ?2")
+        .map_err(|e| e.to_string())?;
+    let pattern = format!("{}%", month_prefix);
+    let punch_times: Vec<String> = stmt
+        .query_map(params![employee_id, pattern], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut first_punch_by_day: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+    for pt in &punch_times {
+        if let Some(date) = parse_ymd(&pt) {
+            let day = date.day();
+            let time_part = if pt.len() >= 19 { pt[11..19].to_string() } else { String::new() };
+            first_punch_by_day
+                .entry(day)
+                .and_modify(|existing| {
+                    if time_part < *existing {
+                        *existing = time_part.clone();
+                    }
+                })
+                .or_insert(time_part);
+        }
+    }
+
+    let mut days = Vec::with_capacity(last_day as usize);
+    let mut present_count = 0i64;
+    let mut late_count = 0i64;
+    let mut absent_count = 0i64;
+
+    for day in 1..=last_day {
+        let date = chrono::NaiveDate::from_ymd_opt(year, month_num, day).ok_or("Date invalide")?;
+        let date_str = date.format("%Y-%m-%d").to_string();
+
+        if date.weekday() == chrono::Weekday::Fri || day < from_day || day > through_day {
+            days.push(DayAttendance { date: date_str, status: DayAttendanceStatus::Weekend, arrival_time: None, late_minutes: None });
+            continue;
+        }
+
+        match first_punch_by_day.get(&day) {
+            Some(time) => {
+                let minutes_past_start = time_to_minutes(time).map(|m| m - SHIFT_START_MINUTES).unwrap_or(0);
+                if minutes_past_start > LATE_GRACE_PERIOD_MINUTES {
+                    late_count += 1;
+                    days.push(DayAttendance {
+                        date: date_str,
+                        status: DayAttendanceStatus::Late,
+                        arrival_time: Some(time.clone()),
+                        late_minutes: Some(minutes_past_start),
+                    });
+                } else {
+                    present_count += 1;
+                    days.push(DayAttendance { date: date_str, status: DayAttendanceStatus::Present, arrival_time: Some(time.clone()), late_minutes: None });
+                }
+            }
+            None => {
+                absent_count += 1;
+                days.push(DayAttendance { date: date_str, status: DayAttendanceStatus::Absent, arrival_time: None, late_minutes: None });
+            }
+        }
+    }
+
+    Ok(EmployeeDailyAttendance { employee_id, month, days, present_count, late_count, absent_count })
+}
+
 // ---- Attendance / punch import ----
 
 #[derive(Deserialize)]
@@ -4843,6 +5372,7 @@ pub struct PunchImportRow {
 pub struct PunchImportSummary {
     pub imported: i64,
     pub skipped_duplicates: i64,
+    pub invalid_format: i64,
     pub unmatched_employee_codes: Vec<String>,
 }
 
@@ -4872,6 +5402,7 @@ pub fn import_punch_records(db: State<'_, Mutex<Connection>>, company_id: String
 
     let mut imported = 0i64;
     let mut skipped = 0i64;
+    let mut invalid_format = 0i64;
     let mut unmatched: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // Every row is kept regardless of mapping status — an unrecognized
@@ -4882,6 +5413,15 @@ pub fn import_punch_records(db: State<'_, Mutex<Connection>>, company_id: String
     // retroactively instead of requiring a re-import.
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for row in rows {
+        // Defense in depth: the frontend parser normalizes every timestamp
+        // to this exact shape before sending it, but a punch_time that
+        // doesn't parse as "YYYY-MM-DD HH:MM:SS" would silently never match
+        // any month's "LIKE 'YYYY-MM%'" attendance/salary query if it slipped
+        // through anyway — reject it here instead of storing dead data.
+        if parse_ymd(&row.punch_time).is_none() {
+            invalid_format += 1;
+            continue;
+        }
         let employee_id = code_map.get(&row.external_code);
         if employee_id.is_none() {
             unmatched.insert(row.external_code.clone());
@@ -4913,6 +5453,7 @@ pub fn import_punch_records(db: State<'_, Mutex<Connection>>, company_id: String
     Ok(PunchImportSummary {
         imported,
         skipped_duplicates: skipped,
+        invalid_format,
         unmatched_employee_codes: unmatched.into_iter().collect(),
     })
 }
@@ -5112,9 +5653,10 @@ pub struct PayrollRun {
     pub paid_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub notes: Option<String>,
 }
 
-const PAYROLL_RUN_COLUMNS: &str = "id, employee_id, month, base_salary, working_days_in_month, absence_days, daily_rate, absence_deduction, primes, avance_deduction, net_a_payer, paid, paid_date, created_at, updated_at";
+const PAYROLL_RUN_COLUMNS: &str = "id, employee_id, month, base_salary, working_days_in_month, absence_days, daily_rate, absence_deduction, primes, avance_deduction, net_a_payer, paid, paid_date, created_at, updated_at, notes";
 
 fn row_to_payroll_run(row: &rusqlite::Row) -> rusqlite::Result<PayrollRun> {
     Ok(PayrollRun {
@@ -5133,6 +5675,7 @@ fn row_to_payroll_run(row: &rusqlite::Row) -> rusqlite::Result<PayrollRun> {
         paid_date: row.get(12)?,
         created_at: row.get(13)?,
         updated_at: row.get(14)?,
+        notes: row.get(15)?,
     })
 }
 
@@ -5289,6 +5832,7 @@ pub struct UpdatePayrollRunData {
     pub primes: f64,
     pub avance_deduction: f64,
     pub net_a_payer: f64,
+    pub notes: Option<String>,
 }
 
 /// Manual override of a payroll run's calculated fields — for correcting a
@@ -5305,11 +5849,11 @@ pub fn update_payroll_run(db: State<'_, Mutex<Connection>>, data: UpdatePayrollR
     let updated = conn.execute(
         "UPDATE payroll_runs SET base_salary = ?2, working_days_in_month = ?3, absence_days = ?4,
             daily_rate = ?5, absence_deduction = ?6, primes = ?7, avance_deduction = ?8,
-            net_a_payer = ?9, updated_at = ?10 WHERE id = ?1",
+            net_a_payer = ?9, notes = ?10, updated_at = ?11 WHERE id = ?1",
         params![
             data.id, data.base_salary, data.working_days_in_month, data.absence_days,
             data.daily_rate, data.absence_deduction, data.primes, data.avance_deduction,
-            data.net_a_payer, now
+            data.net_a_payer, data.notes, now
         ],
     ).map_err(|e| e.to_string())?;
     if updated == 0 {
@@ -5406,6 +5950,96 @@ pub fn get_payroll_dashboard_stats(db: State<'_, Mutex<Connection>>, company_id:
     })
 }
 
+// ---- Employees HR overview (Effectif/Archivés KPIs + per-employee payroll summary) ----
+
+#[derive(Serialize)]
+pub struct EmployeeHrStats {
+    pub active_count: i64,
+    pub inactive_count: i64,
+    pub monthly_payroll: f64,
+    pub total_paid_year: f64,
+}
+
+#[tauri::command]
+pub fn get_employee_hr_stats(db: State<'_, Mutex<Connection>>, company_id: String, year: String) -> Result<EmployeeHrStats, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    let active_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM employees WHERE company_id = ?1 AND (is_active = 1 OR is_active IS NULL)",
+            params![company_id], |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+
+    let inactive_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM employees WHERE company_id = ?1 AND is_active = 0",
+            params![company_id], |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+
+    let monthly_payroll: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(base_salary), 0) FROM employees WHERE company_id = ?1 AND (is_active = 1 OR is_active IS NULL)",
+            params![company_id], |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+
+    let total_paid_year: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(pr.net_a_payer), 0) FROM payroll_runs pr JOIN employees e ON e.id = pr.employee_id WHERE e.company_id = ?1 AND pr.paid = 1 AND substr(pr.month, 1, 4) = ?2",
+            params![company_id, year], |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(EmployeeHrStats {
+        active_count,
+        inactive_count,
+        monthly_payroll,
+        total_paid_year,
+    })
+}
+
+#[derive(Serialize)]
+pub struct EmployeePayrollSummary {
+    pub employee_id: String,
+    pub total_paid: f64,
+    pub last_paid_month: Option<String>,
+    pub last_paid_amount: Option<f64>,
+}
+
+#[tauri::command]
+pub fn get_employee_payroll_summaries(db: State<'_, Mutex<Connection>>, company_id: String) -> Result<Vec<EmployeePayrollSummary>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT e.id,
+                    COALESCE((SELECT SUM(net_a_payer) FROM payroll_runs WHERE employee_id = e.id AND paid = 1), 0),
+                    (SELECT month FROM payroll_runs WHERE employee_id = e.id AND paid = 1 ORDER BY month DESC LIMIT 1),
+                    (SELECT net_a_payer FROM payroll_runs WHERE employee_id = e.id AND paid = 1 ORDER BY month DESC LIMIT 1)
+             FROM employees e WHERE e.company_id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(params![company_id], |row| {
+            Ok(EmployeePayrollSummary {
+                employee_id: row.get(0)?,
+                total_paid: row.get(1)?,
+                last_paid_month: row.get(2)?,
+                last_paid_amount: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for r in rows {
+        result.push(r.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
 // ============= PROJECTS (omada-agency branch only) =============
 // Agency project-management module: client-linked, invoice-derived budget
 // (see get_project_stats), task/deliverable tracking. Replaces the old
@@ -5433,10 +6067,21 @@ pub struct Project {
     pub montant_convenu: Option<f64>,
     pub statut_paiement: String,
     pub date_paiement: Option<String>,
+    /// Explicit, manually-set operational lifecycle status
+    /// (en_cours/termine/en_pause) — deliberately independent of
+    /// statut_paiement (freelancer payables) and of anything derived from
+    /// invoices/payments. Only ever changed by an explicit user action
+    /// (update_project_status or the full edit form), never computed.
+    pub status: String,
 }
 
 #[derive(Deserialize)]
 pub struct CreateProjectData {
+    // Shared with update_project, whose UPDATE statement never touches this
+    // column — the frontend's update payload omits it (Omit<..., "company_id">),
+    // so it must tolerate being absent from that JSON instead of failing
+    // deserialization with "missing field `company_id`".
+    #[serde(default)]
     pub company_id: String,
     pub client_id: String,
     pub name: String,
@@ -5447,6 +6092,7 @@ pub struct CreateProjectData {
     pub planned_budget: f64,
     pub freelancer_id: Option<String>,
     pub montant_convenu: Option<f64>,
+    pub status: Option<String>,
 }
 
 fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<Project> {
@@ -5467,10 +6113,11 @@ fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<Project> {
         montant_convenu: row.get("montant_convenu").ok(),
         statut_paiement: row.get::<_, Option<String>>("statut_paiement").ok().flatten().unwrap_or_else(|| "non_paye".to_string()),
         date_paiement: row.get("date_paiement").ok(),
+        status: row.get::<_, Option<String>>("status").ok().flatten().unwrap_or_else(|| "en_cours".to_string()),
     })
 }
 
-const PROJECT_COLUMNS: &str = "id, company_id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement, date_paiement";
+const PROJECT_COLUMNS: &str = "id, company_id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement, date_paiement, status";
 
 #[tauri::command]
 pub fn get_projects(db: State<'_, Mutex<Connection>>, company_id: String) -> Result<Vec<Project>, String> {
@@ -5508,9 +6155,11 @@ pub fn create_project(db: State<'_, Mutex<Connection>>, data: CreateProjectData)
     let now = chrono::Utc::now().to_rfc3339();
     let categories_json = serde_json::to_string(&data.service_categories).map_err(|e| e.to_string())?;
 
+    let status = data.status.clone().unwrap_or_else(|| "en_cours".to_string());
+
     conn.execute(
-        "INSERT INTO projects (id, company_id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'non_paye')",
-        params![id, data.company_id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, now, data.freelancer_id, data.montant_convenu],
+        "INSERT INTO projects (id, company_id, client_id, name, service_categories, responsible_person, start_date, deadline, planned_budget, created_at, updated_at, freelancer_id, montant_convenu, statut_paiement, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'non_paye', ?14)",
+        params![id, data.company_id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, now, data.freelancer_id, data.montant_convenu, status],
     ).map_err(|e| e.to_string())?;
 
     let _ = log_activity(&conn, "CREATE", "PROJECT", Some(&id), &format!("Nouveau projet créé: {}", data.name));
@@ -5531,12 +6180,16 @@ pub fn create_project(db: State<'_, Mutex<Connection>>, data: CreateProjectData)
         montant_convenu: data.montant_convenu,
         statut_paiement: "non_paye".to_string(),
         date_paiement: None,
+        status,
     })
 }
 
 /// Field edit only — statut_paiement/date_paiement go through
 /// update_freelancer_payment_status below, same split as payroll_runs'
-/// update_payroll_paid vs. run_payroll.
+/// update_payroll_paid vs. run_payroll. `status` (operational lifecycle)
+/// CAN be changed here too (the full edit form sends it along with
+/// everything else), but the primary path for a quick toggle is the
+/// dedicated update_project_status command right below.
 #[tauri::command]
 pub fn update_project(db: State<'_, Mutex<Connection>>, id: String, data: CreateProjectData) -> Result<Project, String> {
     crate::license::require_active_license()?;
@@ -5546,11 +6199,31 @@ pub fn update_project(db: State<'_, Mutex<Connection>>, id: String, data: Create
     let categories_json = serde_json::to_string(&data.service_categories).map_err(|e| e.to_string())?;
 
     conn.execute(
-        "UPDATE projects SET client_id = ?2, name = ?3, service_categories = ?4, responsible_person = ?5, start_date = ?6, deadline = ?7, planned_budget = ?8, updated_at = ?9, freelancer_id = ?10, montant_convenu = ?11 WHERE id = ?1",
-        params![id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, data.freelancer_id, data.montant_convenu],
+        "UPDATE projects SET client_id = ?2, name = ?3, service_categories = ?4, responsible_person = ?5, start_date = ?6, deadline = ?7, planned_budget = ?8, updated_at = ?9, freelancer_id = ?10, montant_convenu = ?11, status = COALESCE(?12, status) WHERE id = ?1",
+        params![id, data.client_id, data.name, categories_json, data.responsible_person, data.start_date, data.deadline, data.planned_budget, now, data.freelancer_id, data.montant_convenu, data.status],
     ).map_err(|e| e.to_string())?;
 
     let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&id), &format!("Projet mis à jour: {}", data.name));
+
+    conn.query_row(&format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS), params![id], row_to_project)
+        .map_err(|e| e.to_string())
+}
+
+/// Dedicated quick-toggle for the Projets table row menu / STATUT cell —
+/// changes ONLY the operational lifecycle status, independent of
+/// statut_paiement (freelancer payables) and of the financial collection
+/// figures (budget_facture/budget_paye), which stay purely informational.
+#[tauri::command]
+pub fn update_project_status(db: State<'_, Mutex<Connection>>, id: String, status: String) -> Result<Project, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE projects SET status = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, status, chrono::Utc::now().to_rfc3339()],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "PROJECT", Some(&id), &format!("Statut du projet changé : {}", status));
 
     conn.query_row(&format!("SELECT {} FROM projects WHERE id = ?1", PROJECT_COLUMNS), params![id], row_to_project)
         .map_err(|e| e.to_string())
@@ -5708,10 +6381,22 @@ pub fn get_project_stats(db: State<'_, Mutex<Connection>>, company_id: String, p
 
     let mut result = Vec::new();
     for p in project_rows {
-        let (budget_facture, budget_paye): (f64, f64) = conn.query_row(
-            "SELECT COALESCE(SUM(total_ttc), 0), COALESCE(SUM(amount_paid), 0) FROM invoices WHERE project_id = ?1",
+        let budget_facture: f64 = conn.query_row(
+            "SELECT COALESCE(SUM(total_ttc), 0) FROM invoices WHERE project_id = ?1",
             params![p.id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| row.get(0),
+        ).map_err(|e| e.to_string())?;
+
+        // Real collected cash, aggregated straight from the payments ledger
+        // (joined via invoices.project_id) rather than trusting each
+        // invoice's own cached amount_paid — the two should always agree in
+        // practice, but this is the actual source of truth and matches
+        // exactly what the Dashboard's "Santé & Rentabilité des Projets"
+        // widget needs to show real per-project collection progress.
+        let budget_paye: f64 = conn.query_row(
+            "SELECT COALESCE(SUM(pay.amount), 0) FROM payments pay JOIN invoices inv ON inv.id = pay.invoice_id WHERE inv.project_id = ?1",
+            params![p.id],
+            |row| row.get(0),
         ).map_err(|e| e.to_string())?;
 
         let (task_count, tasks_approved_count): (i64, i64) = conn.query_row(
@@ -7478,6 +8163,45 @@ pub fn save_pdf_backup(
     fs::write(&file_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Snapshots the live database to a separate file using SQLite's native
+/// `VACUUM INTO`. Unlike a plain file copy, this is atomic and safe to run
+/// against a database the app is actively using — it reads through a
+/// consistent snapshot without taking a long-lived lock, and it never
+/// writes to (or even opens for writing) the source database file, so the
+/// live `database.db`/`database-dev.db` this connection points at is
+/// untouched either way.
+///
+/// `dest_path` lets the caller target a user-chosen location (e.g. from a
+/// native save dialog); when omitted, a timestamped snapshot is written to
+/// `<app_data_dir>/backups/`.
+#[tauri::command]
+pub fn backup_database(dest_path: Option<String>, db: State<'_, Mutex<Connection>>) -> Result<String, String> {
+    let dest = match dest_path {
+        Some(p) => PathBuf::from(p),
+        None => {
+            let backups_dir = app_data_dir().join("backups");
+            fs::create_dir_all(&backups_dir).map_err(|e| e.to_string())?;
+            let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+            backups_dir.join(format!("database-backup-{}.db", timestamp))
+        }
+    };
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let dest_str = dest
+        .to_str()
+        .ok_or_else(|| "Chemin de destination invalide".to_string())?
+        .to_string();
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("VACUUM INTO ?1", params![dest_str])
+        .map_err(|e| e.to_string())?;
+
+    Ok(dest_str)
 }
 
 // ============================================================================

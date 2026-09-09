@@ -2,11 +2,12 @@
   "dashboard": "Tableau de bord",
   "groups": {
     "overview": "Vue d'ensemble",
-    "sales": "Ventes & Clients",
-    "purchasing": "Achats & Charges",
-    "operations": "Gestion & Opérations",
-    "system": "Système",
-    "pilotage": "Pilotage & RH"
+    "finance": "Finances & Facturation",
+    "operations": "Projets & Opérations",
+    "relations": "Relations & Tiers",
+    "hr": "Ressources Humaines",
+    "governance": "Pilotage & Gouvernance",
+    "system": "Système"
   },
   "links": {
     "invoicing": "Facturation",

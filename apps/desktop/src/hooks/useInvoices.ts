@@ -6,7 +6,7 @@ import { db, type Invoice, type CreateInvoiceData as DbCreateInvoiceData } from 
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { Client } from "@/lib/database";
 
-export type InvoiceStatus = "draft" | "issued" | "paid" | "partial" | "overdue" | "cancelled";
+export type InvoiceStatus = "draft" | "issued" | "paid" | "partial" | "overdue" | "cancelled" | "converted";
 export type InvoiceType = "invoice" | "credit_note" | "proforma";
 
 export interface InvoiceWithClient extends Invoice {
@@ -314,7 +314,7 @@ export function useConvertProforma() {
         description: `Proforma convertie en Facture ${invoice.invoice_number || ""}`,
       });
 
-      toast.success("Proforma convertie en facture avec succès");
+      toast.success(`Facture ${invoice.invoice_number || ""} créée à partir du proforma`);
     },
     onError: (error) => {
       toast.error("Erreur lors de la conversion de la proforma");

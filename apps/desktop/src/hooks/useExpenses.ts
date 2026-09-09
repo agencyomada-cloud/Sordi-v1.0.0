@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { expenseSchema } from "@/lib/validations";
 import { mapErrorToUserMessage, isValidationError } from "@/lib/errorMapper";
 import { logError } from "@/lib/errorLogger";
-import { db, type Expense, type CreateExpenseData } from "@/lib/database";
+import { db, type Expense, type CreateExpenseData, type UpdateExpenseData } from "@/lib/database";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
 export const EXPENSE_CATEGORIES = [
@@ -68,6 +68,37 @@ export function useCreateExpense() {
         toast.error(message || mapErrorToUserMessage(error));
       }
       logError("Expense creation error", error);
+    },
+  });
+}
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: UpdateExpenseData) => {
+      return await db.expenses.update(data);
+    },
+    onSuccess: (expense) => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["activity_logs"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", "profitability"] });
+
+      db.history.log({
+        action: "UPDATE",
+        entity_type: "EXPENSE",
+        entity_id: expense?.id || null,
+        description: `Charge modifiée (${expense?.category || ""})`,
+      });
+
+      toast.success("Charge modifiée avec succès");
+    },
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || mapErrorToUserMessage(error));
+      logError("Expense update error", error);
     },
   });
 }

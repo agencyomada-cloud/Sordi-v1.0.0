@@ -5,12 +5,22 @@ import {
   formatPhone,
   formatCurrency,
 } from "./invoiceHtmlShared";
+import { InteractiveStampZone } from "./InteractiveStampZone";
 
 interface Props {
   invoice: any;
+  stampSize?: number;
+  onStampSizeChange?: (size: number) => void;
+  onStampSizeCommit?: (size: number) => void;
 }
 
-export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settings: any }) {
+export function InvoiceReadOnlyStructure({
+  invoice,
+  settings,
+  stampSize,
+  onStampSizeChange,
+  onStampSizeCommit,
+}: Props & { settings: any }) {
   const primaryColor = settings?.primary_color || "#476CFF";
   const data = resolveHtmlInvoiceData(invoice);
   const phones = getCompanyPhones(settings);
@@ -30,11 +40,14 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
             style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff' }}
           >
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
-              {settings?.logo_data && (
-                <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[5mm] pb-[5mm] pl-[5mm] pr-0 flex items-center justify-start">
-                  <img src={settings.logo_data} className="block w-full h-full object-contain object-left" alt={settings?.company_name || ""} />
-                </div>
-              )}
+              <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[3mm] pl-[5mm] flex flex-col items-start gap-1">
+                {settings?.logo_data && (
+                  <img src={settings.logo_data} className="h-9 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                )}
+                <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
+                  {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+                </span>
+              </div>
 
               {settings?.company_name && (
                 <div
@@ -180,40 +193,14 @@ export function InvoiceReadOnlyStructure({ invoice, settings }: Props & { settin
                         </div>
 
                         <div className="flex justify-end items-start">
-                          <div className="mr-8 flex flex-col items-center gap-1">
-                            {/* Signature is signed directly on top of the
-                                stamp, like a real paper document — an
-                                absolute overlay, not a stacked column. */}
-                            {(settings?.stamp_data || settings?.signature_data) && (
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Cachet et Signature</div>
-                            )}
-                            <div
-                              className="min-w-44 relative flex items-center justify-center border-none px-4 py-3"
-                              style={{ height: `${Math.max(settings?.stamp_size || 64, settings?.signature_size || 64, 64) + 40}px` }}
-                            >
-                              {!settings?.stamp_data && !settings?.signature_data ? (
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Cachet et Signature</span>
-                              ) : (
-                                <>
-                                  {settings?.stamp_data && (
-                                    <img
-                                      src={settings.stamp_data}
-                                      alt="Cachet"
-                                      style={{ height: `${settings.stamp_size || 64}px` }}
-                                      className="absolute w-auto max-w-[85%] object-contain -rotate-3 opacity-90 pointer-events-none select-none"
-                                    />
-                                  )}
-                                  {settings?.signature_data && (
-                                    <img
-                                      src={settings.signature_data}
-                                      alt="Signature"
-                                      style={{ height: `${settings.signature_size || 64}px` }}
-                                      className="absolute z-10 w-auto max-w-[85%] object-contain pointer-events-none select-none mix-blend-multiply"
-                                    />
-                                  )}
-                                </>
-                              )}
-                            </div>
+                          <div className="mr-8 flex flex-col items-center">
+                            <InteractiveStampZone
+                              settings={settings}
+                              stampSize={stampSize}
+                              onStampSizeChange={onStampSizeChange}
+                              onStampSizeCommit={onStampSizeCommit}
+                              showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
+                            />
                           </div>
                         </div>
                       </div>

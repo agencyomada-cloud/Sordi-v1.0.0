@@ -81,11 +81,26 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
+  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
+  // 595.28 / 793.700787 = 0.75 pt/px
+  const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
+  // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
+  // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
+  // range (80-400), making the control look broken above that point.
+  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
+  const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
+  const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
 
   const styles = StyleSheet.create({
-    page: { width: 595.28, height: 841.89, padding: 0, fontFamily, fontSize: 9, color: '#111827', backgroundColor: '#ffffff' },
+    // paddingBottom reserves room for the `fixed`, absolutely-positioned
+    // legal-info footer (bottom: 26, ~65-70pt of its own content) — without
+    // it, normal-flow content on a long invoice could reach the page's
+    // bottom edge and render underneath the footer instead of spilling onto
+    // a new page.
+    page: { width: 595.28, height: 841.89, padding: 0, paddingBottom: 90, fontFamily, fontSize: 9, color: '#111827', backgroundColor: '#ffffff' },
 
-    headerBand: { backgroundColor: accent, paddingHorizontal: 40, paddingVertical: 26, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    headerBand: { backgroundColor: accent, paddingHorizontal: 40, paddingVertical: 22, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     logoChip: { backgroundColor: '#ffffff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, maxWidth: 160 },
     logoImage: { height: 28, maxWidth: 136, objectFit: 'contain' },
     companyNameWhite: { fontSize: 12, fontFamily, fontWeight: 'bold', color: '#ffffff', letterSpacing: 0.3 },
@@ -93,9 +108,9 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', color: '#ffffff', textTransform: 'uppercase', letterSpacing: -0.3 },
     docNumber: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: 'rgba(255,255,255,0.75)', marginTop: 5 },
 
-    body: { padding: 40, paddingTop: 26 },
+    body: { padding: 36, paddingTop: 20 },
 
-    cardsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+    cardsRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
     card: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 10, padding: 14 },
     cardLabel: { fontSize: 7, color: accent, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily, fontWeight: 'bold', marginBottom: 6 },
     clientName: { fontSize: 10.5, fontFamily, fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', marginBottom: 3 },
@@ -106,7 +121,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111827' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 6 },
 
-    tableWrap: { borderRadius: 10, overflow: 'hidden', borderWidth: 0.75, borderColor: accentBorder, marginBottom: 18 },
+    tableWrap: { borderRadius: 10, overflow: 'hidden', borderWidth: 0.75, borderColor: accentBorder, marginBottom: 14 },
     tableHeaderRow: { flexDirection: 'row', backgroundColor: accentSoft, paddingVertical: 7, paddingHorizontal: 10 },
     tableHeaderCell: { fontSize: 7.5, color: accent, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily, fontWeight: 'bold' },
     tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, alignItems: 'flex-start' },
@@ -120,7 +135,14 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     cellText: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#374151' },
     cellUnit: { fontFamily, fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase' },
 
-    totalsContainer: { alignItems: 'flex-end', marginBottom: 22 },
+    // Notes + totals share one row (notesRow) so they read as a single
+    // balanced line instead of notes sitting full-width above the totals.
+    notesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+    notesBlock: { width: '46%', padding: 12, backgroundColor: '#f9fafb', borderRadius: 10 },
+    notesLabel: { fontFamily, fontSize: 7.5, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
+    notesText: { fontSize: 8.5, color: '#374151', lineHeight: 1.4 },
+
+    totalsContainer: { alignItems: 'flex-end', marginBottom: 14 },
     totalsBox: { width: '46%', backgroundColor: '#f9fafb', borderRadius: 10, padding: 12 },
     totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
     totalsLabel: { fontSize: 8.5, color: '#6b7280' },
@@ -129,12 +151,12 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     ttcLabel: { fontSize: 9.5, fontFamily, fontWeight: 'bold', color: '#ffffff' },
     ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 'bold', color: '#ffffff' },
 
-    wordsBlock: { marginBottom: 22 },
+    wordsBlock: { maxWidth: 280, paddingRight: 16 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
     wordsValue: { fontSize: 8.5, color: '#374151', lineHeight: 1.4, textTransform: 'uppercase' },
 
-    signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 30 },
-    signBox: { alignItems: 'center', width: 140 },
+    signRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
+    signBox: { alignItems: 'center', minWidth: 140 },
     // The signature is signed directly on top of the stamp, like a real
     // paper document — both images are absolutely centered in a fixed-size
     // box instead of stacked in a column.
@@ -149,8 +171,8 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
     signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
-    stampImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain', opacity: 0.75, transform: 'rotate(-4deg)' },
-    signatureImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, maxWidth: 130, objectFit: 'contain' },
+    stampImage: { position: 'absolute', objectFit: 'contain', opacity: 0.85, transform: 'rotate(-2deg)' },
+    signatureImage: { position: 'absolute', objectFit: 'contain' },
 
     footer: { position: 'absolute', left: 40, right: 40, bottom: 26, paddingTop: 10, borderTopWidth: 1.5, borderColor: accent },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -175,14 +197,15 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
       <Page size="A4" style={styles.page}>
 
         <View style={styles.headerBand} fixed>
-          <View>
-            {settings?.logo_data ? (
+          <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            {settings?.logo_data && (
               <View style={styles.logoChip}>
                 <Image src={settings.logo_data} style={styles.logoImage} />
               </View>
-            ) : settings?.company_name ? (
-              <Text style={styles.companyNameWhite}>{settings.company_name}</Text>
-            ) : null}
+            )}
+            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#ffffff', textTransform: 'uppercase', marginTop: 4 }}>
+              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
+            </Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.docTitle}>{data.docTitle}</Text>
@@ -214,7 +237,13 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                 <Text style={styles.metaRowLabel}>Numéro</Text>
                 <Text style={styles.metaRowValue}>{data.docNumber || "-"}</Text>
               </View>
-              {flags.showPaymentMethod && !data.isProforma && !data.isCreditNote && (
+              {!data.isCreditNote && invoice.due_date && (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaRowLabel}>Échéance</Text>
+                  <Text style={styles.metaRowValue}>{invoice.due_date}</Text>
+                </View>
+              )}
+              {flags.showPaymentMethod && !data.isCreditNote && (
                 <View style={styles.metaRow}>
                   <Text style={styles.metaRowLabel}>Mode de paiement</Text>
                   <Text style={styles.metaRowValue}>{invoice.payment_method || "Chèque"}</Text>
@@ -256,74 +285,118 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             })}
           </View>
 
-          <View style={styles.totalsContainer}>
-            <View style={styles.totalsBox}>
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>Total HT</Text>
-                <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
+          {(() => {
+            const hasNotes = invoice.notes && invoice.notes.trim() !== "";
+            const totalsBox = (
+              <View style={styles.totalsBox}>
+                <View style={styles.totalsRow}>
+                  <Text style={styles.totalsLabel}>Total HT</Text>
+                  <Text style={styles.totalsValue}>{formatCurrency(invoice.subtotal_ht || 0)}</Text>
+                </View>
+                {flags.showTva && (
+                  <View style={styles.totalsRow}>
+                    <Text style={styles.totalsLabel}>TVA (19%)</Text>
+                    <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+                  </View>
+                )}
+                {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
+                  <View style={styles.totalsRow}>
+                    <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
+                    <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
+                  </View>
+                )}
+                {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
+                  <View style={styles.totalsRow}>
+                    <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
+                    <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
+                  </View>
+                )}
+                <View style={styles.ttcRow}>
+                  <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
+                  <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
+                </View>
+                {flags.taxExemptionLegend && (
+                  <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
+                    {flags.taxExemptionLegend}
+                  </Text>
+                )}
               </View>
-              {flags.showTva && (
-                <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>TVA (19%)</Text>
-                  <Text style={styles.totalsValue}>{formatCurrency(invoice.tva_amount || 0)}</Text>
+            );
+
+            if (hasNotes) {
+              return (
+                <View style={styles.notesRow} wrap={false}>
+                  <View style={styles.notesBlock}>
+                    <Text style={styles.notesLabel}>Notes</Text>
+                    <Text style={styles.notesText}>{invoice.notes}</Text>
+                  </View>
+                  {totalsBox}
                 </View>
-              )}
-              {flags.showTimbre && (invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
-                <View style={styles.totalsRow}>
-                  <Text style={styles.totalsLabel}>Timbre Fiscal</Text>
-                  <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
-                </View>
-              )}
-              {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
-                <View style={styles.totalsRow}>
-                  <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
-                  <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
-                </View>
-              )}
-              <View style={styles.ttcRow}>
-                <Text style={styles.ttcLabel}>{flags.grandTotalLabel}</Text>
-                <Text style={styles.ttcValue}>{formatCurrency(invoice.total_ttc || 0)}</Text>
+              );
+            }
+
+            return (
+              <View style={styles.totalsContainer}>
+                {totalsBox}
               </View>
-              {flags.taxExemptionLegend && (
-                <Text style={{ marginTop: 6, fontSize: 7.5, color: '#6b7280', textAlign: 'right' }}>
-                  {flags.taxExemptionLegend}
-                </Text>
-              )}
-            </View>
-          </View>
+            );
+          })()}
 
-          {flags.showMontantEnLettres && (
-            <View style={styles.wordsBlock}>
-              <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
-              <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
-            </View>
-          )}
-
-          {/* Mode de paiement now lives in the "Détails du document" card
-              above alongside Date/Numéro — this row just anchors the
-              signature block to the right. */}
-          <View style={[styles.signRow, { justifyContent: 'flex-end' }]}>
-            <View style={styles.signBox}>
-              {(settings?.stamp_data || settings?.signature_data) && (
+          {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
+          <View style={styles.signRow} wrap={false}>
+            {flags.showMontantEnLettres ? (
+              <View style={styles.wordsBlock}>
+                <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
+                <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            <View style={[styles.signBox, { width: stampWidth, minWidth: stampWidth }]}>
+              {mainStampUrl && (
                 <>
                   <Text style={styles.signLabel}>Cachet et signature</Text>
-                  <View style={styles.signLine} />
+                  <View style={[styles.signLine, { width: stampWidth }]} />
                 </>
               )}
-              <View style={[styles.signatureBox, { height: Math.max(Math.min(settings?.stamp_size || 28, 220), Math.min(settings?.signature_size || 36, 220), 28) + 20 }]}>
-                {!settings?.stamp_data && !settings?.signature_data ? (
+              <View style={[styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]}>
+                {!mainStampUrl ? (
                   <View style={styles.signatureBoxEmpty}>
                     <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
                   </View>
-                ) : (
+                ) : hasBoth ? (
                   <>
-                    {settings?.stamp_data && (
-                      <Image src={settings.stamp_data} style={[styles.stampImage, { height: Math.min(settings.stamp_size || 28, 220) }]} />
-                    )}
-                    {settings?.signature_data && (
-                      <Image src={settings.signature_data} style={[styles.signatureImage, { height: Math.min(settings.signature_size || 36, 220) }]} />
-                    )}
+                    <Image
+                      src={settings!.stamp_data!}
+                      style={{
+                        width: stampWidth,
+                        height: stampHeight,
+                        objectFit: 'contain',
+                        opacity: 0.88,
+                        transform: 'rotate(-2deg)',
+                      }}
+                    />
+                    <Image
+                      src={settings!.signature_data!}
+                      style={{
+                        position: 'absolute',
+                        width: Math.round(stampWidth * 0.85),
+                        height: Math.round(stampHeight * 0.65),
+                        objectFit: 'contain',
+                      }}
+                    />
                   </>
+                ) : (
+                  <Image
+                    src={mainStampUrl}
+                    style={{
+                      width: stampWidth,
+                      height: stampHeight,
+                      objectFit: 'contain',
+                      opacity: 0.88,
+                      transform: 'rotate(-2deg)',
+                    }}
+                  />
                 )}
               </View>
             </View>
@@ -341,7 +414,12 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                 ))}
               </View>
               {settings?.company_address && <Text style={[styles.footerItem, { marginTop: 4 }]}>{settings.company_address}</Text>}
-              {settings?.company_rib && <Text style={[styles.footerItem, { marginTop: 2 }]}>RIB {settings.company_rib}</Text>}
+              {settings?.company_rib && (
+                <Text style={[styles.footerItem, { marginTop: 2 }]}>
+                  RIB {settings.company_rib}
+                  {settings?.company_bank_agency ? ` — ${settings.company_bank_agency}` : ""}
+                </Text>
+              )}
             </View>
 
             <View style={styles.footerContact}>

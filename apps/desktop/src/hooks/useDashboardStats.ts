@@ -26,6 +26,7 @@ export function useDashboardStats(
           unpaid: stats.payments.unpaid,
           initialDebt: stats.payments.initial_debt,
           totalReceivables: stats.payments.total_receivables,
+          outstandingInvoiceCount: stats.payments.outstanding_invoice_count,
         },
         monthlyData: stats.monthly_data,
         dailyData: stats.daily_data,

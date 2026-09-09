@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { db, type Project, type CreateProjectData, type ProjectStats, type ProjectProfitability, type FreelancePaymentStatus } from "@/lib/database";
+import { db, type Project, type CreateProjectData, type ProjectStats, type ProjectProfitability, type FreelancePaymentStatus, type ProjectLifecycleStatus } from "@/lib/database";
+import { getProjectStatus } from "@/lib/projectOverview";
 import { useWorkspace } from "@/hooks/useWorkspace";
 export type { CreateProjectData };
 
@@ -77,6 +78,22 @@ export function useUpdateProject() {
     onError: (error: unknown) => {
       const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
       toast.error(message || "Erreur lors de la mise à jour du projet");
+    },
+  });
+}
+
+export function useUpdateProjectStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: ProjectLifecycleStatus }) => db.projects.updateStatus(id, status),
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
+      toast.success(`Statut mis à jour : ${getProjectStatus(project.status).label}`);
+    },
+    onError: (error: unknown) => {
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la mise à jour du statut du projet");
     },
   });
 }

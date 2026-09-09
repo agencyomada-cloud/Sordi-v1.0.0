@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "widget",
+  "description": "Permissions for the floating widget window — the default capability's \"windows\" scope only covers \"main\", so the widget window had none of the built-in core:window:* permissions at all (custom app commands like toggle_widget_window bypass this system, which is why those kept working while every drag/position API silently did nothing).",
+  "windows": ["widget"],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-position",
+    "core:window:allow-inner-position",
+    "core:window:allow-close",
+    "core:event:default"
+  ]
+}

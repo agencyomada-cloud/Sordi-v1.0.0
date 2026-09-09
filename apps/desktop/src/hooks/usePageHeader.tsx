@@ -28,20 +28,29 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 // per-page wiring. Pages that want a richer trail (a client or document name)
 // override it via useSetPageHeader; everything else falls back to this map,
 // mirrored from the sidebar's nav labels.
+// Each entry checks both the canonical English path and the French
+// sidebar-tree alias (see Sidebar.tsx's navGroups comment) — list pages
+// don't call useSetPageHeader themselves, so this fallback map is the
+// only thing that titles them, and the sidebar links exclusively via the
+// French aliases. Checking only the English path left the header showing
+// the generic "Sordi" fallback on almost every primary section.
 const ROUTE_TITLES: Array<{ test: (path: string) => boolean; title: string }> = [
   { test: (p) => p === "/", title: "Tableau de bord" },
-  { test: (p) => p.startsWith("/invoices"), title: "Facturation" },
+  { test: (p) => p.startsWith("/invoices") || p.startsWith("/factures"), title: "Facturation" },
   { test: (p) => p.startsWith("/payments"), title: "Paiements" },
-  { test: (p) => p.startsWith("/orders"), title: "Commandes" },
-  { test: (p) => p.startsWith("/deliveries"), title: "Livraisons" },
+  { test: (p) => p.startsWith("/orders") || p.startsWith("/commandes"), title: "Commandes" },
+  { test: (p) => p.startsWith("/deliveries") || p.startsWith("/livraisons"), title: "Livraisons" },
   { test: (p) => p.startsWith("/clients"), title: "Clients" },
   { test: (p) => p.startsWith("/projects"), title: "Projets" },
-  { test: (p) => p.startsWith("/products"), title: "Produits" },
-  { test: (p) => p.startsWith("/expenses"), title: "Charges" },
+  { test: (p) => p.startsWith("/products") || p.startsWith("/stocks"), title: "Produits" },
+  { test: (p) => p.startsWith("/expenses") || p.startsWith("/charges"), title: "Charges" },
+  { test: (p) => p.startsWith("/fournisseurs"), title: "Fournisseurs" },
+  { test: (p) => p.startsWith("/contracts"), title: "Contrats" },
   { test: (p) => p.startsWith("/analyses"), title: "Analyses" },
-  { test: (p) => p.startsWith("/history"), title: "Historique" },
-  { test: (p) => p.startsWith("/employees") || p.startsWith("/management"), title: "Employés" },
-  { test: (p) => p.startsWith("/payroll"), title: "Paie" },
+  { test: (p) => p.startsWith("/history") || p.startsWith("/historique"), title: "Historique" },
+  { test: (p) => p.startsWith("/employees") || p.startsWith("/management") || p.startsWith("/employes"), title: "Employés" },
+  { test: (p) => p.startsWith("/payroll") || p.startsWith("/paie"), title: "Paie" },
+  { test: (p) => p.startsWith("/associes") || p.startsWith("/partners"), title: "Associés" },
   { test: (p) => p.startsWith("/integrations"), title: "Intégrations" },
   { test: (p) => p.startsWith("/settings"), title: "Paramètres" },
   { test: (p) => p.startsWith("/upgrade"), title: "Abonnement" },
