@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, DesktopSegmentedControl } from '@sordi/ui';
@@ -9,9 +9,12 @@ import {
   RiLoader4Line as Loader2,
   RiCheckLine as Check,
 } from '@remixicon/react';
-import { Fingerprint, KeyRound, ArrowRight, Building2, FileText, LayoutDashboard } from 'lucide-react';
+import { Fingerprint, KeyRound, ArrowRight, Building2, FileText, LayoutDashboard, Phone, Mail, Rocket } from 'lucide-react';
+import { RiWhatsappLine as WhatsAppIcon } from '@remixicon/react';
 import { useAuth } from '@/hooks/useAuth';
 import { useWorkspace } from '@/hooks/useWorkspace';
+import { useLicenseStatus, useRequestTrial } from '@/hooks/useLicense';
+import { useMachineId, buildWhatsAppActivationUrl } from '@/services/licensing';
 
 // Sentinel Select value for "Autre (préciser)" — never itself stored as the
 // company's activity; handleStep1Continue swaps it out for the free-text
@@ -39,13 +42,13 @@ const CURRENCIES: { value: CurrencyCode; label: string; pill: string }[] = [
   { value: 'USD', label: '$ - Dollar américain (USD)', pill: 'USD' },
 ];
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 /**
  * First-run Desktop Setup Assistant — replaces the bare "create a password"
- * form on a fresh install with a 3-step wizard (company identity → vault
- * password → ready), matching the same native-dialog register as the daily
- * unlock screen (Auth.tsx) it sits inside.
+ * form on a fresh install with a 4-step wizard (company identity → vault
+ * password → activation request → ready), matching the same native-dialog
+ * register as the daily unlock screen (Auth.tsx) it sits inside.
  *
  * Step 1 provisions the active company via useWorkspace().createCompany —
  * on a genuinely fresh database there is no company row at all yet, so this
@@ -55,6 +58,14 @@ type Step = 1 | 2 | 3;
  * path the daily unlock screen uses (it internally calls the Rust
  * `set_password` command when `needsSetup` is true) — same backend command,
  * same session flag, nothing new introduced there.
+ * Step 3 is skippable and only ever shown when there is no active license
+ * yet (a fresh install always qualifies) — it posts name/phone/email to
+ * apps/api's POST /licenses/request-trial, which unlocks a 14-day trial
+ * immediately and separately queues the lead for the sales team's own
+ * à-contacter follow-up in the admin dashboard. Skipping it is always safe:
+ * the app already works unlicensed via the existing TrialBanner/
+ * ActivationModal path elsewhere in the app, this step is purely a
+ * frictionless shortcut to the same outcome.
  */
 export function SetupWizard() {
   const navigate = useNavigate();
@@ -77,6 +88,14 @@ export function SetupWizard() {
   const [biometricPreview, setBiometricPreview] = useState(true);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { data: licenseStatus } = useLicenseStatus();
+  const { data: machineId } = useMachineId();
+  const requestTrial = useRequestTrial();
+  const [activationPhone, setActivationPhone] = useState('');
+  const [activationEmail, setActivationEmail] = useState('');
+  const [activationError, setActivationError] = useState<string | null>(null);
+  const [trialRequested, setTrialRequested] = useState(false);
 
   // The Select's own value when "Autre" is chosen is the OTHER_ACTIVITY
   // sentinel, never what actually gets stored/displayed — this resolves it
@@ -141,6 +160,47 @@ export function SetupWizard() {
     }
   };
 
+  const handleActivationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActivationError(null);
+
+    if (!activationPhone.trim()) {
+      setActivationError('Veuillez entrer votre numéro de téléphone');
+      return;
+    }
+    if (!activationEmail.trim()) {
+      setActivationError('Veuillez entrer votre adresse email');
+      return;
+    }
+
+    requestTrial.mutate(
+      {
+        organizationName: companyName.trim() || 'Mon Entreprise',
+        phone: activationPhone.trim(),
+        email: activationEmail.trim(),
+      },
+      {
+        onSuccess: () => setTrialRequested(true),
+        onError: (error: unknown) => {
+          const detail = typeof error === 'string' ? error : error instanceof Error ? error.message : null;
+          setActivationError(detail || "Impossible d'envoyer la demande. Réessayez.");
+        },
+      }
+    );
+  };
+
+  const whatsappUrl = machineId ? buildWhatsAppActivationUrl(companyName.trim() || 'Mon Entreprise', machineId) : undefined;
+
+  // Edge case: the license is already active by the time Step 3 would show
+  // (VITE_LICENSE_BYPASS, or a rare race with a background verify) — skip
+  // straight past the activation-request UI instead of rendering a
+  // pointless form for a license that already exists.
+  useEffect(() => {
+    if (step === 3 && licenseStatus?.state === 'active') {
+      setStep(4);
+    }
+  }, [step, licenseStatus?.state]);
+
   const finish = (destination: string) => navigate(destination, { replace: true });
 
   return (
@@ -165,7 +225,7 @@ export function SetupWizard() {
 
       {/* Step indicator */}
       <div className="flex items-center gap-1.5 mb-6">
-        {([1, 2, 3] as Step[]).map((s) => (
+        {([1, 2, 3, 4] as Step[]).map((s) => (
           <div
             key={s}
             className={`h-1 flex-1 rounded-full transition-colors ${s <= step ? 'bg-primary' : 'bg-muted'}`}
@@ -367,11 +427,106 @@ export function SetupWizard() {
         </form>
       )}
 
-      {step === 3 && (
+      {step === 3 && licenseStatus?.state !== 'active' && (
+        <div className="space-y-4">
+          {!trialRequested ? (
+            <form onSubmit={handleActivationSubmit} className="space-y-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                <Rocket className="w-3.5 h-3.5" />
+                Étape 3 — Activer votre accès
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed -mt-2">
+                Laissez-nous vos coordonnées : notre équipe vous contactera par téléphone pour activer votre accès complet.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5" />
+                  Numéro de téléphone
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="05 XX XX XX XX"
+                  value={activationPhone}
+                  onChange={(e) => setActivationPhone(e.target.value)}
+                  autoFocus
+                  className="h-10 rounded-lg text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" />
+                  Adresse email
+                </label>
+                <Input
+                  type="email"
+                  placeholder="vous@entreprise.com"
+                  value={activationEmail}
+                  onChange={(e) => setActivationEmail(e.target.value)}
+                  className="h-10 rounded-lg text-sm"
+                />
+              </div>
+
+              {activationError && (
+                <div className="text-[11px] text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {activationError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => setStep(4)}
+                  disabled={requestTrial.isPending}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Passer, activer plus tard
+                </button>
+                <Button type="submit" disabled={requestTrial.isPending} className="h-9 px-4 rounded-lg text-sm gap-1.5">
+                  {requestTrial.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Envoyer la demande <ArrowRight className="w-3.5 h-3.5" /></>}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                Demande envoyée
+              </div>
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3.5 space-y-1.5">
+                <p className="text-sm font-medium text-foreground">Votre demande a bien été reçue !</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Votre accès d'essai est déjà actif. Notre équipe vous appellera prochainement pour vous accompagner et activer votre abonnement complet.
+                </p>
+              </div>
+
+              {whatsappUrl && (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-2 h-10 rounded-lg border border-border/80 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  <WhatsAppIcon className="w-4 h-4 text-emerald-600" />
+                  Nous contacter sur WhatsApp
+                </a>
+              )}
+
+              <Button onClick={() => setStep(4)} className="w-full h-10 rounded-lg text-sm gap-1.5 justify-center">
+                Continuer <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 4 && (
         <div className="space-y-5">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
             <Check className="w-3.5 h-3.5 text-emerald-600" />
-            Étape 3 — Prêt à démarrer
+            Étape 4 — Prêt à démarrer
           </div>
 
           <div className="rounded-lg border border-border/80 bg-muted/30 p-3 space-y-1">

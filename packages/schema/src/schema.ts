@@ -411,6 +411,16 @@ export const activityLogs = pgTable("activity_logs", {
 
 export const licenseStatusEnum = pgEnum("license_status", ["active", "expired", "revoked"]);
 
+// Sales-pipeline tracking for the admin dashboard's Trial-to-Paid flow —
+// entirely independent of `status` above (a license can be "active" and
+// still "à contacter" if it's a fresh trial nobody has called yet).
+export const licenseContactStatusEnum = pgEnum("license_contact_status", [
+  "a_contacter",
+  "en_cours",
+  "converti",
+  "non_interesse",
+]);
+
 export const licenses = pgTable("licenses", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Human-readable, shown to the customer — e.g. "SORDI-A1B2C3".
@@ -418,10 +428,16 @@ export const licenses = pgTable("licenses", {
   // The secret the customer types into the activation screen.
   licenseKey: text("license_key").notNull(),
   organizationName: text("organization_name").notNull(),
+  // Nullable: licenses created before this column existed (via the original
+  // /licenses/create, still callable without these fields) have no contact
+  // info on file.
+  phone: text("phone"),
+  email: text("email"),
   activatedAt: timestamp("activated_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   maxDevices: integer("max_devices").notNull().default(2),
   status: licenseStatusEnum("status").notNull().default("active"),
+  contactStatus: licenseContactStatusEnum("contact_status").notNull().default("a_contacter"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   clientReferenceIdUnique: uniqueIndex("licenses_client_reference_id_idx").on(t.clientReferenceId),

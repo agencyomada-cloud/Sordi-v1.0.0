@@ -30,6 +30,16 @@ export function useActivateLicense() {
   });
 }
 
+export function useRequestTrial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { organizationName: string; phone: string; email: string }) => db.license.requestTrial(input),
+    onSuccess: (status) => {
+      queryClient.setQueryData(["license", "status"], status);
+    },
+  });
+}
+
 /** Fires the background re-verify once per app session, right after mount.
  *  Never blocks anything and never surfaces an error — a network failure
  *  here just means the existing local token (if still locally valid) keeps

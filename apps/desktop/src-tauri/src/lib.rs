@@ -358,6 +358,7 @@ pub fn run() {
       commands::get_license_status,
       commands::activate_license,
       commands::verify_license_background,
+      commands::request_trial,
       commands::get_machine_id,
       // Global search
       commands::search_global,

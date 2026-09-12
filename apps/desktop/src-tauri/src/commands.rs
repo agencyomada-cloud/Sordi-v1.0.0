@@ -66,6 +66,30 @@ pub async fn verify_license_background() -> crate::license::LicenseStatus {
     crate::license::verify_background().await
 }
 
+/// SetupWizard's Step 4 ("no license yet" screen) — a self-service trial
+/// request, not an existing key. Same immediate-heartbeat pattern as
+/// activate_license above: the trial unlocks right away, so the admin
+/// dashboard should reflect it without waiting for the next scheduled sync.
+#[tauri::command]
+pub async fn request_trial(
+    db: State<'_, Mutex<Connection>>,
+    organization_name: String,
+    phone: String,
+    email: String,
+) -> Result<crate::license::LicenseStatus, String> {
+    let status = crate::license::request_trial(organization_name, phone, email).await?;
+
+    if status.state == "active" {
+        if let Ok(conn) = db.lock() {
+            if let Some(path) = conn.path() {
+                crate::telemetry::send_heartbeat_immediately(std::path::PathBuf::from(path), env!("CARGO_PKG_VERSION"));
+            }
+        }
+    }
+
+    Ok(status)
+}
+
 /// Human-readable "SRD-XXXX-XXXX-XXXX" code shown to the user for manual/
 /// offline license activation (e.g. reading it to support over the phone,
 /// or pasting it into a purchase form) — distinct from the opaque device

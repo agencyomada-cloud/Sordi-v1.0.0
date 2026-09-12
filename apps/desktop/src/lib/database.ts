@@ -1281,6 +1281,15 @@ export const db = {
     // MUST surface a real "invalid license key" rejection from Rust/the
     // API as-is, not have it silently replaced by a fallback message.
     activate: (license_key: string): Promise<LicenseStatus> => safeInvoke("activate_license", { licenseKey: license_key }),
+    // Same "no silent fallback" rule as activate above — a failed trial
+    // request (e.g. unreachable API) must surface as a real error to
+    // SetupWizard's Step 4, not silently pretend to succeed.
+    requestTrial: (input: { organizationName: string; phone: string; email: string }): Promise<LicenseStatus> =>
+      safeInvoke("request_trial", {
+        organizationName: input.organizationName,
+        phone: input.phone,
+        email: input.email,
+      }),
     verifyBackground: (): Promise<LicenseStatus> =>
       safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
     // Human-readable "SRD-XXXX-XXXX-XXXX" code for manual activation (see

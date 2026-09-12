@@ -412,6 +412,51 @@ async fn activate_online(license_key: &str) -> Result<LicenseStatus, String> {
     Ok(current_status())
 }
 
+#[derive(Deserialize)]
+struct RequestTrialResponse {
+    #[serde(rename = "signedToken")]
+    signed_token: Option<String>,
+}
+
+/// First-launch "no license yet" screen (SetupWizard's Step 4) — a self-
+/// service trial request, not a key the user already has. Sends the device
+/// fingerprint along so the server can activate this exact machine and hand
+/// back a working token immediately (see apps/api's POST /licenses/request-
+/// trial), rather than requiring a second manual "activate ma clé" step
+/// right after submitting contact info.
+pub async fn request_trial(organization_name: String, phone: String, email: String) -> Result<LicenseStatus, String> {
+    let device_fingerprint = compute_device_fingerprint()?;
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/licenses/request-trial", api_base_url()))
+        .json(&serde_json::json!({
+            "organizationName": organization_name,
+            "phone": phone,
+            "email": email,
+            "deviceFingerprint": device_fingerprint,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach the license server: {e}"))?;
+
+    if !response.status().is_success() {
+        let message = response
+            .json::<ErrorResponse>()
+            .await
+            .ok()
+            .and_then(|e| e.message)
+            .unwrap_or_else(|| "La demande d'activation a échoué.".to_string());
+        return Err(message);
+    }
+
+    let body: RequestTrialResponse = response.json().await.map_err(|e| format!("unexpected server response: {e}"))?;
+    if let Some(token) = body.signed_token {
+        verify_local(&token)?;
+        write_local_token(&token)?;
+    }
+    Ok(current_status())
+}
+
 /// Single entry point for the "Clé de licence" field — accepts either a
 /// short online lookup key (apps/api exchange) or a raw signed token handed
 /// over directly for fully offline activation. See looks_like_jwt() for how

@@ -93,13 +93,34 @@ export const licenseVerifySchema = z.object({
   signedToken: z.string().min(1),
 });
 
-// Internal admin-only endpoint — you call this by hand per sale, so it's
-// deliberately not exposed to any UI. expiresAt is a plain ISO date string
-// on the wire; maxDevices defaults to 2 to match the schema default.
+// Internal admin-only endpoint — you call this by hand per sale/trial
+// signup, so it's deliberately not exposed to any customer-facing UI (only
+// the admin dashboard). expiresAt is a plain ISO date string on the wire;
+// maxDevices defaults to 2 to match the schema default. phone/email are
+// required by the admin dashboard's form (every lead needs a way to follow
+// up), but stay optional here since /licenses/create itself has no other
+// caller that could supply them.
 export const licenseCreateSchema = z.object({
   organizationName: z.string().min(1),
+  phone: z.string().min(1).optional(),
+  email: z.string().email().optional(),
   expiresAt: z.string().datetime(),
   maxDevices: z.number().int().positive().optional(),
+});
+
+// POST /licenses/request-trial — fully public, called by the desktop app's
+// first-launch activation-request screen (no admin secret, unlike
+// licenseCreateSchema above). deviceFingerprint is optional on the wire
+// since older/dev builds might not send one, but the route stores it as the
+// license's own initial activation the moment a fingerprint is present, so
+// the app that requested the trial doesn't also have to "activate" a key it
+// never receives (there's no key to type in — this is a pre-sale request,
+// not an activation).
+export const licenseRequestTrialSchema = z.object({
+  organizationName: z.string().min(1),
+  phone: z.string().min(1),
+  email: z.string().email(),
+  deviceFingerprint: z.string().min(1).optional(),
 });
 
 // GET /licenses (admin dashboard's license table) — optional free-text
@@ -121,6 +142,13 @@ export const licenseRevokeSchema = z.object({});
 // correctly instead of clobbering an earlier extension.
 export const licenseExtendSchema = z.object({
   days: z.number().int().positive(),
+});
+
+// PATCH /licenses/:id/contact-status — the sales-pipeline tracker on the
+// admin dashboard, independent of the license's own active/expired/revoked
+// status.
+export const licenseContactStatusSchema = z.object({
+  contactStatus: z.enum(["a_contacter", "en_cours", "converti", "non_interesse"]),
 });
 
 // ---------------------------------------------------------------------------

@@ -74,10 +74,13 @@ export const licensesRepo = {
         clientReferenceId: licenses.clientReferenceId,
         licenseKey: licenses.licenseKey,
         organizationName: licenses.organizationName,
+        phone: licenses.phone,
+        email: licenses.email,
         activatedAt: licenses.activatedAt,
         expiresAt: licenses.expiresAt,
         maxDevices: licenses.maxDevices,
         status: licenses.status,
+        contactStatus: licenses.contactStatus,
         createdAt: licenses.createdAt,
         deviceCount: sql<number>`coalesce(${db
           .select({ value: count() })
@@ -112,4 +115,7 @@ export const licensesRepo = {
       .where(eq(licenses.id, id))
       .returning()
       .then((rows) => rows[0] ?? null),
+
+  updateContactStatus: (id: string, contactStatus: (typeof licenses.$inferSelect)["contactStatus"]) =>
+    db.update(licenses).set({ contactStatus }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 };

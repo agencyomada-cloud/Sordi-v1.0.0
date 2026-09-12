@@ -89,3 +89,9 @@ tokio = { version = "1", features = ["macros", "rt"] }
 # passed via --features) is completely unaffected; even an accidental merge
 # of this code elsewhere stays inert unless someone explicitly opts in.
 omada_bypass = []
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

@@ -2,9 +2,11 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import {
   licenseActivateSchema,
+  licenseContactStatusSchema,
   licenseCreateSchema,
   licenseExtendSchema,
   licenseListQuerySchema,
+  licenseRequestTrialSchema,
   licenseVerifySchema,
 } from "@sordi/schema";
 import { asyncHandler } from "../middleware/asyncHandler.js";
@@ -104,6 +106,56 @@ licensesRouter.post(
   })
 );
 
+const TRIAL_DAYS = 14;
+
+// Public — the desktop app's first-launch "no license yet" screen posts
+// here directly, no admin secret involved (mirrors /leads/download's trust
+// model: anyone can call this, it just creates a row). Unlike /create, this
+// immediately unlocks a working trial (a signed token comes back in the
+// response) rather than only registering interest — contactStatus stays
+// "a_contacter" purely for the sales team's own follow-up/conversion
+// pipeline, not as a gate on using the trial itself.
+licensesRouter.post(
+  "/request-trial",
+  asyncHandler(async (req, res) => {
+    const parsed = licenseRequestTrialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const { organizationName, phone, email, deviceFingerprint } = parsed.data;
+
+    const expiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const created = await licensesRepo.create({
+      clientReferenceId: generateClientReferenceId(),
+      licenseKey: generateLicenseKey(),
+      organizationName,
+      phone,
+      email,
+      expiresAt,
+      maxDevices: 2,
+      status: "active",
+      contactStatus: "a_contacter",
+    });
+
+    if (deviceFingerprint) {
+      await licensesRepo.recordActivation(created.id, deviceFingerprint);
+      await licensesRepo.setActivatedAt(created.id);
+    }
+
+    const signedToken = deviceFingerprint
+      ? signLicenseToken({ clientReferenceId: created.clientReferenceId, deviceFingerprint })
+      : null;
+
+    res.status(201).json({
+      signedToken,
+      clientReferenceId: created.clientReferenceId,
+      organizationName: created.organizationName,
+      expiresAt: created.expiresAt,
+    });
+  })
+);
+
 // Manual admin auth — a shared secret header, not a user login. See
 // LICENSING.md: there's no admin UI yet, this is called by hand per sale.
 function requireAdminSecret(req: Request, res: Response, next: NextFunction) {
@@ -124,15 +176,18 @@ licensesRouter.post(
       res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
       return;
     }
-    const { organizationName, expiresAt, maxDevices } = parsed.data;
+    const { organizationName, phone, email, expiresAt, maxDevices } = parsed.data;
 
     const created = await licensesRepo.create({
       clientReferenceId: generateClientReferenceId(),
       licenseKey: generateLicenseKey(),
       organizationName,
+      phone: phone ?? null,
+      email: email ?? null,
       expiresAt: new Date(expiresAt),
       maxDevices: maxDevices ?? 2,
       status: "active",
+      contactStatus: "a_contacter",
     });
 
     // The only time the raw license_key is ever shown — comes straight
@@ -188,6 +243,25 @@ licensesRouter.patch(
       return;
     }
     const updated = await licensesRepo.extend(req.params.id, parsed.data.days);
+    res.json({ license: updated });
+  })
+);
+
+licensesRouter.patch(
+  "/:id/contact-status",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseContactStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const updated = await licensesRepo.updateContactStatus(req.params.id, parsed.data.contactStatus);
     res.json({ license: updated });
   })
 );
