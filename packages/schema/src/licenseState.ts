@@ -92,17 +92,13 @@ export function getLicenseUiDecision(state: LicenseState, daysRemaining: number 
         bannerMessage: "Votre période d'essai est terminée",
         blockWrites: true,
       };
-    case "PAID_ACTIVE": {
-      // Only worth a banner when renewal is close — otherwise a paying
-      // customer sees nothing, which is the whole point of paying.
-      const days = daysRemaining ?? Infinity;
-      if (days > 30) return { showBanner: false, bannerMessage: "", blockWrites: false };
-      return {
-        showBanner: true,
-        bannerMessage: `Votre licence expire dans ${days} jour${days > 1 ? "s" : ""}`,
-        blockWrites: false,
-      };
-    }
+    // A paid, active license never shows a banner at all, regardless of
+    // days remaining — a paying customer sees nothing, which is the whole
+    // point of paying. Reassurance for a paid plan lives elsewhere (a
+    // "PRO" badge, an account-menu subscription summary), not a
+    // persistent top-of-screen countdown. daysRemaining is unused here.
+    case "PAID_ACTIVE":
+      return { showBanner: false, bannerMessage: "", blockWrites: false };
     case "PAID_EXPIRED":
       return {
         showBanner: true,

@@ -68,15 +68,13 @@ export function getLicenseUiDecision(state: LicenseState, daysRemaining: number 
     }
     case "TRIAL_EXPIRED":
       return { showBanner: true, bannerMessage: "Votre période d'essai est terminée", blockWrites: true };
-    case "PAID_ACTIVE": {
-      const days = daysRemaining ?? Infinity;
-      if (days > 30) return { showBanner: false, bannerMessage: "", blockWrites: false };
-      return {
-        showBanner: true,
-        bannerMessage: `Votre licence expire dans ${days} jour${days > 1 ? "s" : ""}`,
-        blockWrites: false,
-      };
-    }
+    // Once a license is paid and active, the banner disappears entirely —
+    // no renewal countdown, no pressure. A paying customer is reassured by
+    // the PRO badge in the account menu (see WorkspaceAccountMenu.tsx) and
+    // the "Abonnement" section's own échéance display, not a persistent
+    // top-of-screen banner. daysRemaining is intentionally unused here.
+    case "PAID_ACTIVE":
+      return { showBanner: false, bannerMessage: "", blockWrites: false };
     case "PAID_EXPIRED":
       return {
         showBanner: true,
@@ -93,6 +91,11 @@ export function getLicenseUiDecision(state: LicenseState, daysRemaining: number 
 export interface LicenseDecision {
   state: LicenseState;
   daysRemaining: number | null;
+  /** Raw ISO expiry, straight from LicenseStatus — daysRemaining above is
+   *  a rounded-up whole-day figure (fine for most UI), but a live
+   *  hours/minutes countdown (TrialBanner's <72h mode) needs the actual
+   *  timestamp to compute against, not a pre-rounded day count. */
+  expiresAt: string | null;
   ui: LicenseUiDecision;
   lastSuccessfulVerifyAt: string | null;
   machineId: string | undefined;
@@ -112,6 +115,7 @@ export function useLicenseDecision(): LicenseDecision {
   return {
     state,
     daysRemaining,
+    expiresAt: status?.expires_at ?? null,
     ui: getLicenseUiDecision(state, daysRemaining),
     lastSuccessfulVerifyAt: status?.last_successful_verify_at ?? null,
     machineId,
@@ -169,5 +173,16 @@ export const SUPPORT_WHATSAPP_NUMBER = "213000000000";
  *  to the right workspace/machine without back-and-forth. */
 export function buildWhatsAppActivationUrl(companyName: string, machineId: string): string {
   const message = `Bonjour, je souhaite activer ma licence Sordi Invoicing pour mon entreprise ${companyName}. Mon identifiant machine est : ${machineId}`;
+  return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+/** General "Support & Assistance" entry point (account menu, expired-trial
+ *  banner's "Débloquer l'accès") — deliberately neutral wording, unlike
+ *  buildWhatsAppActivationUrl above which assumes the visitor is already
+ *  mid-activation with a machine id in hand. */
+export function buildWhatsAppSupportUrl(companyName?: string): string {
+  const message = companyName
+    ? `Bonjour, j'ai besoin d'aide concernant mon compte Sordi Invoicing (${companyName}).`
+    : "Bonjour, j'ai besoin d'aide concernant mon compte Sordi Invoicing.";
   return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }

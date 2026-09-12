@@ -8,16 +8,21 @@ import {
   RiMoonLine as MoonIcon,
   RiSettings3Line as SettingsIcon,
   RiLogoutBoxRLine as LogoutIcon,
+  RiWhatsappLine as WhatsAppIcon,
+  RiKeyLine as KeyIcon,
 } from "@remixicon/react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+  Tooltip, TooltipTrigger, TooltipContent,
 } from "@sordi/ui";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
+import { useLicenseDecision, buildWhatsAppSupportUrl } from "@/services/licensing";
 import { CreateCompanyDialog } from "@/components/layout/CreateCompanyDialog";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
+import { ActivationModal } from "@/components/licensing/ActivationModal";
 
 const THEME_OPTIONS: { value: "light" | "dark"; label: string; icon: React.ElementType }[] = [
   { value: "light", label: "Clair", icon: SunIcon },
@@ -37,7 +42,9 @@ export function WorkspaceAccountMenu() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const { state: licenseState, daysRemaining, expiresAt } = useLicenseDecision();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [activationOpen, setActivationOpen] = useState(false);
   // next-themes' theme value is undefined during SSR/first paint — avoid
   // rendering a toggle that doesn't reflect the real resolved theme yet.
   const [mounted, setMounted] = useState(false);
@@ -59,6 +66,30 @@ export function WorkspaceAccountMenu() {
 
   const initial = (activeCompany?.name ?? "?").trim().charAt(0).toUpperCase();
 
+  const isPro = licenseState === "PAID_ACTIVE";
+  const expiryFormatted = expiresAt
+    ? new Date(expiresAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
+  // Subscription summary shown in the new "Abonnement" section — a single
+  // small lookup rather than scattering this if/else across the JSX below.
+  const subscription = (() => {
+    switch (licenseState) {
+      case "PAID_ACTIVE":
+        return { dot: "bg-emerald-500", label: "Licence Active", formula: "Sordi Pro — Annuel" };
+      case "TRIAL_ACTIVE":
+        return { dot: "bg-amber-500", label: "Période d'essai", formula: "Essai 14 jours" };
+      case "PAID_EXPIRED":
+        return { dot: "bg-rose-500", label: "Licence expirée", formula: "Sordi Pro" };
+      case "TRIAL_EXPIRED":
+        return { dot: "bg-rose-500", label: "Essai terminé", formula: "Essai 14 jours" };
+      case "REVOKED":
+        return { dot: "bg-rose-500", label: "Licence révoquée", formula: "Sordi Pro" };
+      default:
+        return { dot: "bg-muted-foreground", label: "Non activée", formula: "Aucune licence" };
+    }
+  })();
+
   return (
     <>
       <DropdownMenu>
@@ -72,6 +103,20 @@ export function WorkspaceAccountMenu() {
             <span className="text-xs font-medium text-foreground truncate max-w-[140px]">
               {activeCompany?.name ?? "Sélectionner"}
             </span>
+            {isPro && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* Minimal, subtle-Scarlet chip — a quiet reward for a
+                      paying customer, not a loud upsell badge. */}
+                  <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
+                    Pro
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  ✓ Licence Sordi Pro active{expiryFormatted ? ` jusqu'au ${expiryFormatted}` : ""}
+                </TooltipContent>
+              </Tooltip>
+            )}
             <ChevronIcon className="w-3 h-3 shrink-0 text-muted-foreground/60" />
           </button>
         </DropdownMenuTrigger>
@@ -154,6 +199,53 @@ export function WorkspaceAccountMenu() {
 
           <DropdownMenuSeparator />
 
+          {/* Abonnement — status, formula, and échéance in one glance, so
+              the customer never has to go hunting through Paramètres to
+              know where they stand. */}
+          <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-2.5 py-1">
+            Abonnement
+          </DropdownMenuLabel>
+          <div className="px-2.5 py-1.5 space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", subscription.dot)} />
+              <span className="text-xs font-medium text-foreground">{subscription.label}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">{subscription.formula}</p>
+            {expiryFormatted && (
+              <p className="text-[11px] text-muted-foreground">
+                Échéance : {expiryFormatted}
+                {daysRemaining !== null && ` (${daysRemaining} j restants)`}
+              </p>
+            )}
+          </div>
+
+          <DropdownMenuSeparator />
+
+          {/* Actions & Support */}
+          <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-2.5 py-1">
+            Actions & Support
+          </DropdownMenuLabel>
+          <DropdownMenuItem asChild>
+            <a
+              href={buildWhatsAppSupportUrl(activeCompany?.name)}
+              target="_blank"
+              rel="noreferrer"
+              className="h-7 px-2.5 rounded flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+            >
+              <WhatsAppIcon className="w-3.5 h-3.5" />
+              Support & Assistance
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setActivationOpen(true)}
+            className="h-7 px-2.5 rounded hover:bg-accent hover:text-accent-foreground flex items-center gap-2 cursor-pointer"
+          >
+            <KeyIcon className="w-3.5 h-3.5 text-muted-foreground" />
+            Gérer ma licence / Saisir une clé
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
           <DropdownMenuItem onClick={() => navigate("/settings")} className="h-7 px-2.5 rounded hover:bg-accent hover:text-accent-foreground flex items-center justify-between cursor-pointer">
             <span className="flex items-center gap-2">
               <SettingsIcon className="w-3.5 h-3.5 text-muted-foreground" />
@@ -172,6 +264,7 @@ export function WorkspaceAccountMenu() {
       </DropdownMenu>
 
       <CreateCompanyDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+      <ActivationModal open={activationOpen} onOpenChange={setActivationOpen} />
     </>
   );
 }
