@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Toaster, Button, Input, Label } from "@sordi/ui";
-import { RiLockLine as LockIcon, RiFileCopyLine as CopyIcon, RiKey2Line as KeyIcon } from "@remixicon/react";
+import {
+  RiLockLine as LockIcon,
+  RiFileCopyLine as CopyIcon,
+  RiCheckLine as CheckIcon,
+  RiKey2Line as KeyIcon,
+  RiLogoutBoxRLine as LogoutIcon,
+} from "@remixicon/react";
 import { webApi, WebApiError } from "@/lib/webApi";
 
 // The entered value IS the admin secret — never compared against anything
@@ -22,6 +28,19 @@ interface GeneratedLicense {
   createdAt: string;
 }
 
+// The public marketing site is light-only by design (see index.css), but
+// this internal tool intentionally opts into the .dark token set — it's
+// operated by the founder/sales team, not a client-facing surface, so it
+// gets the "console" look rather than matching the storefront.
+function AdminShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="dark min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+      <div className="flex min-h-screen items-center justify-center p-4">{children}</div>
+      <Toaster theme="dark" />
+    </div>
+  );
+}
+
 function PasswordGate({ onUnlock }: { onUnlock: (secret: string) => void }) {
   const [value, setValue] = useState("");
 
@@ -32,32 +51,77 @@ function PasswordGate({ onUnlock }: { onUnlock: (secret: string) => void }) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-2xl border border-border/50 bg-card p-6 shadow-sm">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-            <LockIcon className="h-5 w-5 text-primary" />
-          </div>
-          <h1 className="text-lg font-semibold text-foreground">Accès administrateur</h1>
-          <p className="text-sm text-muted-foreground">Entrez le secret admin pour continuer.</p>
+    <form
+      onSubmit={handleSubmit}
+      className="w-full max-w-md space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 shadow-2xl shadow-black/40"
+    >
+      <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15">
+          <LockIcon className="h-5 w-5 text-primary" />
         </div>
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-50">Accès administrateur</h1>
+          <p className="mt-1 text-sm text-zinc-400">Entrez le secret admin pour continuer.</p>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="admin-secret" className="text-zinc-300">
+          Secret admin
+        </Label>
         <Input
+          id="admin-secret"
           type="password"
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Secret admin"
-          className="h-11"
+          placeholder="••••••••••••"
+          className="h-11 border-zinc-800 bg-zinc-950 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-primary/30"
         />
-        <Button type="submit" className="w-full h-11" disabled={!value}>
-          Déverrouiller
-        </Button>
-      </form>
-    </div>
+      </div>
+      <Button type="submit" className="w-full h-11" disabled={!value}>
+        Déverrouiller
+      </Button>
+    </form>
   );
 }
 
-function LicenseGenerator({ adminSecret, onInvalidSecret }: { adminSecret: string; onInvalidSecret: () => void }) {
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success("Copié !");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Impossible de copier la clé.");
+    }
+  };
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleCopy}
+      className="shrink-0 gap-1.5 border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50"
+    >
+      {copied ? <CheckIcon className="h-3.5 w-3.5 text-emerald-400" /> : <CopyIcon className="h-3.5 w-3.5" />}
+      {copied ? "Copié !" : "Copier la clé"}
+    </Button>
+  );
+}
+
+function LicenseGenerator({
+  adminSecret,
+  onInvalidSecret,
+  onLogout,
+}: {
+  adminSecret: string;
+  onInvalidSecret: () => void;
+  onLogout: () => void;
+}) {
   const [clientName, setClientName] = useState("");
   const [plan, setPlan] = useState<Plan>("annual");
   const [durationDays, setDurationDays] = useState(PLAN_DAYS.annual);
@@ -113,62 +177,74 @@ function LicenseGenerator({ adminSecret, onInvalidSecret }: { adminSecret: strin
     }
   };
 
-  const copyKey = async (key: string) => {
-    try {
-      await navigator.clipboard.writeText(key);
-      toast.success("Clé copiée !");
-    } catch {
-      toast.error("Impossible de copier la clé.");
-    }
-  };
-
   return (
-    <div className="mx-auto max-w-2xl p-4 py-8 sm:py-12">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-          <KeyIcon className="h-5 w-5 text-primary" />
+    <div className="w-full max-w-lg">
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
+            <KeyIcon className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-zinc-50">Génération de licences</h1>
+            <p className="text-sm text-zinc-400">Créer une clé pour un client payé manuellement.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Génération de licences</h1>
-          <p className="text-sm text-muted-foreground">Créer une clé pour un client payé manuellement.</p>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onLogout}
+          className="shrink-0 gap-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+        >
+          <LogoutIcon className="h-3.5 w-3.5" />
+          Changer de secret
+        </Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border/50 bg-card p-5 shadow-sm">
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 shadow-2xl shadow-black/40"
+      >
         <div className="space-y-1.5">
-          <Label htmlFor="client-name">Nom du client</Label>
+          <Label htmlFor="client-name" className="text-zinc-300">
+            Nom du client
+          </Label>
           <Input
             id="client-name"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
             placeholder="Nom de l'entreprise ou du client"
             required
-            className="h-11"
+            className="h-11 border-zinc-800 bg-zinc-950 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-primary/30"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="plan">Plan</Label>
+            <Label htmlFor="plan" className="text-zinc-300">
+              Plan
+            </Label>
             <select
               id="plan"
               value={plan}
               onChange={(e) => handlePlanChange(e.target.value as Plan)}
-              className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="flex h-11 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <option value="annual">Annuel</option>
               <option value="lifetime">À vie</option>
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="duration">Durée (jours)</Label>
+            <Label htmlFor="duration" className="text-zinc-300">
+              Durée (jours)
+            </Label>
             <Input
               id="duration"
               type="number"
               min={1}
               value={durationDays}
               onChange={(e) => setDurationDays(Number(e.target.value) || 0)}
-              className="h-11"
+              className="h-11 border-zinc-800 bg-zinc-950 text-zinc-100 focus-visible:ring-primary/30"
             />
           </div>
         </div>
@@ -180,22 +256,21 @@ function LicenseGenerator({ adminSecret, onInvalidSecret }: { adminSecret: strin
 
       {generated.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Licences générées cette session</h2>
+          <h2 className="mb-3 text-sm font-medium text-zinc-400">Licences générées cette session</h2>
           <div className="space-y-2">
             {generated.map((lic) => (
               <div
                 key={lic.licenseKey + lic.createdAt}
-                className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{lic.organizationName}</p>
-                  <p className="break-all font-mono text-xs text-muted-foreground">{lic.licenseKey}</p>
-                  <p className="text-xs text-muted-foreground">Expire le {new Date(lic.expiresAt).toLocaleDateString("fr-FR")}</p>
+                  <p className="truncate text-sm font-medium text-zinc-100">{lic.organizationName}</p>
+                  <p className="mt-1 break-all rounded-md bg-zinc-950 px-2 py-1 font-mono text-xs text-primary/90">
+                    {lic.licenseKey}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">Expire le {new Date(lic.expiresAt).toLocaleDateString("fr-FR")}</p>
                 </div>
-                <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => copyKey(lic.licenseKey)}>
-                  <CopyIcon className="h-3.5 w-3.5" />
-                  Copier la clé
-                </Button>
+                <CopyButton text={lic.licenseKey} />
               </div>
             ))}
           </div>
@@ -219,13 +294,12 @@ export function AdminApp() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <AdminShell>
       {adminSecret ? (
-        <LicenseGenerator adminSecret={adminSecret} onInvalidSecret={invalidateSecret} />
+        <LicenseGenerator adminSecret={adminSecret} onInvalidSecret={invalidateSecret} onLogout={invalidateSecret} />
       ) : (
         <PasswordGate onUnlock={unlock} />
       )}
-      <Toaster />
-    </div>
+    </AdminShell>
   );
 }
