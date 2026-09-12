@@ -15,6 +15,26 @@ export interface DownloadLeadInput {
   osType: "macos" | "windows";
 }
 
+export interface GenerateLicenseInput {
+  organizationName: string;
+  expiresAt: string;
+  maxDevices?: number;
+}
+
+export interface GeneratedLicenseResult {
+  licenseKey: string;
+  organizationName: string;
+  expiresAt: string;
+}
+
+async function parseJsonError(res: Response): Promise<never> {
+  const body = await res.json().catch(() => null);
+  const message =
+    (body && typeof body === "object" && "message" in body && typeof body.message === "string" && body.message) ||
+    "Une erreur est survenue. Réessayez.";
+  throw new WebApiError(res.status, message);
+}
+
 export const webApi = {
   submitDownloadLead: async (input: DownloadLeadInput): Promise<{ downloadUrl: string }> => {
     const res = await fetch(`${API_BASE_URL}/leads/download`, {
@@ -23,15 +43,23 @@ export const webApi = {
       body: JSON.stringify(input),
     });
 
-    const body = await res.json().catch(() => null);
+    if (!res.ok) return parseJsonError(res);
 
-    if (!res.ok) {
-      const message =
-        (body && typeof body === "object" && "message" in body && typeof body.message === "string" && body.message) ||
-        "Une erreur est survenue. Réessayez.";
-      throw new WebApiError(res.status, message);
-    }
+    return res.json();
+  },
 
-    return body as { downloadUrl: string };
+  generateLicense: async (input: GenerateLicenseInput, adminSecret: string): Promise<GeneratedLicenseResult> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
   },
 };
