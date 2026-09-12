@@ -25,23 +25,30 @@ export function useMachineId() {
 // write-access gating happens server/Rust-side via LicenseStatus.state
 // (require_active_license() in license.rs); this is purely a UI countdown.
 //
-// LicenseStatus has no field distinguishing a self-service 14-day trial
-// (POST /licenses/request-trial) from a paid annual license — both come
-// back as state: "active" with a real expires_at claim from the signed
-// token, since a trial is just a license row with a short term. The one
-// real signal available is expires_at itself: a genuinely perpetual/
-// lifetime license has none (activate_offline's manually-issued tokens
-// can omit it, or a future lifetime plan may sign one with no exp claim),
-// while every trial AND every term-limited paid plan (annual, etc.) has
-// one. So: show the countdown for ANY active license that has an expiry
-// at all — a paying annual customer sees "334 jours restants" same as a
-// trial user sees "14 jours restants", both true and both useful — and
-// hide it ONLY for state !== "active" (show a different call-to-activate
-// in that case, handled by TrialBanner directly) or for an active license
-// with genuinely no expires_at (perpetual).
+// LicenseStatus.expires_at now always reflects the license's REAL
+// subscription boundary (apps/api's licenses.expires_at, propagated through
+// the token's realExpiresAt claim — see licenseService.ts's doc comment).
+// Before that fix, a paid/activated license's expires_at was read from the
+// token's own cryptographic `exp`, which for any /activate or /verify call
+// is a fixed 35-day rolling reverification window totally unrelated to the
+// real term purchased — a customer with a license valid until 2028 saw
+// "35 jours restants" forever. With the real value now flowing through,
+// LicenseStatus.expires_at legitimately can be years out for a paid plan.
+//
+// That means expires_at existing is no longer, by itself, a reliable
+// trial/paid signal (both have one) — the actual signal is how CLOSE it is.
+// A trial is always <=14 days; a paid plan someone just activated is
+// practically always much further out. Showing the banner is genuinely
+// useful right up to a real renewal too, so the cutoff is a bit above the
+// trial length rather than exactly 14 — 30 days catches "your trial is
+// ending" and "your paid plan renews soon" alike, while a freshly-activated
+// annual/lifetime license (hundreds of days or no expiry at all) stays
+// hidden, matching what a paid customer actually expects to see.
+const EXPIRY_WARNING_WINDOW_DAYS = 30;
+
 export interface TrialStatus {
   /** True whenever the banner should show: not fully "active" at all, or
-   *  active with a real expires_at (any term length) to count down. */
+   *  active with a real expiry within EXPIRY_WARNING_WINDOW_DAYS. */
   isTrial: boolean;
   /** Days until expires_at, clamped to 0. Only meaningful/precise when the
    *  license is "active" with a real expires_at; a flat fallback otherwise
@@ -68,10 +75,11 @@ export function useTrialStatus(): TrialStatus {
     daysRemaining = Math.max(0, Math.ceil(msRemaining / 86_400_000));
   }
 
-  // Perpetual (active, no expiry at all) is the only case that hides the
-  // banner outright — every other case either isn't active yet or is on
-  // a real countdown.
-  const isTrial = !isActive || hasExpiry;
+  // Hides for: not active at all is handled separately below (still shows,
+  // with a different label — see TrialBanner); a perpetual active license
+  // (no expiry); or an active license whose real expiry is comfortably far
+  // out (a freshly activated paid plan).
+  const isTrial = !isActive || (hasExpiry && daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS);
 
   return {
     isTrial,

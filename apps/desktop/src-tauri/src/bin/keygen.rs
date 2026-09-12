@@ -185,6 +185,10 @@ fn main() {
         device_fingerprint,
         iat,
         exp,
+        // Offline-issued token: exp already reflects the real purchased
+        // term (--valid-days), so real_expires_at is simply the same value
+        // — same pattern as apps/api's trial issuance.
+        real_expires_at: Some(exp),
     };
 
     let encoding_key = match EncodingKey::from_ed_pem(DEV_PRIVATE_KEY_PEM.as_bytes()) {

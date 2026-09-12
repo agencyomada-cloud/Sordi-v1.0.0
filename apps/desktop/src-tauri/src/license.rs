@@ -217,7 +217,32 @@ pub struct LicenseClaims {
     pub client_reference_id: String,
     pub device_fingerprint: String,
     pub iat: u64,
+    // Cryptographic/security expiry ONLY — for an activated (non-trial)
+    // license this is a fixed, short rolling reverification window (see
+    // apps/api's TOKEN_TTL_SECONDS), completely unrelated to how much term
+    // the customer actually purchased. NEVER use this for a user-facing
+    // "days remaining" display — see real_expires_at below, which is what
+    // that value actually means. A trial token's real_expires_at happens to
+    // equal exp (both set from the same real term at issuance).
     pub exp: u64,
+    // The license's real subscription boundary (unix seconds), as recorded
+    // in apps/api's licenses.expires_at — this is what current_status()
+    // reports as LicenseStatus.expires_at, and what TrialBanner/Upgrade
+    // pages should always read for "days remaining" or "valid until".
+    // Optional only so a token signed before this field existed (already
+    // written to disk on some machine) still deserializes — falls back to
+    // exp in that case via #[serde(default)] + the accessor below, matching
+    // the old (paid-license-incorrect) behavior rather than failing closed.
+    #[serde(default)]
+    pub real_expires_at: Option<u64>,
+}
+
+impl LicenseClaims {
+    /// See real_expires_at's own doc comment — this is the value every
+    /// caller should treat as "the license's actual expiry."
+    pub fn display_expires_at(&self) -> u64 {
+        self.real_expires_at.unwrap_or(self.exp)
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -295,8 +320,8 @@ pub fn current_status() -> LicenseStatus {
     match verify_local(&token) {
         Ok(claims) => LicenseStatus {
             state: "active".to_string(),
-            client_reference_id: Some(claims.client_reference_id),
-            expires_at: Some(unix_to_iso(claims.exp)),
+            client_reference_id: Some(claims.client_reference_id.clone()),
+            expires_at: Some(unix_to_iso(claims.display_expires_at())),
         },
         Err(_) => LicenseStatus { state: "read_only".to_string(), client_reference_id: None, expires_at: None },
     }

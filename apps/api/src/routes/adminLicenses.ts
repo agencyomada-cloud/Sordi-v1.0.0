@@ -52,7 +52,13 @@ adminLicensesRouter.post(
     // The token's own exp is set to the actual purchased term (validDays),
     // not signLicenseToken's fixed 35-day online-reverification window.
     const token = signLicenseTokenWithTtl(
-      { clientReferenceId: generateClientReferenceId(), deviceFingerprint: device.deviceFingerprint },
+      {
+        clientReferenceId: generateClientReferenceId(),
+        deviceFingerprint: device.deviceFingerprint,
+        // exp already IS the real purchased term here (ttlSeconds), unlike
+        // the fixed-35-day /activate path — same value either way.
+        realExpiresAt: Math.floor(validUntil.getTime() / 1000),
+      },
       ttlSeconds
     );
 

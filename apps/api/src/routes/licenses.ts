@@ -62,7 +62,11 @@ licensesRouter.post(
       await licensesRepo.setActivatedAt(license.id);
     }
 
-    const signedToken = signLicenseToken({ clientReferenceId: license.clientReferenceId, deviceFingerprint });
+    const signedToken = signLicenseToken({
+      clientReferenceId: license.clientReferenceId,
+      deviceFingerprint,
+      realExpiresAt: Math.floor(license.expiresAt.getTime() / 1000),
+    });
     res.json({
       signedToken,
       clientReferenceId: license.clientReferenceId,
@@ -101,6 +105,7 @@ licensesRouter.post(
     const signedToken = signLicenseToken({
       clientReferenceId: license.clientReferenceId,
       deviceFingerprint: payload.deviceFingerprint,
+      realExpiresAt: Math.floor(license.expiresAt.getTime() / 1000),
     });
     res.json({ signedToken });
   })
@@ -144,7 +149,11 @@ licensesRouter.post(
     }
 
     const signedToken = deviceFingerprint
-      ? signLicenseToken({ clientReferenceId: created.clientReferenceId, deviceFingerprint })
+      ? signLicenseToken({
+          clientReferenceId: created.clientReferenceId,
+          deviceFingerprint,
+          realExpiresAt: Math.floor(created.expiresAt.getTime() / 1000),
+        })
       : null;
 
     res.status(201).json({

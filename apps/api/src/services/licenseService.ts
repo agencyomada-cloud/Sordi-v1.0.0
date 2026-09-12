@@ -32,6 +32,21 @@ function base64url(input: Buffer | string): string {
 export interface LicenseTokenPayload {
   clientReferenceId: string;
   deviceFingerprint: string;
+  // The license's REAL subscription boundary (unix seconds) — distinct from
+  // the token's own cryptographic `exp` below. For a paid/activated license,
+  // `exp` is deliberately a short, fixed 35-day rolling reverification
+  // window (see TOKEN_TTL_SECONDS) so a revoked license can't stay valid
+  // offline indefinitely; it has NO relation to how much term the customer
+  // actually purchased. Before this field existed, the desktop app's "jours
+  // restants" countdown read `exp` directly, so every paid activation
+  // displayed "35 jours restants" forever, regardless of a real multi-year
+  // term (a customer with a license valid until 2028 saw the banner as if
+  // they were about to expire in 5 weeks). realExpiresAt carries the actual
+  // value from `licenses.expiresAt` for display purposes; `exp` keeps doing
+  // its security job untouched. For a self-service trial, the two happen to
+  // be equal (signLicenseTokenWithTtl is called with the trial's own real
+  // term as both), so no special-casing is needed there.
+  realExpiresAt: number;
 }
 
 interface LicenseTokenClaims extends LicenseTokenPayload {
@@ -78,6 +93,11 @@ export function verifyLicenseToken(token: string): LicenseTokenClaims | null {
     const claims = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as LicenseTokenClaims;
     if (typeof claims.exp !== "number" || claims.exp < Math.floor(Date.now() / 1000)) return null;
     if (typeof claims.clientReferenceId !== "string" || typeof claims.deviceFingerprint !== "string") return null;
+
+    // Tolerate a token signed before realExpiresAt existed (already in the
+    // wild) — falls back to the reverification exp, same as the old
+    // (incorrect for paid licenses) behavior, rather than rejecting it.
+    if (typeof claims.realExpiresAt !== "number") claims.realExpiresAt = claims.exp;
 
     return claims;
   } catch {
