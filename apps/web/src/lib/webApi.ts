@@ -15,8 +15,12 @@ export interface DownloadLeadInput {
   osType: "macos" | "windows";
 }
 
+export type ContactStatus = "a_contacter" | "en_cours" | "converti" | "non_interesse";
+
 export interface GenerateLicenseInput {
   organizationName: string;
+  phone: string;
+  email: string;
   expiresAt: string;
   maxDevices?: number;
 }
@@ -32,10 +36,13 @@ export interface License {
   clientReferenceId: string;
   licenseKey: string;
   organizationName: string;
+  phone: string | null;
+  email: string | null;
   activatedAt: string | null;
   expiresAt: string;
   maxDevices: number;
   status: "active" | "expired" | "revoked";
+  contactStatus: ContactStatus;
   createdAt: string;
   deviceCount: number;
 }
@@ -108,6 +115,25 @@ export const webApi = {
         "x-admin-secret": adminSecret,
       },
       body: JSON.stringify({ days }),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  updateContactStatus: async (
+    id: string,
+    contactStatus: ContactStatus,
+    adminSecret: string
+  ): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/contact-status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ contactStatus }),
     });
 
     if (!res.ok) return parseJsonError(res);
