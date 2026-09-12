@@ -206,6 +206,14 @@ const Auth = () => {
           </div>
         )}
       </div>
+
+      {/* Quiet agency credit — belongs at the bottom of every auth state
+          (first-run wizard and daily unlock alike), never inside the card
+          itself which is about the unlock/setup action, not attribution. */}
+      <div className="shrink-0 pb-4 flex items-center justify-center gap-1.5 select-none">
+        <span className="text-[10px] text-muted-foreground/70">Développé par</span>
+        <img src="/brand/omada-logo.svg" alt="Omada" className="h-3.5 w-auto opacity-70 invert dark:invert-0" draggable={false} />
+      </div>
     </div>
   );
 };

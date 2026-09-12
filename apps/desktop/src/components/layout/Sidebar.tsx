@@ -43,12 +43,11 @@ import { useActivities } from "@/hooks/useActivities";
 import { getInvoiceStatusConfig } from "@/lib/invoiceStatus";
 import { formatCurrency } from "@/lib/i18nFormat";
 import { useModuleFlags, type ModuleKey } from "@/lib/moduleFlags";
+import { SordiLogo } from "@/components/brand/SordiLogo";
 
 // Command palette deep-search caps — Raycast/Linear-style, a handful of
 // best matches per section rather than an unbounded scroll.
 const MAX_RESULTS_PER_GROUP = 5;
-
-const logoHorizontal = "/brand/sordi-logo.svg";
 
 interface NavItem {
   icon: React.ElementType;
@@ -531,11 +530,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
                 editable text) — "Finance" is added as its own subtitle tag
                 rather than attempted inside the SVG artwork itself. */}
             <div className="flex flex-col gap-0.5 overflow-hidden min-w-0">
-              <img
-                src={logoHorizontal}
-                alt="Sordi"
-                className="h-6 w-auto object-contain dark:invert shrink-0"
-              />
+              <SordiLogo className="h-6 w-auto object-contain shrink-0 text-foreground" />
               <div className="flex items-center gap-1.5 whitespace-nowrap">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 select-none">
                   Finance

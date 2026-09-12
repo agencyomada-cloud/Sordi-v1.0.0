@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { FALLBACK_APP_VERSION } from "@/lib/pdfGenerator";
-
-const logoHorizontal = "/brand/sordi-logo.svg";
+import { SordiLogo } from "@/components/brand/SordiLogo";
 
 // Purely decorative — this window has no IPC channel back to the main
 // window's real bootstrap progress (SQLite init, workspace/company load,
@@ -47,7 +46,7 @@ export default function SplashScreen() {
         data-tauri-drag-region
       >
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <img src={logoHorizontal} alt="Sordi" className="h-8 w-auto" draggable={false} />
+          <SordiLogo className="h-8 w-auto text-foreground" />
           <span className="text-[10px] font-mono text-muted-foreground/70 tracking-wide">v{version}</span>
         </div>
 
