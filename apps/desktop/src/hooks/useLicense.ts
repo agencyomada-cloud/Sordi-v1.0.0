@@ -8,7 +8,7 @@ import { db, type LicenseStatus } from "@/lib/database";
 // untouched — this is a single additive short-circuit, not a modification of
 // how licensing works.
 const LICENSE_BYPASS = import.meta.env.VITE_LICENSE_BYPASS === "true";
-const BYPASS_STATUS: LicenseStatus = { state: "active", client_reference_id: null, expires_at: null };
+const BYPASS_STATUS: LicenseStatus = { state: "active", client_reference_id: null, expires_at: null, plan_type: "lifetime" };
 
 export function useLicenseStatus() {
   return useQuery({

@@ -189,6 +189,10 @@ fn main() {
         // term (--valid-days), so real_expires_at is simply the same value
         // — same pattern as apps/api's trial issuance.
         real_expires_at: Some(exp),
+        // This CLI only ever manually issues a paid offline key — never a
+        // trial (that's request_trial's job) — so "annual" is always
+        // correct here regardless of --valid-days.
+        plan_type: Some("annual".to_string()),
     };
 
     let encoding_key = match EncodingKey::from_ed_pem(DEV_PRIVATE_KEY_PEM.as_bytes()) {

@@ -43,6 +43,13 @@
       "when": 1789191155576,
       "tag": "0005_blushing_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789230615728,
+      "tag": "0006_hard_ted_forrester",
+      "breakpoints": true
     }
   ]
 }

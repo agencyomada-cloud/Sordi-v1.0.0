@@ -81,6 +81,7 @@ export const licensesRepo = {
         maxDevices: licenses.maxDevices,
         status: licenses.status,
         contactStatus: licenses.contactStatus,
+        planType: licenses.planType,
         createdAt: licenses.createdAt,
         deviceCount: sql<number>`coalesce(${db
           .select({ value: count() })
@@ -118,6 +119,29 @@ export const licensesRepo = {
 
   updateContactStatus: (id: string, contactStatus: (typeof licenses.$inferSelect)["contactStatus"]) =>
     db.update(licenses).set({ contactStatus }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+
+  // Manual override — see licensePlanTypeSchema's doc comment for when
+  // this is used on its own vs. convertToPaid below for the common case.
+  updatePlanType: (id: string, planType: (typeof licenses.$inferSelect)["planType"]) =>
+    db.update(licenses).set({ planType }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+
+  // Atomic version of "extend + mark converted" — the admin dashboard's
+  // "Convertir en Annuel" action used to compose extend() and
+  // updateContactStatus() as two separate round trips, which never touched
+  // planType at all (the actual bug this method exists to fix: a converted
+  // license kept planType: "trial" forever, so the desktop app's
+  // TrialBanner had no reliable way to know it was no longer a trial).
+  convertToPaid: (id: string, days: number, planType: "annual" | "lifetime") =>
+    db
+      .update(licenses)
+      .set({
+        expiresAt: sql`${licenses.expiresAt} + (${days} * interval '1 day')`,
+        contactStatus: "converti",
+        planType,
+      })
+      .where(eq(licenses.id, id))
+      .returning()
+      .then((rows) => rows[0] ?? null),
 
   // Hard delete, not a status change — lets the same machine (device
   // fingerprint) start onboarding over from zero, e.g. after a test run.

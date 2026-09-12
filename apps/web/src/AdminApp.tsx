@@ -14,7 +14,7 @@ import {
   RiWhatsappLine as WhatsappIcon,
   RiDeleteBinLine as DeleteIcon,
 } from "@remixicon/react";
-import { webApi, WebApiError, type ContactStatus, type License } from "@/lib/webApi";
+import { webApi, WebApiError, type ContactStatus, type License, type PlanType } from "@/lib/webApi";
 
 // The entered value IS the admin secret — never compared against anything
 // baked into the client bundle (a VITE_* value ships in plaintext to every
@@ -30,6 +30,21 @@ const PLAN_LABELS: Record<Plan, string> = {
   trial7: "Essai 7 jours",
   trial14: "Essai 14 jours",
   annual: "Annuel (365 jours)",
+};
+// What actually gets stored on the license row — trial7/trial14 are both
+// genuinely trials, only the duration differs.
+const PLAN_TO_PLAN_TYPE: Record<Plan, PlanType> = { trial7: "trial", trial14: "trial", annual: "annual" };
+
+const PLAN_TYPE_LABELS: Record<PlanType, string> = {
+  trial: "Essai",
+  annual: "Annuel",
+  lifetime: "À vie",
+};
+
+const PLAN_TYPE_BADGE: Record<PlanType, string> = {
+  trial: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  annual: "bg-sky-500/10 text-sky-400 border-sky-500/30",
+  lifetime: "bg-violet-500/10 text-violet-400 border-violet-500/30",
 };
 
 const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
@@ -189,7 +204,13 @@ function GenerateLicenseForm({ adminSecret, onCreated }: { adminSecret: string; 
     try {
       const expiresAt = new Date(Date.now() + PLAN_DAYS[plan] * 24 * 60 * 60 * 1000).toISOString();
       const result = await webApi.generateLicense(
-        { organizationName: clientName.trim(), phone: phone.trim(), email: email.trim(), expiresAt },
+        {
+          organizationName: clientName.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          expiresAt,
+          planType: PLAN_TO_PLAN_TYPE[plan],
+        },
         adminSecret
       );
       setLastGenerated({ licenseKey: result.licenseKey, organizationName: result.organizationName });
@@ -357,6 +378,22 @@ function ExtendPopover({ onExtend }: { onExtend: (days: number) => void }) {
   );
 }
 
+function PlanTypeSelect({ value, onChange }: { value: PlanType; onChange: (next: PlanType) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as PlanType)}
+      className={`h-8 rounded-full border px-2.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${PLAN_TYPE_BADGE[value]}`}
+    >
+      {(Object.keys(PLAN_TYPE_LABELS) as PlanType[]).map((key) => (
+        <option key={key} value={key} className="bg-zinc-900 text-zinc-100">
+          {PLAN_TYPE_LABELS[key]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ContactStatusSelect({
   value,
   onChange,
@@ -460,12 +497,29 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
   const handleConvertToAnnual = async (license: License) => {
     setBusyId(license.id);
     try {
-      await webApi.extendLicense(license.id, 365, adminSecret);
-      await webApi.updateContactStatus(license.id, "converti", adminSecret);
+      // One atomic call — extends, marks converti, AND sets planType so the
+      // desktop app's TrialBanner correctly stops treating it as a trial
+      // (the old two-call extend+contact-status composition never touched
+      // planType, which was the actual root cause of a converted license
+      // still showing "il vous reste 35 jours" on the desktop indefinitely).
+      await webApi.convertToPaid(license.id, 365, "annual", adminSecret);
       toast.success("Licence prolongée d'un an et marquée comme convertie.");
       await load();
     } catch (error) {
       toast.error(error instanceof WebApiError ? error.message : "Impossible de convertir la licence.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handlePlanTypeChange = async (license: License, next: PlanType) => {
+    setBusyId(license.id);
+    setLicenses((prev) => prev?.map((l) => (l.id === license.id ? { ...l, planType: next } : l)) ?? prev);
+    try {
+      await webApi.updatePlanType(license.id, next, adminSecret);
+    } catch (error) {
+      toast.error(error instanceof WebApiError ? error.message : "Impossible de mettre à jour le type de licence.");
+      await load();
     } finally {
       setBusyId(null);
     }
@@ -529,6 +583,7 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
               <th className="px-5 py-3 font-medium">Client</th>
               <th className="px-5 py-3 font-medium">Téléphone &amp; Email</th>
               <th className="px-5 py-3 font-medium">Clé</th>
+              <th className="px-5 py-3 font-medium">Type</th>
               <th className="px-5 py-3 font-medium">Expiration</th>
               <th className="px-5 py-3 font-medium">Statut de suivi</th>
               <th className="px-5 py-3 font-medium">Appareils</th>
@@ -538,14 +593,14 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
           <tbody>
             {licenses === null && !loadError && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-zinc-500">
+                <td colSpan={8} className="px-5 py-8 text-center text-zinc-500">
                   Chargement des licences...
                 </td>
               </tr>
             )}
             {licenses !== null && licenses.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-zinc-500">
+                <td colSpan={8} className="px-5 py-8 text-center text-zinc-500">
                   Aucune licence trouvée.
                 </td>
               </tr>
@@ -600,6 +655,12 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
                       </span>
                       <CopyButton text={license.licenseKey} label="Copier" />
                     </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <PlanTypeSelect
+                      value={license.planType}
+                      onChange={(next) => handlePlanTypeChange(license, next)}
+                    />
                   </td>
                   <td className="px-5 py-3">
                     <div className="text-zinc-300">{new Date(license.expiresAt).toLocaleDateString("fr-FR")}</div>

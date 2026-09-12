@@ -25,30 +25,31 @@ export function useMachineId() {
 // write-access gating happens server/Rust-side via LicenseStatus.state
 // (require_active_license() in license.rs); this is purely a UI countdown.
 //
-// LicenseStatus.expires_at now always reflects the license's REAL
-// subscription boundary (apps/api's licenses.expires_at, propagated through
-// the token's realExpiresAt claim — see licenseService.ts's doc comment).
-// Before that fix, a paid/activated license's expires_at was read from the
-// token's own cryptographic `exp`, which for any /activate or /verify call
-// is a fixed 35-day rolling reverification window totally unrelated to the
-// real term purchased — a customer with a license valid until 2028 saw
-// "35 jours restants" forever. With the real value now flowing through,
-// LicenseStatus.expires_at legitimately can be years out for a paid plan.
+// LicenseStatus.plan_type ("trial" | "annual" | "lifetime") is the
+// authoritative signal for whether this banner should show at all — NOT a
+// days-remaining guess. A trial and a freshly-activated year-long paid
+// license both look identical at the token-expiry level (an active,
+// unexpired token with a real, possibly-far-future expires_at), so no
+// amount of day-counting can reliably tell them apart; a customer who
+// activates a license valid until 2028 must never see a trial countdown,
+// no matter how many days that number is. plan_type is set once at
+// creation (POST /licenses/request-trial always "trial"; the admin
+// dashboard's Générer une licence and Convertir en Annuel set it
+// explicitly) and carried through the signed token, so the desktop app
+// never has to infer it.
 //
-// That means expires_at existing is no longer, by itself, a reliable
-// trial/paid signal (both have one) — the actual signal is how CLOSE it is.
-// A trial is always <=14 days; a paid plan someone just activated is
-// practically always much further out. Showing the banner is genuinely
-// useful right up to a real renewal too, so the cutoff is a bit above the
-// trial length rather than exactly 14 — 30 days catches "your trial is
-// ending" and "your paid plan renews soon" alike, while a freshly-activated
-// annual/lifetime license (hundreds of days or no expiry at all) stays
-// hidden, matching what a paid customer actually expects to see.
+// plan_type can be missing on a token issued before this field existed
+// (already written to a local license.token file on some machine) — in
+// that one legacy case only, fall back to the old days-based heuristic
+// (show if expiring within EXPIRY_WARNING_WINDOW_DAYS) so an existing
+// install doesn't regress until its next activate/verify round-trip
+// refreshes the token with the real plan_type.
 const EXPIRY_WARNING_WINDOW_DAYS = 30;
 
 export interface TrialStatus {
-  /** True whenever the banner should show: not fully "active" at all, or
-   *  active with a real expiry within EXPIRY_WARNING_WINDOW_DAYS. */
+  /** True whenever the banner should show: not fully "active" at all, a
+   *  genuine trial plan, or (legacy fallback only) an active license with
+   *  no plan_type whose expiry happens to be within the warning window. */
   isTrial: boolean;
   /** Days until expires_at, clamped to 0. Only meaningful/precise when the
    *  license is "active" with a real expires_at; a flat fallback otherwise
@@ -75,11 +76,13 @@ export function useTrialStatus(): TrialStatus {
     daysRemaining = Math.max(0, Math.ceil(msRemaining / 86_400_000));
   }
 
-  // Hides for: not active at all is handled separately below (still shows,
-  // with a different label — see TrialBanner); a perpetual active license
-  // (no expiry); or an active license whose real expiry is comfortably far
-  // out (a freshly activated paid plan).
-  const isTrial = !isActive || (hasExpiry && daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS);
+  const isExplicitTrial = status?.plan_type === "trial";
+  const isExplicitPaid = status?.plan_type === "annual" || status?.plan_type === "lifetime";
+  // Only reached when plan_type is genuinely absent (a pre-existing token
+  // that predates this field) — never overrides an explicit paid plan.
+  const legacyHeuristic = !status?.plan_type && hasExpiry && daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS;
+
+  const isTrial = !isActive || isExplicitTrial || (!isExplicitPaid && legacyHeuristic);
 
   return {
     isTrial,

@@ -58,6 +58,9 @@ adminLicensesRouter.post(
         // exp already IS the real purchased term here (ttlSeconds), unlike
         // the fixed-35-day /activate path — same value either way.
         realExpiresAt: Math.floor(validUntil.getTime() / 1000),
+        // This endpoint is a paid-device activation flow only (never a
+        // trial) — "yearly" maps to the schema's "annual" plan type.
+        planType: licenseType === "lifetime" ? "lifetime" : "annual",
       },
       ttlSeconds
     );

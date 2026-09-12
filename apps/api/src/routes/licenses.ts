@@ -3,9 +3,11 @@ import type { NextFunction, Request, Response } from "express";
 import {
   licenseActivateSchema,
   licenseContactStatusSchema,
+  licenseConvertToPaidSchema,
   licenseCreateSchema,
   licenseExtendSchema,
   licenseListQuerySchema,
+  licensePlanTypeSchema,
   licenseRequestTrialSchema,
   licenseVerifySchema,
 } from "@sordi/schema";
@@ -66,6 +68,7 @@ licensesRouter.post(
       clientReferenceId: license.clientReferenceId,
       deviceFingerprint,
       realExpiresAt: Math.floor(license.expiresAt.getTime() / 1000),
+      planType: license.planType,
     });
     res.json({
       signedToken,
@@ -106,6 +109,7 @@ licensesRouter.post(
       clientReferenceId: license.clientReferenceId,
       deviceFingerprint: payload.deviceFingerprint,
       realExpiresAt: Math.floor(license.expiresAt.getTime() / 1000),
+      planType: license.planType,
     });
     res.json({ signedToken });
   })
@@ -141,6 +145,7 @@ licensesRouter.post(
       maxDevices: 2,
       status: "active",
       contactStatus: "a_contacter",
+      planType: "trial",
     });
 
     if (deviceFingerprint) {
@@ -153,6 +158,7 @@ licensesRouter.post(
           clientReferenceId: created.clientReferenceId,
           deviceFingerprint,
           realExpiresAt: Math.floor(created.expiresAt.getTime() / 1000),
+          planType: "trial",
         })
       : null;
 
@@ -185,7 +191,7 @@ licensesRouter.post(
       res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
       return;
     }
-    const { organizationName, phone, email, expiresAt, maxDevices } = parsed.data;
+    const { organizationName, phone, email, expiresAt, maxDevices, planType } = parsed.data;
 
     const created = await licensesRepo.create({
       clientReferenceId: generateClientReferenceId(),
@@ -197,6 +203,7 @@ licensesRouter.post(
       maxDevices: maxDevices ?? 2,
       status: "active",
       contactStatus: "a_contacter",
+      planType: planType ?? "trial",
     });
 
     // The only time the raw license_key is ever shown — comes straight
@@ -271,6 +278,49 @@ licensesRouter.patch(
       return;
     }
     const updated = await licensesRepo.updateContactStatus(req.params.id, parsed.data.contactStatus);
+    res.json({ license: updated });
+  })
+);
+
+licensesRouter.patch(
+  "/:id/plan-type",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licensePlanTypeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const updated = await licensesRepo.updatePlanType(req.params.id, parsed.data.planType);
+    res.json({ license: updated });
+  })
+);
+
+// Atomic "extend + mark paid" — see licensesRepo.convertToPaid's doc
+// comment for why this replaced composing /extend and /contact-status as
+// two separate admin-dashboard calls (it never touched planType, so a
+// converted license stayed "trial" forever from the desktop app's
+// perspective).
+licensesRouter.patch(
+  "/:id/convert-to-paid",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseConvertToPaidSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const updated = await licensesRepo.convertToPaid(req.params.id, parsed.data.days, parsed.data.planType);
     res.json({ license: updated });
   })
 );

@@ -106,6 +106,10 @@ export const licenseCreateSchema = z.object({
   email: z.string().email().optional(),
   expiresAt: z.string().datetime(),
   maxDevices: z.number().int().positive().optional(),
+  // Defaults to "trial" (the pre-existing behavior before this field
+  // existed) — the admin dashboard's Essai plans rely on this default,
+  // only the Annuel/À vie plans send an explicit override.
+  planType: z.enum(["trial", "annual", "lifetime"]).optional(),
 });
 
 // POST /licenses/request-trial — fully public, called by the desktop app's
@@ -149,6 +153,23 @@ export const licenseExtendSchema = z.object({
 // status.
 export const licenseContactStatusSchema = z.object({
   contactStatus: z.enum(["a_contacter", "en_cours", "converti", "non_interesse"]),
+});
+
+// PATCH /licenses/:id/plan-type — manual override, for the rare case a
+// license was miscategorized (e.g. a trial the admin wants to explicitly
+// mark annual without also extending it right now, or vice versa).
+export const licensePlanTypeSchema = z.object({
+  planType: z.enum(["trial", "annual", "lifetime"]),
+});
+
+// PATCH /licenses/:id/convert-to-paid — the admin dashboard's "Convertir en
+// Annuel" action, done as one atomic update instead of composing separate
+// extend + contact-status calls: extends expiresAt, sets planType (so the
+// desktop app's TrialBanner stops treating it as a trial), and marks the
+// sales pipeline "converti" all in a single write.
+export const licenseConvertToPaidSchema = z.object({
+  days: z.number().int().positive().default(365),
+  planType: z.enum(["annual", "lifetime"]).default("annual"),
 });
 
 // ---------------------------------------------------------------------------

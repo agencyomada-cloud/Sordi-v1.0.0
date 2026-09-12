@@ -47,6 +47,14 @@ export interface LicenseTokenPayload {
   // be equal (signLicenseTokenWithTtl is called with the trial's own real
   // term as both), so no special-casing is needed there.
   realExpiresAt: number;
+  // Explicit plan identity ("trial" | "annual" | "lifetime") — the
+  // authoritative signal for whether the desktop app's TrialBanner should
+  // show. Both trial and paid licenses look identical at the token-expiry
+  // level (an active, unexpired token with a real, possibly-far-future
+  // expiry either way), so guessing from days-remaining alone is
+  // unreliable; this is the actual `licenses.plan_type` column value,
+  // carried through so the desktop app never has to guess.
+  planType: "trial" | "annual" | "lifetime";
 }
 
 interface LicenseTokenClaims extends LicenseTokenPayload {
@@ -94,10 +102,16 @@ export function verifyLicenseToken(token: string): LicenseTokenClaims | null {
     if (typeof claims.exp !== "number" || claims.exp < Math.floor(Date.now() / 1000)) return null;
     if (typeof claims.clientReferenceId !== "string" || typeof claims.deviceFingerprint !== "string") return null;
 
-    // Tolerate a token signed before realExpiresAt existed (already in the
-    // wild) — falls back to the reverification exp, same as the old
-    // (incorrect for paid licenses) behavior, rather than rejecting it.
+    // Tolerate a token signed before realExpiresAt/planType existed
+    // (already in the wild) — falls back to the reverification exp / a
+    // conservative "trial" guess, same as the old behavior, rather than
+    // rejecting it. Not load-bearing here either way: /verify re-signs
+    // using the license row's own current planType/expiresAt, not these
+    // decoded claims — this is only for type-safety and any future caller.
     if (typeof claims.realExpiresAt !== "number") claims.realExpiresAt = claims.exp;
+    if (claims.planType !== "trial" && claims.planType !== "annual" && claims.planType !== "lifetime") {
+      claims.planType = "trial";
+    }
 
     return claims;
   } catch {

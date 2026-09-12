@@ -125,6 +125,9 @@ export interface LicenseStatus {
   state: "active" | "read_only" | "not_activated";
   client_reference_id: string | null;
   expires_at: string | null;
+  // "trial" | "annual" | "lifetime", or null for a token issued before
+  // this field existed — see useTrialStatus's fallback for that case.
+  plan_type: "trial" | "annual" | "lifetime" | null;
 }
 
 export interface TelemetryStatus {
@@ -1274,7 +1277,7 @@ export const db = {
   // Licensing
   license: {
     getStatus: (): Promise<LicenseStatus> =>
-      safeInvoke("get_license_status", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
+      safeInvoke("get_license_status", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null, plan_type: "lifetime" })),
     // No fallback on purpose: safeInvoke's catch block calls the fallback
     // on ANY invoke failure in Tauri mode too, not just web-mode — for
     // every other command here that's a harmless degrade, but activate
@@ -1291,7 +1294,7 @@ export const db = {
         email: input.email,
       }),
     verifyBackground: (): Promise<LicenseStatus> =>
-      safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
+      safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null, plan_type: "lifetime" })),
     // Human-readable "SRD-XXXX-XXXX-XXXX" code for manual activation (see
     // license.rs's compute_machine_id) — distinct from the opaque device
     // fingerprint embedded in the license token itself, which is never

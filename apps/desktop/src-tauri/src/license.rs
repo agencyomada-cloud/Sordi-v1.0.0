@@ -235,6 +235,15 @@ pub struct LicenseClaims {
     // the old (paid-license-incorrect) behavior rather than failing closed.
     #[serde(default)]
     pub real_expires_at: Option<u64>,
+    // Explicit plan identity ("trial" | "annual" | "lifetime") — the
+    // authoritative signal for TrialBanner, replacing a fragile "guess from
+    // days remaining" heuristic (a trial and a freshly-activated year-long
+    // paid license both look like "active, real far-future expiry" at the
+    // token level, so days-remaining alone can never reliably tell them
+    // apart). Optional for the same reason as real_expires_at: an
+    // already-issued token predating this field must still deserialize.
+    #[serde(default)]
+    pub plan_type: Option<String>,
 }
 
 impl LicenseClaims {
@@ -253,6 +262,10 @@ pub struct LicenseStatus {
     pub state: String,
     pub client_reference_id: Option<String>,
     pub expires_at: Option<String>,
+    /// "trial" | "annual" | "lifetime", or None for a token issued before
+    /// this field existed (the frontend falls back to its old days-based
+    /// heuristic in that case — see useTrialStatus).
+    pub plan_type: Option<String>,
 }
 
 fn read_local_token() -> Option<String> {
@@ -315,15 +328,16 @@ fn verify_local(token: &str) -> Result<LicenseClaims, String> {
 /// the write-command gate. Never blocks on I/O beyond one small file read.
 pub fn current_status() -> LicenseStatus {
     let Some(token) = read_local_token() else {
-        return LicenseStatus { state: "not_activated".to_string(), client_reference_id: None, expires_at: None };
+        return LicenseStatus { state: "not_activated".to_string(), client_reference_id: None, expires_at: None, plan_type: None };
     };
     match verify_local(&token) {
         Ok(claims) => LicenseStatus {
             state: "active".to_string(),
             client_reference_id: Some(claims.client_reference_id.clone()),
             expires_at: Some(unix_to_iso(claims.display_expires_at())),
+            plan_type: claims.plan_type.clone(),
         },
-        Err(_) => LicenseStatus { state: "read_only".to_string(), client_reference_id: None, expires_at: None },
+        Err(_) => LicenseStatus { state: "read_only".to_string(), client_reference_id: None, expires_at: None, plan_type: None },
     }
 }
 

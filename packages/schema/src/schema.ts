@@ -421,6 +421,17 @@ export const licenseContactStatusEnum = pgEnum("license_contact_status", [
   "non_interesse",
 ]);
 
+// Explicit plan identity, replacing a fragile "guess trial vs. paid from
+// days remaining" heuristic on the desktop app's side — a self-service
+// trial and a freshly-activated year-long paid license both sign a token
+// with a real, far-future expiry, so days-remaining alone can never
+// reliably tell them apart. This is the one authoritative signal: set once
+// at creation ("trial" for POST /licenses/request-trial and the admin
+// dashboard's Essai plans, "annual"/"lifetime" for a paid plan), and
+// flipped explicitly by the admin dashboard's "Convertir en Annuel" action
+// or a manual override — never inferred.
+export const licensePlanTypeEnum = pgEnum("license_plan_type", ["trial", "annual", "lifetime"]);
+
 export const licenses = pgTable("licenses", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Human-readable, shown to the customer — e.g. "SORDI-A1B2C3".
@@ -438,6 +449,7 @@ export const licenses = pgTable("licenses", {
   maxDevices: integer("max_devices").notNull().default(2),
   status: licenseStatusEnum("status").notNull().default("active"),
   contactStatus: licenseContactStatusEnum("contact_status").notNull().default("a_contacter"),
+  planType: licensePlanTypeEnum("plan_type").notNull().default("trial"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   clientReferenceIdUnique: uniqueIndex("licenses_client_reference_id_idx").on(t.clientReferenceId),

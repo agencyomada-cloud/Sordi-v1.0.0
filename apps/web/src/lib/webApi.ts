@@ -15,6 +15,7 @@ export class WebApiError extends Error {
 }
 
 export type ContactStatus = "a_contacter" | "en_cours" | "converti" | "non_interesse";
+export type PlanType = "trial" | "annual" | "lifetime";
 
 export interface GenerateLicenseInput {
   organizationName: string;
@@ -22,6 +23,7 @@ export interface GenerateLicenseInput {
   email: string;
   expiresAt: string;
   maxDevices?: number;
+  planType?: PlanType;
 }
 
 export interface GeneratedLicenseResult {
@@ -42,6 +44,7 @@ export interface License {
   maxDevices: number;
   status: "active" | "expired" | "revoked";
   contactStatus: ContactStatus;
+  planType: PlanType;
   createdAt: string;
   deviceCount: number;
 }
@@ -134,6 +137,47 @@ export const webApi = {
         "x-admin-secret": adminSecret,
       },
       body: JSON.stringify({ contactStatus }),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  // Manual override for the rare miscategorized case — doesn't touch
+  // expiresAt or contactStatus, just the plan identity itself.
+  updatePlanType: async (id: string, planType: PlanType, adminSecret: string): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/plan-type`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ planType }),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  // Atomic "extend + mark paid" — replaces composing extendLicense +
+  // updateContactStatus as two separate calls, which never updated
+  // planType and left a converted license looking like a trial forever
+  // from the desktop app's perspective.
+  convertToPaid: async (
+    id: string,
+    days: number,
+    planType: "annual" | "lifetime",
+    adminSecret: string
+  ): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/convert-to-paid`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ days, planType }),
     });
 
     if (!res.ok) return parseJsonError(res);
