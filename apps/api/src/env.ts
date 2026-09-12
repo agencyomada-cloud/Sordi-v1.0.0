@@ -18,11 +18,14 @@ const envSchema = z.object({
   LICENSE_ADMIN_SECRET: z.string().min(16, "LICENSE_ADMIN_SECRET must be set to a real secret"),
 
   // Lead-download notification email (see services/notifyService.ts) — both
-  // optional. Genuinely absent (not just empty) in most dev setups until an
-  // admin sets up a real Resend account, so the notifier no-ops rather than
-  // failing startup when either is missing.
-  RESEND_API_KEY: z.string().min(1).optional(),
-  ADMIN_NOTIFICATION_EMAIL: z.string().email().optional(),
+  // optional, and tolerant of an empty string too, not just an absent key:
+  // some hosts (Dokploy included) always set every declared env var, using
+  // "" for one left blank in the UI, which is a defined-but-empty string,
+  // not undefined — .optional() alone doesn't let that through .min(1)/
+  // .email(), so the empty case is caught first and normalized to
+  // undefined before the real check runs.
+  RESEND_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
+  ADMIN_NOTIFICATION_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
 
   // Landing page download CTAs (apps/web) — placeholder targets until real
   // installer artifacts are hosted somewhere. Defaulted rather than
