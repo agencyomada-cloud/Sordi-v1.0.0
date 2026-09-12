@@ -30,8 +30,8 @@ const envSchema = z.object({
   // Landing page download CTAs (apps/web) — placeholder targets until real
   // installer artifacts are hosted somewhere. Defaulted rather than
   // required so the API and web app still boot without them configured.
-  DOWNLOAD_URL_MACOS: z.string().min(1).default("/downloads/sordi-finance-mac.dmg"),
-  DOWNLOAD_URL_WINDOWS: z.string().min(1).default("/downloads/sordi-finance-windows.exe"),
+  DOWNLOAD_URL_MACOS: z.string().min(1).default("/downloads/sordi-invoicing-mac.dmg"),
+  DOWNLOAD_URL_WINDOWS: z.string().min(1).default("/downloads/sordi-invoicing-windows.exe"),
 });
 
 const parsed = envSchema.safeParse(process.env);

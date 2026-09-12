@@ -2,8 +2,8 @@
 // modal, no form, no lead-capture step of any kind. A click must produce a
 // file download immediately, with nothing in between.
 const DOWNLOAD_URL: Record<"macos" | "windows", string> = {
-  macos: "/downloads/sordi-finance-mac.dmg",
-  windows: "/downloads/sordi-finance-win.exe",
+  macos: "/downloads/sordi-invoicing-mac.dmg",
+  windows: "/downloads/sordi-invoicing-windows.exe",
 };
 
 export function triggerDirectDownload(osType: "macos" | "windows" = "macos") {
