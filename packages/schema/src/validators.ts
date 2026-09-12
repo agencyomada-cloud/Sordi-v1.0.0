@@ -172,6 +172,13 @@ export const licenseConvertToPaidSchema = z.object({
   planType: z.enum(["annual", "lifetime"]).default("annual"),
 });
 
+// DELETE /licenses/:id/activations — "Délier l'appareil", the admin
+// dashboard's device-detail panel. Body-based (not a path param) since a
+// device fingerprint is an opaque, potentially URL-unfriendly hash.
+export const licenseUnlinkDeviceSchema = z.object({
+  deviceFingerprint: z.string().min(1),
+});
+
 // ---------------------------------------------------------------------------
 // Device telemetry & admin license issuing (apps/api/src/routes/telemetry.ts,
 // apps/api/src/routes/adminLicenses.ts)

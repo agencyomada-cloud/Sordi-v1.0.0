@@ -2,7 +2,7 @@ import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { licenseActivations, licenses } from "@sordi/schema";
 
-export type NewLicenseInput = Omit<typeof licenses.$inferInsert, "id" | "createdAt" | "activatedAt">;
+export type NewLicenseInput = Omit<typeof licenses.$inferInsert, "id" | "createdAt" | "activatedAt" | "updatedAt">;
 
 // Unlike clients/products (org-scoped, see clients.ts's comment), licenses
 // are looked up globally by licenseKey/clientReferenceId — there is no
@@ -60,12 +60,35 @@ export const licensesRepo = {
   touchLastVerified: (id: string) =>
     db.update(licenseActivations).set({ lastVerifiedAt: new Date() }).where(eq(licenseActivations.id, id)),
 
-  // Admin dashboard's license table. Joins in the live activation count per
-  // license (not a stored column — recomputed from license_activations, the
-  // same source countDevices() reads) so "2 / 2 appareils" reflects reality
-  // even though no route ever writes an activation count onto the row
-  // itself. Newest first, since that's the order a salesperson wants to
-  // find "the license I just created."
+  // Every device fingerprint activated against a license, for the admin
+  // dashboard's "Voir détails" panel (support needs the raw fingerprint to
+  // help a customer who's hit their device quota figure out which machine
+  // to unlink).
+  listActivations: (licenseId: string) =>
+    db
+      .select()
+      .from(licenseActivations)
+      .where(eq(licenseActivations.licenseId, licenseId))
+      .orderBy(desc(licenseActivations.activatedAt)),
+
+  // "Délier l'appareil" — frees one device slot without touching the
+  // license itself (distinct from remove() below, which deletes the whole
+  // license and cascades every activation). Scoped by licenseId too, not
+  // just the activation's own id, so a caller can't accidentally unlink a
+  // device belonging to a DIFFERENT license by guessing/reusing an id.
+  removeActivation: (licenseId: string, deviceFingerprint: string) =>
+    db
+      .delete(licenseActivations)
+      .where(and(eq(licenseActivations.licenseId, licenseId), eq(licenseActivations.deviceFingerprint, deviceFingerprint)))
+      .returning()
+      .then((rows) => rows[0] ?? null),
+
+  // Admin dashboard's license table. Joins in the live activation count AND
+  // the actual fingerprints per license (not stored columns — recomputed
+  // from license_activations each time) so both "2 / 2 appareils" and the
+  // dashboard's device-fingerprint search stay accurate without a
+  // separate round trip per license. Newest first, since that's the order
+  // a salesperson wants to find "the license I just created."
   list: (opts: { search?: string; limit?: number } = {}) => {
     const conditions = opts.search ? [ilike(licenses.organizationName, `%${opts.search}%`)] : [];
     return db
@@ -83,10 +106,15 @@ export const licensesRepo = {
         contactStatus: licenses.contactStatus,
         planType: licenses.planType,
         createdAt: licenses.createdAt,
+        updatedAt: licenses.updatedAt,
         deviceCount: sql<number>`coalesce(${db
           .select({ value: count() })
           .from(licenseActivations)
           .where(eq(licenseActivations.licenseId, licenses.id))}, 0)`,
+        deviceFingerprints: sql<string[]>`coalesce(${db
+          .select({ value: sql`array_agg(${licenseActivations.deviceFingerprint})` })
+          .from(licenseActivations)
+          .where(eq(licenseActivations.licenseId, licenses.id))}, array[]::text[])`,
       })
       .from(licenses)
       .where(conditions.length ? and(...conditions) : undefined)
@@ -102,7 +130,8 @@ export const licensesRepo = {
   // licenses.ts route comment history). Once revoked, /licenses/activate
   // and /verify's `status !== "active"` check already rejects it — no
   // change needed on that side.
-  revoke: (id: string) => db.update(licenses).set({ status: "revoked" }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+  revoke: (id: string) =>
+    db.update(licenses).set({ status: "revoked", updatedAt: new Date() }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 
   // Adds `days` on top of the CURRENT expiresAt (read-modify-write in one
   // round trip via SQL interval arithmetic), not "now + days" — a license
@@ -112,18 +141,18 @@ export const licensesRepo = {
   extend: (id: string, days: number) =>
     db
       .update(licenses)
-      .set({ expiresAt: sql`${licenses.expiresAt} + (${days} * interval '1 day')` })
+      .set({ expiresAt: sql`${licenses.expiresAt} + (${days} * interval '1 day')`, updatedAt: new Date() })
       .where(eq(licenses.id, id))
       .returning()
       .then((rows) => rows[0] ?? null),
 
   updateContactStatus: (id: string, contactStatus: (typeof licenses.$inferSelect)["contactStatus"]) =>
-    db.update(licenses).set({ contactStatus }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+    db.update(licenses).set({ contactStatus, updatedAt: new Date() }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 
   // Manual override — see licensePlanTypeSchema's doc comment for when
   // this is used on its own vs. convertToPaid below for the common case.
   updatePlanType: (id: string, planType: (typeof licenses.$inferSelect)["planType"]) =>
-    db.update(licenses).set({ planType }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+    db.update(licenses).set({ planType, updatedAt: new Date() }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 
   // Atomic version of "extend + mark converted" — the admin dashboard's
   // "Convertir en Annuel" action used to compose extend() and
@@ -138,6 +167,7 @@ export const licensesRepo = {
         expiresAt: sql`${licenses.expiresAt} + (${days} * interval '1 day')`,
         contactStatus: "converti",
         planType,
+        updatedAt: new Date(),
       })
       .where(eq(licenses.id, id))
       .returning()

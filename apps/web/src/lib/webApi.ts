@@ -46,7 +46,17 @@ export interface License {
   contactStatus: ContactStatus;
   planType: PlanType;
   createdAt: string;
+  updatedAt: string;
   deviceCount: number;
+  deviceFingerprints: string[];
+}
+
+export interface DeviceActivation {
+  id: string;
+  licenseId: string;
+  deviceFingerprint: string;
+  activatedAt: string;
+  lastVerifiedAt: string;
 }
 
 async function parseJsonError(res: Response): Promise<never> {
@@ -183,5 +193,30 @@ export const webApi = {
     if (!res.ok) return parseJsonError(res);
 
     return res.json();
+  },
+
+  listActivations: async (id: string, adminSecret: string): Promise<{ activations: DeviceActivation[] }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/activations`, {
+      headers: { "x-admin-secret": adminSecret },
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  // "Délier l'appareil" — frees one device slot without touching the
+  // license itself.
+  unlinkDevice: async (id: string, deviceFingerprint: string, adminSecret: string): Promise<void> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/activations`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ deviceFingerprint }),
+    });
+
+    if (!res.ok) return parseJsonError(res);
   },
 };

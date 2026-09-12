@@ -11,6 +11,7 @@ import {
   licenseListQuerySchema,
   licensePlanTypeSchema,
   licenseRequestTrialSchema,
+  licenseUnlinkDeviceSchema,
   licenseVerifySchema,
   type LicenseState,
 } from "@sordi/schema";
@@ -368,6 +369,49 @@ licensesRouter.patch(
     }
     const updated = await licensesRepo.convertToPaid(req.params.id, parsed.data.days, parsed.data.planType);
     res.json({ license: updated });
+  })
+);
+
+// Admin dashboard's "Voir détails" panel — every device fingerprint
+// activated against this license, for support to identify which machine
+// to unlink when a customer has hit their device quota.
+licensesRouter.get(
+  "/:id/activations",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const activations = await licensesRepo.listActivations(req.params.id);
+    res.json({ activations });
+  })
+);
+
+// "Délier l'appareil" — frees one device slot without touching the
+// license's own status/expiry/plan, distinct from DELETE /:id below
+// (which removes the whole license and cascades every activation).
+licensesRouter.delete(
+  "/:id/activations",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseUnlinkDeviceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const removed = await licensesRepo.removeActivation(req.params.id, parsed.data.deviceFingerprint);
+    if (!removed) {
+      res.status(404).json({ error: "activation_not_found" });
+      return;
+    }
+    res.status(204).send();
   })
 );
 

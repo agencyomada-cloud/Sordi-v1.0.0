@@ -453,6 +453,11 @@ export const licenses = pgTable("licenses", {
   contactStatus: licenseContactStatusEnum("contact_status").notNull().default("a_contacter"),
   planType: licensePlanTypeEnum("plan_type").notNull().default("trial"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Bumped by every admin write (revoke/extend/contact-status/plan-type/
+  // convert-to-paid) — the admin dashboard's notification center uses this
+  // to detect "this license was converted recently" (contactStatus alone
+  // has no timestamp of its own to say WHEN it changed).
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   clientReferenceIdUnique: uniqueIndex("licenses_client_reference_id_idx").on(t.clientReferenceId),
   licenseKeyUnique: uniqueIndex("licenses_license_key_idx").on(t.licenseKey),

@@ -57,6 +57,13 @@
       "when": 1789240003258,
       "tag": "0007_minor_union_jack",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789241672811,
+      "tag": "0008_great_wild_pack",
+      "breakpoints": true
     }
   ]
 }
