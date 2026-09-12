@@ -16,6 +16,8 @@ import {
 import { Button, Input, Label, Textarea } from "@sordi/ui";
 import { useClient, useCreateClient, useUpdateClient, type CreateClientData } from "@/hooks/useClients";
 import { toast } from "sonner";
+import { useLicenseGate } from "@/hooks/useLicenseGate";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 const defaultForm: Omit<CreateClientData, "company_id"> = {
   name: "",
@@ -65,6 +67,7 @@ export default function NewClientPage() {
   const { data: existingClient, isLoading: isLoadingClient } = useClient(id);
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
+  const { requireActive, blockedOpen, setBlockedOpen } = useLicenseGate();
 
   const [formData, setFormData] = useState<Omit<CreateClientData, "company_id">>(defaultForm);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
@@ -122,6 +125,8 @@ export default function NewClientPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!requireActive()) return;
 
     if (!formData.name.trim()) {
       toast.error("Le nom du client est requis");
@@ -452,6 +457,8 @@ export default function NewClientPage() {
               </div>
             </div>
           </form>
+
+      <LicenseBlockedModal open={blockedOpen} onOpenChange={setBlockedOpen} />
     </main>
   );
 }

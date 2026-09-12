@@ -180,7 +180,12 @@ export function useCreateInvoice() {
       if (error.issues) {
         toast.error(error.issues[0]?.message || "Erreur de validation");
       } else {
-        toast.error("Erreur lors de la création de la facture");
+        // Show the real backend message (e.g. require_active_license()'s
+        // license-expired rejection) instead of a generic fallback that
+        // would hide exactly the information the user needs — same
+        // reasoning as useUpdateInvoice's onError below.
+        const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+        toast.error(message || "Erreur lors de la création de la facture");
       }
       logError("Invoice creation error", error);
     },

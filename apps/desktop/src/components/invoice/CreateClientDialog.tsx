@@ -3,6 +3,8 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 import { RiLoader4Line as Loader2 } from "@remixicon/react";
 import { useCreateClient } from "@/hooks/useClients";
 import { toast } from "sonner";
+import { useLicenseGate } from "@/hooks/useLicenseGate";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 interface CreateClientDialogProps {
   open: boolean;
@@ -28,6 +30,7 @@ export function CreateClientDialog({ open, onOpenChange, initialName, onCreated 
   const [nif, setNif] = useState("");
   const [address, setAddress] = useState("");
   const createClient = useCreateClient();
+  const { requireActive, blockedOpen, setBlockedOpen } = useLicenseGate();
 
   useEffect(() => {
     if (open) {
@@ -41,6 +44,7 @@ export function CreateClientDialog({ open, onOpenChange, initialName, onCreated 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireActive()) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       toast.error("Le nom du client est requis");
@@ -101,6 +105,8 @@ export function CreateClientDialog({ open, onOpenChange, initialName, onCreated 
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <LicenseBlockedModal open={blockedOpen} onOpenChange={setBlockedOpen} />
     </Dialog>
   );
 }

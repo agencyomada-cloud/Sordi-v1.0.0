@@ -44,6 +44,7 @@ import { useParams } from "react-router-dom";
 import { useClearClientDraftProducts } from "@/hooks/useClientDraftProducts";
 import { useAddClientAdvance } from "@/hooks/useClientAdvances";
 import { useSecureSession } from "@/hooks/useSecureSession";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 interface InvoiceItem {
   product_id: string;
@@ -142,6 +143,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   const [customTitle, setCustomTitle] = useState(draftData?.customTitle || (documentTypeProp === "proforma" ? "Facture Proforma" : ""));
   const [isDownloading, setIsDownloading] = useState(false);
   const [customizeDrawerOpen, setCustomizeDrawerOpen] = useState(false);
+  const [licenseBlockedOpen, setLicenseBlockedOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() => {
     if (draftData?.savedAt) {
       const d = new Date(draftData.savedAt);
@@ -650,6 +652,11 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   };
 
   const submitInvoice = () => {
+    if (licenseStatus?.state !== "active") {
+      setLicenseBlockedOpen(true);
+      return;
+    }
+
     const validItems = items.filter(item => item.quantity > 0);
 
     if (!clientId || validItems.length === 0) {
@@ -1083,6 +1090,8 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <LicenseBlockedModal open={licenseBlockedOpen} onOpenChange={setLicenseBlockedOpen} />
         </main>
   );
 }

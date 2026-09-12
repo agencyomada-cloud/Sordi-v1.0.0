@@ -77,7 +77,8 @@ export function useCreateClient() {
       if (error.issues) {
         toast.error(error.issues[0]?.message || "Erreur de validation");
       } else {
-        toast.error("Erreur lors de la création du client");
+        const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+        toast.error(message || "Erreur lors de la création du client");
       }
       logError("Client creation error", error);
     },

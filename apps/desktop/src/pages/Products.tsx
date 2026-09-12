@@ -21,6 +21,8 @@ import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } fro
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import type { CreateProductData, Product } from "@/lib/database";
 import { cn } from "@/lib/utils";
+import { useLicenseGate } from "@/hooks/useLicenseGate";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 // Agency billing units, replacing the old weight/volume units (tonne, m³...).
 // "Forfait / Projet" is the default — most agency work is scoped/quoted, not
@@ -99,6 +101,7 @@ export default function ProductsPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const { requireActive, blockedOpen, setBlockedOpen } = useLicenseGate();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const filteredProducts = products?.filter((p) => {
@@ -258,6 +261,7 @@ export default function ProductsPage() {
   }, [newProduct]);
 
   const handleCreateProduct = () => {
+    if (!requireActive()) return;
     if (!newProduct.code.trim() || !newProduct.name.trim()) return;
     createProduct.mutate({ ...newProduct, timbre_exempt: newProductExemptFromTimbre }, {
       onSuccess: () => {
@@ -269,11 +273,13 @@ export default function ProductsPage() {
   };
 
   const startEdit = (product: Product) => {
+    if (!requireActive()) return;
     setEditingProduct(product);
     setIsEditDialogOpen(true);
   };
 
   const handleDelete = () => {
+    if (!requireActive()) return;
     if (!productToDelete) return;
     deleteProduct.mutate(productToDelete, {
       onSuccess: () => {
@@ -284,6 +290,7 @@ export default function ProductsPage() {
   };
 
   const handleUpdateProduct = () => {
+    if (!requireActive()) return;
     if (!editingProduct || !editProductData.code.trim() || !editProductData.name.trim()) return;
     updateProduct.mutate({ id: editingProduct.id, data: { ...editProductData, timbre_exempt: editProductExemptFromTimbre } }, {
       onSuccess: () => {
@@ -395,6 +402,7 @@ export default function ProductsPage() {
                             <TooltipTrigger asChild>
                               <button
                                 onClick={() => {
+                                  if (!requireActive()) return;
                                   setProductToDelete(product.id);
                                   setDeleteDialogOpen(true);
                                 }}
@@ -417,7 +425,13 @@ export default function ProductsPage() {
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="h-9 mb-3 flex items-center justify-between gap-4">
             <h1 className="text-sm font-semibold text-foreground truncate">Catalogue &amp; Services</h1>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog
+              open={isDialogOpen}
+              onOpenChange={(next) => {
+                if (next && !requireActive()) return;
+                setIsDialogOpen(next);
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="h-[30px] px-3 text-xs font-medium rounded-md gap-1.5">
                   <Plus className="w-3.5 h-3.5" />
@@ -905,6 +919,8 @@ export default function ProductsPage() {
         isLoading={deleteProduct.isPending}
         onConfirm={handleDelete}
       />
+
+      <LicenseBlockedModal open={blockedOpen} onOpenChange={setBlockedOpen} />
     </>
   );
 }

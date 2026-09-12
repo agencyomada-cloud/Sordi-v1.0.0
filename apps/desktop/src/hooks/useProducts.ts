@@ -35,7 +35,8 @@ export function useCreateProduct() {
       toast.success("Produit créé avec succès");
     },
     onError: (error: any) => {
-      toast.error("Erreur lors de la création du produit");
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+      toast.error(message || "Erreur lors de la création du produit");
       logError("Product create error", error);
     },
   });
