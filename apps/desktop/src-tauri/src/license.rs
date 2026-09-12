@@ -19,13 +19,17 @@ use std::sync::OnceLock;
 // https://api.sordi.app). Whoever decompiles this binary gets a key that
 // can *verify* tokens, never forge one.
 //
-// PRODUCTION KEY — matches the Ed25519 keypair the production API signs
-// licenses with. Never revert this to the old dev/test key once real
-// licenses have been issued against it; doing so would invalidate every
-// license already signed with this key. Rotating this constant at all
-// invalidates every previously issued license — treat it as a one-way
-// door.
-const LICENSE_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEASfG68XhH5V8qB+Qy/dZp3e4lG+r4kZ8Z4B/G+9pG7kA=\n-----END PUBLIC KEY-----\n";
+// PRODUCTION KEY — matches the Ed25519 keypair the production API
+// (api.sordi.app's LICENSE_PRIVATE_KEY_PEM) actually signs licenses with,
+// confirmed by deriving the public key from the live env var and comparing
+// it byte-for-byte against this constant. A prior value here was a stale
+// key that had never actually been paired with what's deployed — every
+// activation failed with InvalidSignature as a result. Never revert to an
+// older key once real licenses have been issued against this one; doing so
+// invalidates every license already signed with it. Rotating this constant
+// at all invalidates every previously issued license — treat it as a
+// one-way door.
+const LICENSE_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAqTG3Y2HPE4cu9D7+TGYthikQ9jXJz78GP1twfnfIICA=\n-----END PUBLIC KEY-----\n";
 
 // Override at build time for a real deployment:
 //   SORDI_LICENSE_API_URL=https://api.sordi.app cargo build --release
