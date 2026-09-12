@@ -21,24 +21,28 @@ export function useMachineId() {
   });
 }
 
-// Soft, informational trial window — NOT the real enforcement boundary.
-// Actual write-access gating happens server/Rust-side via LicenseStatus.state
-// (require_active_license() in license.rs); this is purely a UI countdown so
-// the banner can say "N jours restants" instead of a static "vous êtes en
-// essai". Anchored to the active company's own `created_at` (a real,
-// already-persisted SQLite timestamp set once at onboarding) rather than a
-// separate localStorage flag, which would reset the moment someone clears
-// site data — using created_at means the countdown at least survives that,
-// even though it's still not tamper-proof (nothing here needs to be: a
-// user who edits their own local trial countdown display doesn't gain any
-// actual unlicensed write access, since that's gated separately).
-const TRIAL_LENGTH_DAYS = 14;
+// Soft, informational banner — NOT the real enforcement boundary. Actual
+// write-access gating happens server/Rust-side via LicenseStatus.state
+// (require_active_license() in license.rs); this is purely a UI countdown.
+//
+// LicenseStatus has no field distinguishing a self-service 14-day trial
+// (POST /licenses/request-trial) from a paid annual/lifetime license —
+// both come back as state: "active" with a real expires_at claim from the
+// signed token, since a trial is just a license row with a short term.
+// Rather than invent a client-side "trial" concept the server doesn't
+// actually track, the banner shows for ANY active license approaching its
+// real expiry (⩽30 days), which is useful for a paying customer's annual
+// renewal too, not just a trial — and shows unconditionally whenever the
+// license isn't active at all (read_only/not_activated), same as before.
+const EXPIRY_WARNING_WINDOW_DAYS = 30;
 
 export interface TrialStatus {
-  /** True whenever the license isn't fully "active" — i.e. still on the
-   *  informational trial clock, whether or not that clock has run out. */
+  /** True whenever the banner should show: not fully "active" at all, or
+   *  active but within EXPIRY_WARNING_WINDOW_DAYS of expiring. */
   isTrial: boolean;
-  /** Clamped to 0 once the trial window has elapsed — never negative. */
+  /** Days until expires_at, clamped to 0. Only meaningful/precise when the
+   *  license is "active" with a real expires_at; a flat fallback otherwise
+   *  (not_activated/read_only have no expiry claim to count down from). */
   trialDaysRemaining: number;
   machineId: string | undefined;
   isLoading: boolean;
@@ -46,22 +50,22 @@ export interface TrialStatus {
 
 export function useTrialStatus(): TrialStatus {
   const { data: status, isLoading: statusLoading } = useLicenseStatus();
-  const { companies, activeCompanyId, isReady } = useWorkspace();
+  const { isReady } = useWorkspace();
   const { data: machineId, isLoading: machineIdLoading } = useMachineId();
 
-  const isTrial = status?.state !== "active";
+  const isActive = status?.state === "active";
 
-  const activeCompany = companies.find((c) => c.id === activeCompanyId);
-  let trialDaysRemaining = TRIAL_LENGTH_DAYS;
-  if (activeCompany?.created_at) {
-    const createdAt = new Date(activeCompany.created_at).getTime();
-    const daysSinceCreation = Math.floor((Date.now() - createdAt) / 86_400_000);
-    trialDaysRemaining = Math.max(0, TRIAL_LENGTH_DAYS - daysSinceCreation);
+  let daysRemaining = EXPIRY_WARNING_WINDOW_DAYS;
+  if (isActive && status?.expires_at) {
+    const msRemaining = new Date(status.expires_at).getTime() - Date.now();
+    daysRemaining = Math.max(0, Math.ceil(msRemaining / 86_400_000));
   }
+
+  const isTrial = !isActive || daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS;
 
   return {
     isTrial,
-    trialDaysRemaining,
+    trialDaysRemaining: daysRemaining,
     machineId,
     isLoading: statusLoading || machineIdLoading || !isReady,
   };
