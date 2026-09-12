@@ -1,17 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { db } from "../lib/database";
-import { format, formatDistanceToNow, getMonth, parseISO, startOfYear, endOfYear } from "date-fns";
+import { format, getMonth, parseISO, startOfYear, endOfYear } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
     RiRefreshLine as RefreshCw,
-    RiFilter3Line as Filter,
     RiCloseLine as X,
     RiDownloadLine as Download,
     RiDeleteBinLine as Trash2,
 } from "@remixicon/react";
-import { getActionColor, getActionLabel, getEntityConfig, getEntityRoute } from "@/lib/activityLog";
+import { getActionLabel, getEntityConfig, getEntityRoute } from "@/lib/activityLog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { exportToCSV } from "../lib/csvUtils";
@@ -31,8 +30,17 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    Skeleton,
     EmptyState,
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+    TableLoading,
 } from "@sordi/ui";
 
 // Same solid-dot palette as the Dashboard's Activité Récente timeline —
@@ -88,13 +96,14 @@ export default function History() {
         ),
     });
 
-    // Client-side filtering for Months
-    const filteredLogs = logs?.filter(log => {
+    // Client-side filtering for Months — memoized so it doesn't re-scan
+    // the fetched log list on every unrelated re-render.
+    const filteredLogs = useMemo(() => logs?.filter(log => {
         if (selectedMonths.length === 0) return true;
         const logDate = parseISO(log.created_at);
         const month = (getMonth(logDate) + 1).toString();
         return selectedMonths.includes(month);
-    });
+    }), [logs, selectedMonths]);
 
     const clearFilters = () => {
         setEntityType("all");
@@ -150,44 +159,49 @@ export default function History() {
 
     return (
         <>
-                <main className="flex-1 p-8 pt-4 space-y-8">
+                <main className="flex-1 p-6 space-y-5">
                     {/* Header */}
-                    <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-4">
+                    <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-3">
                         <div>
-                            <h1 className="text-3xl font-bold text-foreground tracking-tight">Historique</h1>
-                            <p className="text-muted-foreground mt-1">Suivez toutes les activités et changements</p>
+                            <h1 className="text-lg font-semibold text-foreground tracking-tight">Historique</h1>
+                            <p className="text-xs text-muted-foreground mt-0.5">Suivez toutes les activités et changements</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handleExport} className="h-9 gap-2">
-                                <Download className="w-4 h-4" />
+                        <div className="flex items-center gap-1.5">
+                            <Button variant="outline" size="sm" onClick={handleExport} className="h-[30px] gap-1.5 text-xs rounded-md">
+                                <Download className="w-3.5 h-3.5" />
                                 Exporter
                             </Button>
                             <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
                                 onClick={() => setIsClearDialogOpen(true)}
                                 disabled={!logs || logs.length === 0}
-                                className="h-9 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                                className="h-[30px] gap-1.5 text-xs rounded-md text-muted-foreground hover:text-destructive"
                             >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                                 Effacer l'historique
                             </Button>
-                            <Button size="sm" onClick={() => { refetch(); toast.success("Historique actualisé"); }} className="h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm border-0 font-medium">
-                                <RefreshCw className="w-4 h-4" />
-                                Actualiser
-                            </Button>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => { refetch(); toast.success("Historique actualisé"); }}
+                                        className="h-[30px] w-[30px] rounded-md"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">Actualiser</TooltipContent>
+                            </Tooltip>
                         </div>
                     </div>
 
-                    {/* Filters Bar */}
-                    <div className="flex flex-wrap gap-4 items-center bg-card p-4 rounded-3xl border border-border/30 shadow-sm relative z-30">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
-                            <Filter className="w-4 h-4" />
-                            <span className="font-medium">Filtres:</span>
-                        </div>
-
+                    {/* Filter bar — a plain row with a bottom hairline, not a
+                        floating rounded-3xl card. */}
+                    <div className="flex flex-wrap gap-2 items-center pb-3 border-b border-border/70">
                         <Select value={entityType} onValueChange={setEntityType}>
-                            <SelectTrigger className="w-[200px]">
+                            <SelectTrigger className="w-[170px] h-[30px] text-xs rounded-md">
                                 <SelectValue placeholder="Entité" />
                             </SelectTrigger>
                             <SelectContent>
@@ -204,7 +218,7 @@ export default function History() {
                         </Select>
 
                         <Select value={action} onValueChange={setAction}>
-                            <SelectTrigger className="w-[200px]">
+                            <SelectTrigger className="w-[150px] h-[30px] text-xs rounded-md">
                                 <SelectValue placeholder="Action" />
                             </SelectTrigger>
                             <SelectContent>
@@ -216,7 +230,7 @@ export default function History() {
                             </SelectContent>
                         </Select>
 
-                        <div className="h-8 w-px bg-border mx-2 hidden md:block"></div>
+                        <div className="h-4 w-px bg-border mx-1 hidden md:block" aria-hidden="true" />
 
                         {/* Date Filters matching Dashboard */}
                         <MultiSelect
@@ -225,11 +239,11 @@ export default function History() {
                             selected={selectedMonths}
                             onChange={setSelectedMonths}
                             placeholder="Filtrer par mois..."
-                            className="w-64"
+                            className="w-56 h-[30px] text-xs"
                         />
 
                         <Select value={selectedYear} onValueChange={setSelectedYear}>
-                            <SelectTrigger className="w-32">
+                            <SelectTrigger className="w-24 h-[30px] text-xs rounded-md">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -240,86 +254,70 @@ export default function History() {
                         </Select>
 
                         {hasActiveFilters && (
-                            <Button variant="ghost" size="sm" onClick={clearFilters} className="ml-auto h-11 text-destructive hover:text-destructive hover:bg-destructive/10">
-                                <X className="w-4 h-4 mr-2" />
+                            <Button variant="ghost" size="sm" onClick={clearFilters} className="ml-auto h-[30px] text-xs rounded-md text-muted-foreground hover:text-destructive">
+                                <X className="w-3.5 h-3.5 mr-1" />
                                 Effacer
                             </Button>
                         )}
                     </div>
 
-                    {/* Interactive timeline / feed — same avatar-chip, entity-chip,
-                        and relative-date pattern as the Dashboard's Activité
-                        Récente card, instead of a flat raw database table. Days
-                        are grouped with a sticky date header so a long history
-                        still reads as a scannable feed rather than a log dump. */}
-                    <div className="bg-card/60 backdrop-blur-sm rounded-3xl border border-border/40 p-2">
-                        {isLoading ? (
-                            <div className="px-4 py-2">
-                                {[1, 2, 3, 4, 5].map((i) => (
-                                    <div key={i} className="flex items-start gap-3 p-2">
-                                        <Skeleton className="w-8 h-8 rounded-full shrink-0" />
-                                        <div className="min-w-0 flex-1 pt-1 space-y-1.5">
-                                            <Skeleton className="h-4 w-2/3" />
-                                            <Skeleton className="h-3 w-24" />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : filteredLogs && filteredLogs.length > 0 ? (
-                            (() => {
-                                // Group consecutive entries by calendar day for the
-                                // sticky day headers, preserving the existing sort order.
-                                const groups: { day: string; logs: typeof filteredLogs }[] = [];
-                                for (const log of filteredLogs) {
-                                    const day = format(new Date(log.created_at), "yyyy-MM-dd");
-                                    const last = groups[groups.length - 1];
-                                    if (last && last.day === day) last.logs.push(log);
-                                    else groups.push({ day, logs: [log] });
-                                }
-                                return groups.map((group) => (
-                                    <div key={group.day} className="mb-2 last:mb-0">
-                                        <div className="sticky top-0 z-10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-card/95 backdrop-blur-sm rounded-xl">
-                                            {format(parseISO(group.day), "EEEE d MMMM yyyy", { locale: fr })}
-                                        </div>
-                                        <ol className="relative px-4">
-                                            {group.logs.map((log, i) => {
-                                                const entityConfig = getEntityConfig(log.entity_type);
-                                                const isLast = i === group.logs.length - 1;
-                                                return (
-                                                    <li key={log.id} className="relative pb-4 last:pb-2">
-                                                        {!isLast && <span className="absolute left-4 top-9 bottom-0 w-px bg-border/60" />}
-                                                        <button
-                                                            onClick={() => navigate(getEntityRoute(log.entity_type, log.entity_id))}
-                                                            className="w-full flex items-start gap-3 text-left group/item p-2 rounded-xl hover:bg-muted/40 transition-colors"
-                                                        >
-                                                            <span className="relative shrink-0 z-10">
-                                                                <span className={cn("flex items-center justify-center w-8 h-8 rounded-full ring-4 ring-card", entityConfig.color)}>{entityConfig.icon}</span>
-                                                                <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-card", ACTION_DOT_COLORS[log.action] || "bg-muted-foreground")} />
-                                                            </span>
-                                                            <span className="min-w-0 flex-1 pt-1">
-                                                                <span className="text-sm text-foreground leading-snug group-hover/item:text-primary transition-colors">{log.description}</span>
-                                                                <span className="flex items-center gap-1.5 mt-1">
-                                                                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", getActionColor(log.action))}>{getActionLabel(log.action)}</span>
-                                                                    <span className="text-[10px] text-muted-foreground/70 font-mono tabular-nums">
-                                                                        {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: fr })}
-                                                                    </span>
-                                                                </span>
-                                                            </span>
-                                                        </button>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ol>
-                                    </div>
-                                ));
-                            })()
-                        ) : (
-                            <EmptyState type="history" title="Aucune activité" description="Aucune activité enregistrée sur cette période" />
-                        )}
+                    {/* Structured desktop audit ledger — a proper table
+                        (Date & Heure | Utilisateur | Module | Action |
+                        Détails) instead of floating bulleted timeline
+                        bubbles. */}
+                    <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                                    <TableHead className="w-36 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date &amp; Heure</TableHead>
+                                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Utilisateur</TableHead>
+                                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Module</TableHead>
+                                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Action</TableHead>
+                                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Détails</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isLoading ? (
+                                    <TableLoading columns={5} rows={8} />
+                                ) : filteredLogs && filteredLogs.length > 0 ? (
+                                    filteredLogs.map((log) => {
+                                        const entityConfig = getEntityConfig(log.entity_type);
+                                        return (
+                                            <TableRow
+                                                key={log.id}
+                                                className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer"
+                                                onClick={() => navigate(getEntityRoute(log.entity_type, log.entity_id))}
+                                            >
+                                                <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                                    {format(new Date(log.created_at), "dd/MM/yy HH:mm")}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">
+                                                    {log.user_id || "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", ACTION_DOT_COLORS[log.action] || "bg-muted-foreground")} />
+                                                        {entityConfig.label}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">{getActionLabel(log.action)}</TableCell>
+                                                <TableCell className="text-foreground max-w-[420px] truncate" title={log.description}>{log.description}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={5}>
+                                            <EmptyState type="history" title="Aucune activité" description="Aucune activité enregistrée sur cette période" />
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                         {/* Load More - optional, slightly simplistic with client-side filtering but useful if we hit limit */}
                         {logs && logs.length >= limit && (
-                            <div className="p-4 flex justify-center">
-                                <Button variant="outline" onClick={() => setLimit(l => l + 500)} className="bg-background">
+                            <div className="p-3 border-t border-border/60 flex justify-center">
+                                <Button variant="outline" size="sm" onClick={() => setLimit(l => l + 500)} className="h-[30px] text-xs rounded-md">
                                     Charger plus d'activités
                                 </Button>
                             </div>

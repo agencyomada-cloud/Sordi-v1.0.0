@@ -9,50 +9,10 @@ import {
   getDocumentSectionFlags,
   resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
-
-// The four selectable document fonts (Paramètres > Thème de la facture PDF >
-// Police) — all registered up front; react-pdf only actually fetches the
-// family a given Text style references, so registering all four here costs
-// nothing beyond bookkeeping. Keep in sync with INVOICE_PDF_FONTS.
-Font.register({
-  family: 'Montserrat',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf' },
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Poppins',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf' },
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf' },
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
-  ]
-});
-// Fixed monospace face for all numeric/fiscal data — not user-selectable
-// like the four body fonts above, always JetBrains Mono per the
-// Swiss-minimalist numeric-scale spec.
-Font.register({
-  family: 'JetBrains Mono',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
-  ]
-});
+import { getContrastTextColor } from '@/lib/colorContrast';
+import { PdfStatusBadge } from './PdfStatusBadge';
+import { PDF_PAGE_BASE, STANDARD_MARGIN_PT, LOGO_MAX_WIDTH_PT, resolveLogoMaxHeight, PX_TO_PT_SCALE } from '@/services/export/pdfGeometry';
+import './pdfFonts';
 
 interface InvoiceTemplateEpureProps {
   invoice: PDFInvoice;
@@ -66,28 +26,28 @@ interface InvoiceTemplateEpureProps {
  */
 export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpureProps) {
   const accent = settings?.primary_color || "#476CFF";
+  const headerTextColor = getContrastTextColor(accent);
   const fontFamily = resolveInvoicePdfFontFamily(settings);
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
-  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
-  // 595.28 / 793.700787 = 0.75 pt/px
   const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
   // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
   // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
   // range (80-400), making the control look broken above that point.
-  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampWidth = Math.min(200, Math.round(rawSize * PX_TO_PT_SCALE));
   const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
   const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
   const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
 
   const styles = StyleSheet.create({
     page: {
-      width: 595.28,
-      height: 841.89,
-      paddingTop: 38,
-      paddingLeft: 38,
-      paddingRight: 38,
+      ...PDF_PAGE_BASE,
+      // 52pt (~18.5mm) — an executive-grade print margin, the single left/
+      // right grid line every section aligns to.
+      paddingTop: 44,
+      paddingLeft: STANDARD_MARGIN_PT,
+      paddingRight: STANDARD_MARGIN_PT,
       // The legal-info footer is a `fixed`, absolutely-positioned overlay
       // (bottom: 32, its own content runs ~70-75pt tall) that normal-flow
       // content doesn't know about — without this, a long invoice's content
@@ -102,14 +62,14 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
       backgroundColor: '#ffffff',
     },
 
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-    logoImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
+    logoImage: { maxHeight: resolveLogoMaxHeight(settings), maxWidth: LOGO_MAX_WIDTH_PT, objectFit: 'contain' },
     companyName: { fontSize: 12, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#111111' },
     headerRight: { alignItems: 'flex-end' },
     docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', letterSpacing: -0.3, color: '#111111', textTransform: 'uppercase' },
     docNumber: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#9ca3af', marginTop: 5 },
 
-    metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18 },
+    metaGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
     metaBlock: { width: '46%' },
     metaLabel: { fontFamily, fontWeight: 'bold', fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
     clientName: { fontSize: 11, fontFamily, fontWeight: 'bold', color: '#111111', textTransform: 'uppercase', marginBottom: 2 },
@@ -120,24 +80,29 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111111' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 4, textAlign: 'right' },
 
-    table: { marginBottom: 16 },
+    table: { marginBottom: 18 },
     tableHeaderRow: {
       flexDirection: 'row',
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderColor: 'rgba(0,0,0,0.15)',
-      paddingVertical: 6,
+      backgroundColor: accent,
+      paddingVertical: 8,
+      alignItems: 'center',
     },
-    tableHeaderCell: { fontFamily, fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6 },
-    tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', paddingVertical: 8, alignItems: 'flex-start' },
+    tableHeaderCell: { fontFamily, fontSize: 7.5, color: headerTextColor, textTransform: 'uppercase', letterSpacing: 0.6, paddingHorizontal: 10 },
+    // Absolute + bottom, same idiom as sordiWatermark just below — a
+    // `fixed` element without an explicit position just repeats wherever it
+    // falls in normal flow, which isn't reliably "pinned to the page
+    // bottom" the way this needs to be. Sits between the legal footer
+    // (bottom: 32) and the license watermark (bottom: 8).
+    pageNumber: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 18, fontSize: 7.5, fontFamily: 'Courier', color: '#a1a1aa', letterSpacing: 1, textAlign: 'center' },
+    tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', paddingVertical: 6, alignItems: 'flex-start' },
     colDesignation: { width: '42%' },
     colPrice: { width: '15%', textAlign: 'right' },
     colQty: { width: '9%', textAlign: 'right' },
     colUnit: { width: '16%', textAlign: 'center' },
     colAmount: { width: '18%', textAlign: 'right' },
-    itemName: { fontSize: 9, color: '#111111' },
-    cellText: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#111111' },
-    cellUnit: { fontFamily, fontSize: 8, color: '#9ca3af', textTransform: 'uppercase' },
+    itemName: { fontSize: 9, color: '#111111', paddingHorizontal: 10 },
+    cellText: { fontFamily: 'JetBrains Mono', fontSize: 9, color: '#111111', paddingHorizontal: 10 },
+    cellUnit: { fontFamily, fontSize: 8, color: '#9ca3af', textTransform: 'uppercase', paddingHorizontal: 10 },
 
     // Notes + totals share one row (notesRow) so they read as a single
     // balanced line instead of notes sitting full-width above the totals.
@@ -147,15 +112,24 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     notesText: { fontSize: 8.5, color: '#374151', lineHeight: 1.4 },
 
     totalsContainer: { alignItems: 'flex-end', marginBottom: 16 },
-    totalsBox: { width: '46%' },
-    totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-    totalsLabel: { fontSize: 8.5, color: '#6b7280' },
-    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111111' },
-    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderColor: '#111111' },
-    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#111111' },
-    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: accent },
+    // Fixed pt width, not a percentage — a % here is only as reliable as
+    // every ancestor's own width being exactly what it looks like, and one
+    // of them (the notes+totals row) is a flex child whose real width
+    // isn't guaranteed to match the page's full content width. A fixed
+    // 230pt is generous for "1 190 000.00 DZD" at 8.5-13pt and never
+    // depends on that chain resolving correctly.
+    totalsBox: { width: 230 },
+    totalsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+    totalsLabel: { fontSize: 8.5, color: '#6b7280', flexShrink: 0 },
+    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111111', textAlign: 'right', flexShrink: 0 },
+    ttcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderColor: '#111111' },
+    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#111111', flexShrink: 0 },
+    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: accent, textAlign: 'right', flexShrink: 0 },
 
-    wordsBlock: { maxWidth: 280, paddingRight: 16 },
+    // width (not maxWidth) so the amount always gets the full 62% column
+    // instead of shrink-wrapping to its own text — a narrow maxWidth was
+    // forcing long French amounts to hyphen-break mid-word.
+    wordsBlock: { width: '62%', paddingRight: 16 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 3 },
     wordsValue: { fontSize: 8.5, color: '#374151', lineHeight: 1.4, textTransform: 'uppercase' },
 
@@ -171,10 +145,15 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     },
     signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
     signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
+    // Only applied when no stamp/signature image was uploaded — a real
+    // stamp image fills styles.signatureBox exactly at its own dynamic
+    // dimensions (bound to settings.stamp_size), so a border there would
+    // frame the company's actual stamp like a placeholder.
+    signatureBoxEmptyFrame: { borderWidth: 1, borderColor: '#D1D5DB', borderStyle: 'dashed' },
     signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-    footer: { position: 'absolute', left: 42, right: 42, bottom: 32, paddingTop: 10, borderTopWidth: 0.75, borderColor: '#e5e7eb' },
+    footer: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 35, paddingTop: 10, borderTopWidth: 0.75, borderColor: '#e5e7eb' },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
     footerCol: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     footerItem: { fontSize: 6.8, color: '#6b7280' },
@@ -182,7 +161,7 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
 
-    sordiWatermark: { position: 'absolute', left: 42, right: 42, bottom: 8, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
+    sordiWatermark: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 8, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
   });
 
   const legalItems: { label: string; value?: string }[] = [
@@ -197,14 +176,16 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
     <Document title={`${data.docTitle} ${data.docNumber}`} author={settings?.company_name || undefined}>
       <Page size="A4" style={styles.page}>
 
+        <PdfStatusBadge status={invoice.status} />
+
         <View style={styles.header}>
           <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-            {settings?.logo_data ? (
+            {/* No logo uploaded — collapse to empty space on the issued
+                PDF, not a placeholder box or a repeated company-name line
+                (the legal footer block already carries that). */}
+            {settings?.logo_data && (
               <Image src={settings.logo_data} style={styles.logoImage} />
-            ) : null}
-            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#0f172a', textTransform: 'uppercase', marginTop: 4 }}>
-              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-            </Text>
+            )}
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.docTitle}>{data.docTitle}</Text>
@@ -350,14 +331,20 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
           ) : (
             <View />
           )}
-          <View style={[styles.signBox, { width: stampWidth, minWidth: stampWidth }]}>
+          <View style={[styles.signBox, mainStampUrl ? { width: stampWidth, minWidth: stampWidth } : { width: 140, minWidth: 140 }]}>
             {mainStampUrl && (
               <>
                 <Text style={styles.signLabel}>Cachet et signature</Text>
                 <View style={[styles.signLine, { width: stampWidth }]} />
               </>
             )}
-            <View style={[styles.signatureBox, { width: stampWidth, height: stampHeight }]}>
+            <View
+              style={
+                mainStampUrl
+                  ? [styles.signatureBox, { width: stampWidth, height: stampHeight }]
+                  : [styles.signatureBox, styles.signatureBoxEmptyFrame, { width: 140, height: 75 }]
+              }
+            >
               {!mainStampUrl ? (
                 <View style={styles.signatureBoxEmpty}>
                   <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
@@ -431,6 +418,12 @@ export function InvoiceTemplateEpure({ invoice, settings }: InvoiceTemplateEpure
         {settings?.license_active === false && (
           <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.1 — www.sordi.app</Text>
         )}
+        {/* This template auto-paginates (a single <Page>, react-pdf breaks
+            it up itself) rather than manually chunking items like the
+            Structuré theme — react-pdf's render-prop pattern is the correct
+            way to get "1 / 2" pagination out of that, since there's no
+            pageIndex/pages.length available here to compute it manually. */}
+        <Text style={styles.pageNumber} fixed render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
 
       </Page>
     </Document>

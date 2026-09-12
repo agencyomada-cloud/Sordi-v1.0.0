@@ -6,6 +6,10 @@ import {
   formatCurrency,
 } from "./invoiceHtmlShared";
 import { InteractiveStampZone } from "./InteractiveStampZone";
+import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
+import { PaidWatermark } from "./PaidWatermark";
+import { getContrastTextColor } from "@/lib/colorContrast";
+import type { InvoiceAppearanceConfig } from "@/components/pdf/invoiceAppearance";
 
 interface Props {
   invoice: any;
@@ -17,11 +21,15 @@ interface Props {
 export function InvoiceReadOnlyEpure({
   invoice,
   settings,
+  appearance,
   stampSize,
   onStampSizeChange,
   onStampSizeCommit,
-}: Props & { settings: any }) {
-  const accent = settings?.primary_color || "#476CFF";
+}: Props & { settings: any; appearance: InvoiceAppearanceConfig }) {
+  // Sourced from the shared resolver (same one pdfGenerator.ts consumes),
+  // not re-derived independently from `settings`.
+  const accent = appearance.primaryColor;
+  const fontFamily = `'${appearance.fontFamily}', sans-serif`;
   const data = resolveHtmlInvoiceData(invoice);
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
@@ -29,25 +37,32 @@ export function InvoiceReadOnlyEpure({
   return (
     <div id="invoice-preview">
       {data.pages.map((pageItems, pageIndex) => {
+        const isFirstPage = pageIndex === 0;
         const isLastPage = pageIndex === data.pages.length - 1;
 
         return (
           <div
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-[#1a1a1a] mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', padding: '14mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: "'Space Grotesk', sans-serif" }}
+            className="a4 relative bg-white dark:bg-white text-[#1a1a1a] mx-auto select-text border border-border/80 dark:border-neutral-700 shadow-md rounded-[2px] print:border-none print:shadow-none print:m-0 mb-8"
+            style={{ width: '210mm', height: '297mm', padding: '14mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily }}
           >
+            {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
+            {isFirstPage && invoice.status === "paid" && <PaidWatermark />}
             <div className="flex flex-col h-full justify-between">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex flex-col items-start gap-1">
                     {settings?.logo_data && (
-                      <img src={settings.logo_data} className="h-10 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                      <img
+                        src={settings.logo_data}
+                        style={{ maxHeight: appearance.logoHeight, maxWidth: 180 }}
+                        className="h-auto w-auto object-contain object-left"
+                        alt="Logo"
+                      />
                     )}
-                    <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
-                      {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-                    </span>
+                    {/* No logo uploaded — collapse to empty space on an
+                        issued document, no upload prompt or placeholder box. */}
                   </div>
                   <div className="text-right">
                     <div className="text-[13pt] font-semibold tracking-[-0.02em] uppercase">{data.docTitle}</div>
@@ -89,12 +104,12 @@ export function InvoiceReadOnlyEpure({
 
                 <table className="w-full text-[9pt] mb-6 table-fixed" style={{ borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="border-y border-gray-300">
-                      <th className="text-left py-2 w-[42%] text-[11px] font-medium text-gray-400 uppercase tracking-wider">Désignation / Prestation</th>
-                      <th className="text-right py-2 w-[15%] text-[11px] font-medium text-gray-400 uppercase tracking-wider">P.U (HT)</th>
-                      <th className="text-right py-2 w-[7%] text-[11px] font-medium text-gray-400 uppercase tracking-wider">Qté</th>
-                      <th className="text-center py-2 w-[16%] text-[11px] font-medium text-gray-400 uppercase tracking-wider">U.M</th>
-                      <th className="text-right py-2 w-[20%] text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total HT</th>
+                    <tr style={{ backgroundColor: accent, color: getContrastTextColor(accent) }}>
+                      <th className="text-left py-2 px-2 w-[42%] text-[11px] font-medium uppercase tracking-wider">Désignation / Prestation</th>
+                      <th className="text-right py-2 px-2 w-[15%] text-[11px] font-medium uppercase tracking-wider">P.U (HT)</th>
+                      <th className="text-right py-2 px-2 w-[7%] text-[11px] font-medium uppercase tracking-wider">Qté</th>
+                      <th className="text-center py-2 px-2 w-[16%] text-[11px] font-medium uppercase tracking-wider">U.M</th>
+                      <th className="text-right py-2 px-2 w-[20%] text-[11px] font-medium uppercase tracking-wider">Total HT</th>
                     </tr>
                   </thead>
                   <tbody>

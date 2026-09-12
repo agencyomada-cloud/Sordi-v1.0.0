@@ -10,6 +10,7 @@ import {
   RiCheckboxCircleLine as CheckCircle,
   RiScales3Line as Scales,
   RiReceiptLine as Receipt,
+  RiErrorWarningLine as AlertCircle,
 } from "@remixicon/react";
 import {
   Button, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -23,6 +24,8 @@ import { useSuppliers, useDeleteSupplier, useRestoreSupplier, useSupplierPurchas
 import { NewSupplierDialog } from "@/components/NewSupplierDialog";
 import type { Supplier } from "@/lib/database";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 0 }).format(amount) + " DA";
@@ -34,7 +37,7 @@ export default function SuppliersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
-  const { data: suppliers, isLoading } = useSuppliers();
+  const { data: suppliers, isLoading, isError, refetch } = useSuppliers();
   const { data: purchaseTotalsBySupplierId } = useSupplierPurchaseTotalsMap();
   const deleteSupplier = useDeleteSupplier();
   const restoreSupplier = useRestoreSupplier();
@@ -77,6 +80,15 @@ export default function SuppliersPage() {
     navigate(`/expenses?supplier_id=${supplier.id}`);
   };
 
+  // Desktop keyboard ergonomics — N opens the new-supplier dialog, Escape
+  // clears the search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: filteredSuppliers ?? [],
+    onOpen: (supplier: Supplier) => openEditDialog(supplier),
+    onCreate: () => openCreateDialog(),
+    onEscape: () => setSearchQuery(""),
+  });
+
   // Optimistic delete + Sonner undo toast (5s window) — the record is
   // actually deleted immediately; "Annuler" re-creates it via
   // useRestoreSupplier rather than reverting an in-flight mutation, since
@@ -105,11 +117,12 @@ export default function SuppliersPage() {
 
             <div className="flex items-center gap-3">
               <Button
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors"
+                className="gap-1.5 h-[30px] px-3 text-xs rounded-md font-medium"
                 onClick={openCreateDialog}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Nouveau fournisseur
+                <kbd className="text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
               </Button>
             </div>
           </div>
@@ -134,16 +147,18 @@ export default function SuppliersPage() {
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6 animate-fade-in-up animation-delay-150">
+          {/* Action & search bar — a single compact desktop row, not a
+              stacked mobile-style filter block. */}
+          <div className="flex items-center gap-2 mb-4 animate-fade-in-up animation-delay-150">
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
               placeholder="Rechercher par nom, catégorie, téléphone..."
-              containerClassName="w-full sm:w-80"
+              className="h-[30px] text-xs bg-background border-border/80 rounded-md"
+              containerClassName="w-64"
             />
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full sm:w-64">
+              <SelectTrigger className="h-[30px] w-48 text-xs rounded-md border-border/80">
                 <SelectValue placeholder="Toutes les catégories" />
               </SelectTrigger>
               <SelectContent>
@@ -158,7 +173,7 @@ export default function SuppliersPage() {
           </div>
 
           {/* Table */}
-          <div className="animate-fade-in-up animation-delay-200">
+          <div className="animate-fade-in-up animation-delay-200 border border-border/80 rounded-md bg-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -173,25 +188,45 @@ export default function SuppliersPage() {
               <TableBody>
                 {isLoading ? (
                   <TableLoading columns={6} rows={5} />
-                ) : filteredSuppliers?.length === 0 ? (
+                ) : isError ? (
                   <TableRow>
                     <TableCell colSpan={6}>
                       <EmptyState
-                        type="suppliers"
-                        title="Aucun fournisseur"
-                        description={searchQuery ? "Essayez une autre recherche" : "Créez votre premier fournisseur"}
-                        action={searchQuery ? {
-                          label: "Effacer la recherche",
-                          onClick: () => setSearchQuery(""),
-                        } : {
-                          label: "Créer",
-                          onClick: openCreateDialog,
-                        }}
+                        icon={AlertCircle}
+                        tone="destructive"
+                        title="Échec du chargement des données"
+                        description="Une erreur est survenue lors du chargement des fournisseurs."
+                        action={{ label: "Réessayer", onClick: () => refetch() }}
                       />
                     </TableCell>
                   </TableRow>
+                ) : filteredSuppliers?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      {/* Compact desktop empty state — the header's own
+                          primary CTA already covers "create a supplier", so
+                          this only ever offers a secondary action (clearing
+                          a search) instead of a second, competing button. */}
+                      <div className="flex flex-col items-center justify-center text-center py-12">
+                        <Store className="size-8 text-muted-foreground/50 border border-border/60 rounded-md p-1.5 bg-muted/20 mb-2" strokeWidth={1.5} />
+                        <p className="text-xs font-medium text-foreground">Aucun fournisseur</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {searchQuery ? "Essayez une autre recherche" : "Créez votre premier fournisseur"}
+                        </p>
+                        {searchQuery && (
+                          <Button
+                            variant="outline"
+                            className="h-[30px] px-3 text-xs rounded-md mt-3"
+                            onClick={() => setSearchQuery("")}
+                          >
+                            Effacer la recherche
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  filteredSuppliers?.map((supplier) => {
+                  filteredSuppliers?.map((supplier, index) => {
                     const totalAchatsForSupplier = purchaseTotalsBySupplierId.get(supplier.id)?.total_achats || 0;
                     const soldeDu = supplier.solde_du || 0;
 
@@ -199,9 +234,13 @@ export default function SuppliersPage() {
                       <ContextMenu key={supplier.id}>
                         <ContextMenuTrigger asChild>
                           <TableRow
-                            className="cursor-pointer"
+                            className={cn(
+                              "cursor-pointer",
+                              focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                            )}
                             dimmed={supplier.is_active === false}
                             onClick={() => openEditDialog(supplier)}
+                            onMouseEnter={() => setFocusedIndex(index)}
                           >
                             <TableCell className="font-medium max-w-[240px]">
                               <Tooltip>

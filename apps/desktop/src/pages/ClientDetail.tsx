@@ -27,11 +27,16 @@ import {
 } from "@remixicon/react";
 import { Button, StatusBadge, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsContent, TabsList, TabsTrigger, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
 import { DatePicker } from "@/components/ui/date-picker";
+import { CopyChip } from "@/components/ui/copy-chip";
 import { useClient, useUpdateClient, useClientOverviewStats, type CreateClientData } from "@/hooks/useClients";
 import { useSetPageHeader } from "@/hooks/usePageHeader";
 import { useInvoices, useUpdateInvoiceStatus, type InvoiceStatus } from "@/hooks/useInvoices";
 import { computeAveragePaymentDelay, computePurchaseFrequency, computeClientStatus } from "@/lib/clientOverview";
 import { ClientStatusBadge } from "@/components/ClientStatusBadge";
+import { CreateActivityModal } from "@/components/CreateActivityModal";
+import { ActivityList } from "@/components/ActivityList";
+import { useActivities } from "@/hooks/useActivities";
+import { RiAddLine as ActivityIcon } from "@remixicon/react";
 import { useClientProducts } from "@/hooks/useClientProducts";
 import { useProducts } from "@/hooks/useProducts";
 import { useClientDraftProducts, useAddClientDraftProduct, useUpdateClientDraftProductQuantity, useDeleteClientDraftProduct, useClearClientDraftProducts } from "@/hooks/useClientDraftProducts";
@@ -84,6 +89,10 @@ export default function ClientDetailPage() {
 
   // Edit State
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  // Same queryKey ActivityList itself uses below, so this is a cache hit,
+  // not a second fetch — only here for the heading's open-count badge.
+  const { pendingActivities: pendingClientActivities } = useActivities("client", id);
   const [formData, setFormData] = useState<Omit<CreateClientData, "company_id">>({
     name: "",
     code: "",
@@ -565,6 +574,10 @@ export default function ClientDetailPage() {
                 {client.wilaya || "Algérie"}
               </p>
             </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-md gap-1.5" onClick={() => setIsActivityModalOpen(true)}>
+              <ActivityIcon className="w-3.5 h-3.5" />
+              Activité
+            </Button>
             <Button className="gap-2 rounded-full" onClick={handleEditClick}>
               <Pencil className="w-4 h-4" />
               Modifier
@@ -635,6 +648,20 @@ export default function ClientDetailPage() {
                   </Card>
                 </div>
               )}
+
+              {/* Activités & Rappels — Odoo-chatter-style follow-ups scoped
+                  to this client. */}
+              <div className="mb-6">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  Activités &amp; Rappels
+                  {pendingClientActivities.length > 0 && (
+                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-muted text-[10px] font-semibold text-foreground normal-case tracking-normal">
+                      {pendingClientActivities.length}
+                    </span>
+                  )}
+                </p>
+                <ActivityList entityType="client" entityId={client.id} />
+              </div>
 
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -775,11 +802,14 @@ export default function ClientDetailPage() {
                           { icon: Building2, label: "RC Principal", value: client.rc },
                           { icon: Scale, label: "AI", value: client.ai },
                         ].map(({ icon: Icon, label, value }) => (
-                          <div key={label} className="flex items-start gap-2">
+                          <div key={label} className="flex items-start gap-2 group">
                             <Icon className="w-3.5 h-3.5 text-muted-foreground/40 mt-1 shrink-0" />
                             <div className="flex-1 flex items-center justify-between gap-2">
                               <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide shrink-0">{label}</p>
-                              <p className="text-sm font-mono font-semibold text-foreground text-right">{value || <span className="text-muted-foreground/30 font-sans font-normal">—</span>}</p>
+                              <span className="flex items-center gap-1">
+                                <p className="text-sm font-mono font-semibold text-foreground text-right">{value || <span className="text-muted-foreground/30 font-sans font-normal">—</span>}</p>
+                                <CopyChip value={value} />
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -1501,7 +1531,7 @@ export default function ClientDetailPage() {
 
       {/* Edit Dialog */}
       < Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen} >
-        <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-2xl rounded-xl border border-border/80 shadow-2xl p-5 max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Modifier les informations de {client.name}</DialogTitle>
           </DialogHeader>
@@ -1760,7 +1790,7 @@ export default function ClientDetailPage() {
 
       {/* Add Advance Dialog */}
       < Dialog open={isAddAdvanceDialogOpen} onOpenChange={setIsAddAdvanceDialogOpen} >
-        <DialogContent className="max-w-md rounded-3xl">
+        <DialogContent className="max-w-md rounded-xl border border-border/80 shadow-2xl p-5">
           <DialogHeader>
             <DialogTitle>Ajouter une avance</DialogTitle>
           </DialogHeader>
@@ -1874,6 +1904,14 @@ export default function ClientDetailPage() {
           </form>
         </DialogContent>
       </Dialog >
+
+      <CreateActivityModal
+        open={isActivityModalOpen}
+        onOpenChange={setIsActivityModalOpen}
+        entityType="client"
+        entityId={client.id}
+        entityLabel={client.name}
+      />
     </>
   );
 }

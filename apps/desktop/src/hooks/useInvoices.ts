@@ -74,6 +74,10 @@ export function useInvoices(status?: InvoiceStatus, invoiceType?: InvoiceType) {
       return await db.invoices.getAllWithClients(activeCompanyId, status || undefined, invoiceType || undefined);
     },
     enabled: isReady,
+    // Mutations already invalidate this key explicitly, so a 5-minute
+    // staleTime just stops every window refocus from re-fetching the full
+    // (now 200+) invoice list — it doesn't delay picking up local changes.
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -221,7 +225,13 @@ export function useUpdateInvoice() {
       if (error.issues) {
         toast.error(error.issues[0]?.message || "Erreur de validation");
       } else {
-        toast.error("Erreur lors de la mise à jour de la facture");
+        // The Rust command's own message (e.g. the immutability guard's
+        // "cette facture a déjà été payée..." rejection) arrives here as a
+        // plain string or Error, not a Zod issue — show it verbatim
+        // instead of a generic fallback that would hide exactly the
+        // information the user needs to understand why the save failed.
+        const message = typeof error === "string" ? error : error instanceof Error ? error.message : null;
+        toast.error(message || "Erreur lors de la mise à jour de la facture");
       }
       logError("Invoice update error", error);
     },

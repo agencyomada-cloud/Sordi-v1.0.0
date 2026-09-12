@@ -21,7 +21,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-11 w-full items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/50 px-3.5 py-2 text-sm text-slate-900 ring-offset-background placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 transition-colors dark:border-border/50 dark:bg-secondary/30 dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:bg-card",
+      // Same desktop-compact density + real --border/--primary tokens as
+      // Input — was hardcoded slate-200/blue-500 web-template literals
+      // that a token change (e.g. the desktop cobalt accent) never reached.
+      "flex h-8 w-full items-center justify-between rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 transition-colors",
       className,
     )}
     {...props}

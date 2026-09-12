@@ -440,3 +440,79 @@ export const licenseActivations = pgTable("license_activations", {
   licenseDeviceUnique: uniqueIndex("license_activations_license_device_idx").on(t.licenseId, t.deviceFingerprint),
   licenseIdx: index("license_activations_license_idx").on(t.licenseId),
 }));
+
+// ---------------------------------------------------------------------------
+// Anonymous device telemetry registry — populated by the desktop app's
+// unauthenticated POST /telemetry/heartbeat (telemetry.rs), and read by the
+// admin-only POST /admin/licenses/issue to look up a device's fingerprint
+// from its human-readable machine_id before signing it a license. Deliberately
+// separate from `licenses`/`licenseActivations` above: a device can send
+// heartbeats for weeks before ever buying a license (trial), and this table
+// carries no PII (see telemetry.rs's payload — no company/contact info).
+// ---------------------------------------------------------------------------
+
+export const deviceStatusEnum = pgEnum("device_status", ["trial", "active", "expired"]);
+export const licenseTypeEnum = pgEnum("license_type", ["yearly", "lifetime"]);
+
+export const devices = pgTable("devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Human-readable "SRD-XXXX-XXXX-XXXX" shown to the user and sent to
+  // support/admin to issue a license — cryptographically unlinked from
+  // deviceFingerprint below (see license.rs's compute_machine_id doc comment).
+  machineId: text("machine_id").notNull(),
+  // SHA-256 of the raw platform hardware id — what actually goes into the
+  // signed JWT's deviceFingerprint claim.
+  deviceFingerprint: text("device_fingerprint").notNull(),
+  appVersion: text("app_version").notNull(),
+  // Optional — not sent by the anonymous heartbeat itself (telemetry.rs
+  // never collects PII), only ever set later by an admin manually editing a
+  // device record after a sale/support conversation identifies the person.
+  customerName: text("customer_name"),
+  email: text("email"),
+  // WhatsApp-format, e.g. "213555123456" (no "+", no spaces) — what
+  // buildWhatsAppActivationUrl-style links are built from directly.
+  phoneNumber: text("phone_number"),
+  osPlatform: text("os_platform"),
+  invoicesCount: integer("invoices_count").notNull().default(0),
+  clientsCount: integer("clients_count").notNull().default(0),
+  expensesCount: integer("expenses_count").notNull().default(0),
+  status: deviceStatusEnum("status").notNull().default("trial"),
+  licenseType: licenseTypeEnum("license_type"),
+  validUntil: timestamp("valid_until", { withTimezone: true }),
+  // Set once, the first time this machine_id is ever seen (upsertHeartbeat
+  // only sets it on insert) — distinct from lastSeenAt/createdAt: this is
+  // specifically "when did this person's trial begin," used for cohort/
+  // conversion reporting, not just bookkeeping.
+  downloadedAt: timestamp("downloaded_at", { withTimezone: true }).notNull().defaultNow(),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  machineIdUnique: uniqueIndex("devices_machine_id_idx").on(t.machineId),
+  fingerprintIdx: index("devices_fingerprint_idx").on(t.deviceFingerprint),
+}));
+
+// ---------------------------------------------------------------------------
+// Landing page lead capture (apps/web's download modal -> apps/api's
+// POST /leads/download) — deliberately NOT linked to `devices` by a foreign
+// key: a lead is captured the moment someone fills the download form,
+// before the app is even installed, let alone before it has a machine_id
+// (that only exists once the desktop app's first heartbeat fires). Matching
+// a lead to its eventual device is a manual/reporting-time correlation
+// (e.g. by phone number), not a schema-enforced relationship.
+// ---------------------------------------------------------------------------
+
+export const osTypeEnum = pgEnum("os_type", ["macos", "windows"]);
+
+export const leads = pgTable("leads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  // WhatsApp-format, e.g. "213555123456" — same convention as
+  // devices.phoneNumber (no "+", no spaces).
+  phone: text("phone").notNull(),
+  company: text("company"),
+  osType: osTypeEnum("os_type").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  createdAtIdx: index("leads_created_at_idx").on(t.createdAt),
+}));

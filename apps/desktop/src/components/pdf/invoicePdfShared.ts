@@ -97,7 +97,7 @@ export interface PDFSettings {
   company_rib?: string;
   company_bank_agency?: string;
   logo_data?: string;
-  footer_logo_data?: string;
+  logo_size?: number;
   stamp_data?: string;
   stamp_size?: number;
   signature_data?: string;

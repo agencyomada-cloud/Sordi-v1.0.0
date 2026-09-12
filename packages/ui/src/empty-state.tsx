@@ -57,6 +57,11 @@ interface EmptyStateProps {
    *  smaller card body (e.g. a dashboard chart card) — smaller icon badge,
    *  body-weight text instead of a heading, small outline button. */
   size?: "default" | "compact";
+  /** "default" is the neutral muted icon badge used for genuine empty data.
+   *  "destructive" tints it red instead — for a failed fetch, so it reads as
+   *  an error rather than a normal "nothing here yet" state even though the
+   *  layout is otherwise identical. */
+  tone?: "default" | "destructive";
 }
 
 export function EmptyState({
@@ -67,13 +72,15 @@ export function EmptyState({
   action,
   className,
   size = "default",
+  tone = "default",
 }: EmptyStateProps) {
   const Icon = icon || defaultIcons[type] || defaultIcons.default;
+  const badgeToneClasses = tone === "destructive" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
 
   if (size === "compact") {
     return (
       <div className={cn("flex flex-col items-center justify-center text-center py-8 w-full gap-3 h-full", className)}>
-        <span className="flex items-center justify-center w-11 h-11 rounded-2xl bg-muted text-muted-foreground">
+        <span className={cn("flex items-center justify-center w-11 h-11 rounded-2xl", badgeToneClasses)}>
           <Icon className="w-5 h-5" strokeWidth={1.5} />
         </span>
         <div className="space-y-1">
@@ -91,8 +98,8 @@ export function EmptyState({
 
   return (
     <div className={cn("flex flex-col items-center justify-center py-12 px-4", className)}>
-      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 text-muted-foreground" />
+      <div className={cn("w-16 h-16 rounded-full flex items-center justify-center mb-4", badgeToneClasses)}>
+        <Icon className="w-8 h-8" />
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-1">{title}</h3>
       {description && (

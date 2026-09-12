@@ -6,6 +6,10 @@ import {
   formatCurrency,
 } from "./invoiceHtmlShared";
 import { InteractiveStampZone } from "./InteractiveStampZone";
+import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
+import { PaidWatermark } from "./PaidWatermark";
+import { getContrastTextColor } from "@/lib/colorContrast";
+import type { InvoiceAppearanceConfig } from "@/components/pdf/invoiceAppearance";
 
 interface Props {
   invoice: any;
@@ -17,11 +21,17 @@ interface Props {
 export function InvoiceReadOnlyStructure({
   invoice,
   settings,
+  appearance,
   stampSize,
   onStampSizeChange,
   onStampSizeCommit,
-}: Props & { settings: any }) {
-  const primaryColor = settings?.primary_color || "#476CFF";
+}: Props & { settings: any; appearance: InvoiceAppearanceConfig }) {
+  // Sourced from the shared resolver (same one pdfGenerator.ts consumes),
+  // not re-derived independently from `settings` — the whole point of
+  // that resolver is that this canvas, the editor, and the exported PDF
+  // can never quietly disagree on what "the invoice's color" is.
+  const primaryColor = appearance.primaryColor;
+  const fontFamily = `'${appearance.fontFamily}', sans-serif`;
   const data = resolveHtmlInvoiceData(invoice);
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
@@ -36,28 +46,39 @@ export function InvoiceReadOnlyStructure({
           <div
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-black font-sans mx-auto shadow-lg print:border-none print:shadow-none print:m-0 mb-8"
-            style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff' }}
+            className="a4 relative bg-white dark:bg-white text-black font-sans mx-auto select-text border border-border/80 dark:border-neutral-700 shadow-md rounded-[2px] print:border-none print:shadow-none print:m-0 mb-8"
+            style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily }}
           >
+            {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
+            {isFirstPage && invoice.status === "paid" && <PaidWatermark />}
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
               <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[3mm] pl-[5mm] flex flex-col items-start gap-1">
                 {settings?.logo_data && (
-                  <img src={settings.logo_data} className="h-9 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                  <img
+                    src={settings.logo_data}
+                    style={{ maxHeight: appearance.logoHeight, maxWidth: 180 }}
+                    className="h-auto w-auto object-contain object-left"
+                    alt="Logo"
+                  />
                 )}
-                <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
-                  {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-                </span>
+                {/* No logo uploaded — collapse to empty space. This is a
+                    finished, issued document; an "Ajoutez votre logo"
+                    upload prompt or a dashed placeholder box has no
+                    business rendering on it. */}
               </div>
 
-              {settings?.company_name && (
+              {/* Only shown alongside a real logo — this badge IS the
+                  header's one company-name display when there's no logo to
+                  pair it with, so showing it there too would just repeat
+                  the typographic fallback above it. */}
+              {settings?.logo_data && settings?.company_name && (
                 <div
                   className="absolute right-0 bottom-0 w-[71.5mm] h-[7.8mm] flex items-center justify-center px-[5mm] text-[8.5pt] font-bold leading-none whitespace-nowrap text-white z-2 tracking-wide uppercase"
-                  style={{ backgroundColor: primaryColor, fontFamily: "'Space Grotesk', sans-serif" }}
+                  style={{ backgroundColor: primaryColor }}
                 >
                   {settings.company_name}
                 </div>
               )}
-
             </header>
 
             <main className="absolute left-0 top-[33.9mm] w-full h-[229.8mm] overflow-hidden bg-white">
@@ -120,12 +141,12 @@ export function InvoiceReadOnlyStructure({
                   <div className="mb-6">
                     <table className="w-full border-collapse text-xs table-fixed">
                       <thead>
-                        <tr className="border-y border-gray-300">
-                          <th className="py-2 text-left w-[42%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Désignation / Prestation</th>
-                          <th className="py-2 text-right w-[15%] text-[11px] font-medium tracking-wider uppercase text-gray-400">P.U (HT)</th>
-                          <th className="py-2 text-right w-[7%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Qté</th>
-                          <th className="py-2 text-center w-[16%] text-[11px] font-medium tracking-wider uppercase text-gray-400">U.M</th>
-                          <th className="py-2 text-right w-[20%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Total HT</th>
+                        <tr style={{ backgroundColor: primaryColor, color: getContrastTextColor(primaryColor) }}>
+                          <th className="py-2 px-2 text-left w-[42%] text-[11px] font-medium tracking-wider uppercase">Désignation / Prestation</th>
+                          <th className="py-2 px-2 text-right w-[15%] text-[11px] font-medium tracking-wider uppercase">P.U (HT)</th>
+                          <th className="py-2 px-2 text-right w-[7%] text-[11px] font-medium tracking-wider uppercase">Qté</th>
+                          <th className="py-2 px-2 text-center w-[16%] text-[11px] font-medium tracking-wider uppercase">U.M</th>
+                          <th className="py-2 px-2 text-right w-[20%] text-[11px] font-medium tracking-wider uppercase">Total HT</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -238,16 +259,6 @@ export function InvoiceReadOnlyStructure({
                 </section>
 
                 <section className="relative h-full">
-                  {(settings?.footer_logo_data || settings?.company_name) && (
-                    <div className="absolute top-0 left-0 h-[8mm] w-[43mm] flex items-center">
-                      {settings?.footer_logo_data ? (
-                        <img src={settings.footer_logo_data} alt="Footer Logo" className="h-full w-full object-contain object-left" />
-                      ) : (
-                        <span className="font-extrabold text-[9pt] text-black tracking-tight uppercase" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{settings.company_name}</span>
-                      )}
-                    </div>
-                  )}
-
                   <div className="absolute bottom-0 left-0 w-full">
                     <div className="pt-[0.1mm] text-[7.1pt] leading-[1.65] whitespace-nowrap flex flex-col justify-end">
                       {settings?.company_email && <div className="font-bold">{settings.company_email}</div>}

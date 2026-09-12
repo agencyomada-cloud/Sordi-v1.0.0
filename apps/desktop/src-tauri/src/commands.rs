@@ -1,7 +1,7 @@
 use crate::database::{generate_invoice_number, peek_next_invoice_number, generate_delivery_note_number, generate_order_number, recalculate_invoice_totals, update_invoice_payment_status};
 use std::sync::Mutex;
 use rusqlite::Connection;
-use tauri::State;
+use tauri::{AppHandle, State};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use chrono::Datelike;
@@ -40,13 +40,40 @@ pub fn get_license_status() -> crate::license::LicenseStatus {
 }
 
 #[tauri::command]
-pub async fn activate_license(license_key: String) -> Result<crate::license::LicenseStatus, String> {
-    crate::license::activate(license_key).await
+pub async fn activate_license(
+    db: State<'_, Mutex<Connection>>,
+    license_key: String,
+) -> Result<crate::license::LicenseStatus, String> {
+    let status = crate::license::activate(license_key).await?;
+
+    // Send an immediate, un-throttled heartbeat right after a successful
+    // activation so the admin dashboard reflects the new status without
+    // waiting up to 24h for the next scheduled one (see telemetry.rs's
+    // send_heartbeat_immediately doc comment).
+    if status.state == "active" {
+        if let Ok(conn) = db.lock() {
+            if let Some(path) = conn.path() {
+                crate::telemetry::send_heartbeat_immediately(std::path::PathBuf::from(path), env!("CARGO_PKG_VERSION"));
+            }
+        }
+    }
+
+    Ok(status)
 }
 
 #[tauri::command]
 pub async fn verify_license_background() -> crate::license::LicenseStatus {
     crate::license::verify_background().await
+}
+
+/// Human-readable "SRD-XXXX-XXXX-XXXX" code shown to the user for manual/
+/// offline license activation (e.g. reading it to support over the phone,
+/// or pasting it into a purchase form) — distinct from the opaque device
+/// fingerprint silently embedded in the license token itself. See
+/// license.rs's compute_machine_id() for why these are two separate values.
+#[tauri::command]
+pub fn get_machine_id() -> Result<String, String> {
+    crate::license::compute_machine_id()
 }
 
 // ============= GLOBAL SEARCH =============
@@ -646,6 +673,11 @@ pub struct Company {
     pub name: String,
     pub logo_base64: Option<String>,
     pub activity: Option<String>,
+    /// Algerian legal form — EURL, SARL, SPA, SNC, Auto-entrepreneur,
+    /// Personne physique / Établissement individuel. Distinct from
+    /// `activity` (business sector, e.g. "Services") — this is the legal
+    /// structure printed on official documents.
+    pub legal_form: Option<String>,
     pub rc: Option<String>,
     pub nif: Option<String>,
     pub nis: Option<String>,
@@ -672,6 +704,7 @@ pub struct CreateCompanyData {
     pub name: String,
     pub logo_base64: Option<String>,
     pub activity: Option<String>,
+    pub legal_form: Option<String>,
     pub rc: Option<String>,
     pub nif: Option<String>,
     pub nis: Option<String>,
@@ -696,6 +729,7 @@ fn map_company_row(row: &rusqlite::Row) -> rusqlite::Result<Company> {
         name: row.get("name")?,
         logo_base64: row.get("logo_base64")?,
         activity: row.get("activity")?,
+        legal_form: row.get("legal_form").unwrap_or(None),
         rc: row.get("rc")?,
         nif: row.get("nif")?,
         nis: row.get("nis")?,
@@ -744,12 +778,13 @@ pub fn create_company(db: State<'_, Mutex<Connection>>, data: CreateCompanyData)
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO companies (id, name, logo_base64, activity, rc, nif, nis, article_imposition, address, phone, phones, email, website, capital, rib, bank_agency, extra_info, cnas_adherent, currency, invoice_prefix, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+        "INSERT INTO companies (id, name, logo_base64, activity, legal_form, rc, nif, nis, article_imposition, address, phone, phones, email, website, capital, rib, bank_agency, extra_info, cnas_adherent, currency, invoice_prefix, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
         params![
             id,
             data.name,
             data.logo_base64,
             data.activity,
+            data.legal_form,
             data.rc,
             data.nif,
             data.nis,
@@ -784,12 +819,13 @@ pub fn update_company(db: State<'_, Mutex<Connection>>, id: String, data: Create
     let conn = db.lock().map_err(|e| e.to_string())?;
 
     conn.execute(
-        "UPDATE companies SET name = ?2, logo_base64 = ?3, activity = ?4, rc = ?5, nif = ?6, nis = ?7, article_imposition = ?8, address = ?9, phone = ?10, phones = ?11, email = ?12, website = ?13, capital = ?14, rib = ?15, bank_agency = ?16, extra_info = ?17, cnas_adherent = ?18, currency = ?19, invoice_prefix = ?20 WHERE id = ?1",
+        "UPDATE companies SET name = ?2, logo_base64 = ?3, activity = ?4, legal_form = ?5, rc = ?6, nif = ?7, nis = ?8, article_imposition = ?9, address = ?10, phone = ?11, phones = ?12, email = ?13, website = ?14, capital = ?15, rib = ?16, bank_agency = ?17, extra_info = ?18, cnas_adherent = ?19, currency = ?20, invoice_prefix = ?21 WHERE id = ?1",
         params![
             id,
             data.name,
             data.logo_base64,
             data.activity,
+            data.legal_form,
             data.rc,
             data.nif,
             data.nis,
@@ -1693,8 +1729,47 @@ pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: Create
     crate::license::require_active_license()?;
 
     let mut conn = db.lock().map_err(|e| e.to_string())?;
+
+    // Immutability guard — once real money has been recorded against an
+    // invoice, or it has been converted from a proforma, or cancelled, its
+    // header and line items can never be edited again: a financial
+    // document that already had money or a real legal outcome attached to
+    // it must be corrected via a credit note (avoir), never by silently
+    // rewriting its own history. Deliberately scoped to "a money/legal
+    // event already happened" rather than "status != draft" — every
+    // invoice in this app is created with status 'issued' by default (see
+    // create_invoice below), never 'draft', so a literal drafts-only rule
+    // would make every invoice read-only the instant it's created and
+    // break the normal "just made it, fix a typo" edit flow. 'issued' and
+    // 'overdue' (created, not yet paid) stay fully editable.
+    //
+    // This check reads the CURRENT stored status, never the incoming
+    // payload's `data.status` — the whole point is to not trust a client
+    // that might be racing an out-of-date form against a since-paid
+    // invoice.
+    //
+    // update_invoice_status and the payment-reconciliation path
+    // (update_invoice_payment_status, called after create/update/delete
+    // payment) are separate commands entirely and are NOT behind this
+    // guard — status transitions and balance recalculation must keep
+    // working on a locked invoice; only manual edits to its header/items
+    // are blocked.
+    let existing_status: Option<String> = conn
+        .query_row("SELECT status FROM invoices WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let Some(status) = existing_status.as_deref() {
+        if matches!(status, "paid" | "partial" | "converted" | "cancelled") {
+            // "INVOICE_LOCKED:" prefix — a stable, machine-checkable error
+            // code the frontend can match on (see InvoiceDetail.tsx's
+            // isLocked guard) without parsing the localized French text,
+            // which is free to be reworded later without breaking that check.
+            return Err("INVOICE_LOCKED: Cette facture a déjà été payée, convertie ou annulée et ne peut plus être modifiée. Utilisez un Avoir pour corriger cette facture.".to_string());
+        }
+    }
+
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     // Sync sequence if number is updated
     if let Some(ref num) = data.invoice_number {
         crate::database::sync_invoice_sequence(&conn, num).map_err(|e| e.to_string())?;
@@ -1801,10 +1876,30 @@ pub fn update_invoice_status(db: State<'_, Mutex<Connection>>, id: String, statu
     crate::license::require_active_license()?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
-    
+
+    // Audit-trail guard — a regular invoice or credit note is assigned its
+    // official sequential number (invoice_number / "AV-xxx") the moment
+    // it's created, not at some later "finalize" step, so there's no status
+    // this app has that legitimately corresponds to "a numbered document
+    // that hasn't really been issued yet". Reverting one back to "draft"
+    // would leave a document carrying a real, gap-free legal sequence
+    // number sitting in a state that implies it was never issued — exactly
+    // the kind of inconsistency a paper/PDF audit trail can't tolerate.
+    // Proformas ("PRO-<timestamp>") aren't part of that official sequence,
+    // so they're exempt.
+    if status == "draft" {
+        let invoice_type: Option<String> = conn
+            .query_row("SELECT invoice_type FROM invoices WHERE id = ?1", params![id], |row| row.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if matches!(invoice_type.as_deref(), Some("invoice") | Some("credit_note")) {
+            return Err("INVOICE_LOCKED: Cette facture porte un numéro séquentiel officiel et ne peut pas être remise en brouillon. Utilisez un Avoir pour corriger cette facture.".to_string());
+        }
+    }
+
     if status == "paid" {
         conn.execute(
-            "UPDATE invoices SET status = ?2, amount_paid = total_ttc, balance_due = 0 WHERE id = ?1", 
+            "UPDATE invoices SET status = ?2, amount_paid = total_ttc, balance_due = 0 WHERE id = ?1",
             params![id, status]
         ).map_err(|e| e.to_string())?;
     } else {
@@ -3185,6 +3280,142 @@ pub fn delete_expense(db: State<'_, Mutex<Connection>>, id: String) -> Result<()
     Ok(())
 }
 
+// ============= ACTIVITÉS & RAPPELS (Odoo "chatter"-style follow-ups) =============
+// A lightweight task attached to any record (invoice, client, supplier,
+// quote) — NOT the same table/struct as ActivityLog (activity_logs), which
+// is the read-only audit trail behind History.tsx. These are open,
+// actionable to-dos a user schedules for themselves.
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Activity {
+    pub id: String,
+    pub company_id: Option<String>,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub title: String,
+    pub activity_type: String,
+    pub due_date: String,
+    pub done_at: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateActivityData {
+    pub company_id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub title: String,
+    pub activity_type: String,
+    pub due_date: String,
+    pub notes: Option<String>,
+}
+
+const ACTIVITY_SELECT: &str = "SELECT id, company_id, entity_type, entity_id, title, activity_type, due_date, done_at, notes, created_at FROM activities";
+
+fn map_activity_row(row: &rusqlite::Row) -> rusqlite::Result<Activity> {
+    Ok(Activity {
+        id: row.get(0)?,
+        company_id: row.get(1)?,
+        entity_type: row.get(2)?,
+        entity_id: row.get(3)?,
+        title: row.get(4)?,
+        activity_type: row.get(5)?,
+        due_date: row.get(6)?,
+        done_at: row.get(7)?,
+        notes: row.get(8)?,
+        created_at: row.get(9)?,
+    })
+}
+
+fn get_activity_by_id(conn: &Connection, id: &str) -> Result<Activity, String> {
+    conn.prepare(&format!("{} WHERE id = ?1", ACTIVITY_SELECT))
+        .map_err(|e| e.to_string())?
+        .query_row(params![id], |row| map_activity_row(row))
+        .map_err(|e| e.to_string())
+}
+
+/// Lists activities for a company, optionally narrowed to one record
+/// (entity_type + entity_id — e.g. a single client's inspector panel) or one
+/// entity_type across all records (e.g. "every invoice reminder"). Open
+/// tasks (done_at IS NULL) sort soonest-due-first; completed ones trail
+/// behind, most-recently-done first, so a detail page's list reads as
+/// "what's next" without hiding history.
+#[tauri::command]
+pub fn list_activities(
+    db: State<'_, Mutex<Connection>>,
+    company_id: String,
+    entity_type: Option<String>,
+    entity_id: Option<String>,
+) -> Result<Vec<Activity>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+
+    let mut conditions = vec!["company_id = ?1".to_string()];
+    let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(company_id)];
+
+    if let Some(et) = entity_type {
+        query_params.push(Box::new(et));
+        conditions.push(format!("entity_type = ?{}", query_params.len()));
+    }
+    if let Some(eid) = entity_id {
+        query_params.push(Box::new(eid));
+        conditions.push(format!("entity_id = ?{}", query_params.len()));
+    }
+
+    let query = format!(
+        "{} WHERE {} ORDER BY (done_at IS NOT NULL), due_date ASC",
+        ACTIVITY_SELECT,
+        conditions.join(" AND ")
+    );
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = query_params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt
+        .query_map(param_refs.as_slice(), map_activity_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>();
+
+    rows.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_activity(db: State<'_, Mutex<Connection>>, data: CreateActivityData) -> Result<Activity, String> {
+    crate::license::require_active_license()?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO activities (id, company_id, entity_type, entity_id, title, activity_type, due_date, notes, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![id, data.company_id, data.entity_type, data.entity_id, data.title, data.activity_type, data.due_date, data.notes, now],
+    ).map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "CREATE", "ACTIVITY", Some(&id), &format!("Rappel créé: {}", data.title));
+
+    get_activity_by_id(&conn, &id)
+}
+
+#[tauri::command]
+pub fn complete_activity(db: State<'_, Mutex<Connection>>, id: String) -> Result<Activity, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute("UPDATE activities SET done_at = ?1 WHERE id = ?2", params![now, id])
+        .map_err(|e| e.to_string())?;
+
+    let _ = log_activity(&conn, "UPDATE", "ACTIVITY", Some(&id), "Rappel terminé");
+
+    get_activity_by_id(&conn, &id)
+}
+
+#[tauri::command]
+pub fn delete_activity(db: State<'_, Mutex<Connection>>, id: String) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM activities WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let _ = log_activity(&conn, "DELETE", "ACTIVITY", Some(&id), "Rappel supprimé");
+    Ok(())
+}
+
 // Command to read letterhead image
 #[tauri::command]
 pub fn get_letterhead_image() -> Result<Option<Vec<u8>>, String> {
@@ -3471,6 +3702,25 @@ pub fn update_settings(db: State<'_, Mutex<Connection>>, settings: std::collecti
     let _ = log_activity(&conn, "UPDATE", "SETTINGS", None, "Paramètres globaux mis à jour");
 
     Ok(())
+}
+
+// ============= TELEMETRY =============
+// See telemetry.rs for the full design (what's sent, the 24h throttle,
+// why it's fail-silent). set_telemetry_enabled deliberately does NOT call
+// require_active_license() — unlike update_setting/update_settings above,
+// a privacy control must stay usable regardless of license state, or a
+// trial/expired user would have no way to opt out.
+
+#[tauri::command]
+pub fn get_telemetry_status(db: State<'_, Mutex<Connection>>) -> Result<crate::telemetry::TelemetryStatus, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    Ok(crate::telemetry::status(&conn))
+}
+
+#[tauri::command]
+pub fn set_telemetry_enabled(db: State<'_, Mutex<Connection>>, enabled: bool) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    crate::telemetry::set_enabled(&conn, enabled)
 }
 
 // ============= EMAIL =============
@@ -8165,6 +8415,56 @@ pub fn save_pdf_backup(
     Ok(())
 }
 
+/// Automatic rolling backup, run on a background thread once at app launch
+/// and once on clean shutdown (see lib.rs::run()'s setup()) — independent of
+/// the user-triggered `backup_database` command below. Uses its own
+/// filename prefix (`sordi_backup_*`) so its 7-snapshot retention policy
+/// never prunes a manual backup, and takes its own fresh `Connection` to the
+/// db file rather than the app's shared `Mutex<Connection>`, so it can never
+/// contend with (or block behind) normal app usage — WAL mode allows a
+/// second reader connection to run concurrently with the app's writer.
+pub fn create_rolling_backup(conn: &Connection, app_dir: &Path) -> Result<PathBuf, String> {
+    let backups_dir = app_dir.join("backups");
+    fs::create_dir_all(&backups_dir).map_err(|e| e.to_string())?;
+
+    // Seconds granularity: `VACUUM INTO` errors ("output file already
+    // exists") rather than overwriting, and a minute-only timestamp collides
+    // whenever the app launches twice within the same minute (observed in
+    // practice during dev — restart, or a launch right after a shutdown
+    // backup from the previous run).
+    let timestamp = chrono::Local::now().format("%Y-%m-%d_%H%M%S");
+    let dest = backups_dir.join(format!("sordi_backup_{}.db", timestamp));
+    let dest_str = dest
+        .to_str()
+        .ok_or_else(|| "Chemin de destination invalide".to_string())?
+        .to_string();
+
+    conn.execute("VACUUM INTO ?1", params![dest_str]).map_err(|e| e.to_string())?;
+
+    // Retention: keep only the 7 most recent rolling snapshots. The
+    // "YYYY-MM-DD_HHmm" filename suffix sorts chronologically as plain text,
+    // so a lexicographic sort is enough — no need to parse timestamps.
+    let mut snapshots: Vec<PathBuf> = fs::read_dir(&backups_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("sordi_backup_") && n.ends_with(".db"))
+                .unwrap_or(false)
+        })
+        .collect();
+    snapshots.sort();
+    if snapshots.len() > 7 {
+        for old in &snapshots[..snapshots.len() - 7] {
+            let _ = fs::remove_file(old);
+        }
+    }
+
+    Ok(dest)
+}
+
 /// Snapshots the live database to a separate file using SQLite's native
 /// `VACUUM INTO`. Unlike a plain file copy, this is atomic and safe to run
 /// against a database the app is actively using — it reads through a
@@ -8202,6 +8502,64 @@ pub fn backup_database(dest_path: Option<String>, db: State<'_, Mutex<Connection
         .map_err(|e| e.to_string())?;
 
     Ok(dest_str)
+}
+
+/// The newest backup's timestamp (RFC 3339, from the file's mtime) and size
+/// in bytes, for the "last backup" readout in Paramètres > Sauvegarde.
+/// Considers both the rolling snapshots (`sordi_backup_*.db`) and manual
+/// ones (`database-backup-*.db`) — whichever is newest wins. `None` means no
+/// backup exists yet (e.g. right after a fresh install, before the
+/// launch-time rolling backup's background thread has finished).
+#[tauri::command]
+pub fn get_last_backup_info() -> Result<Option<(String, u64)>, String> {
+    let backups_dir = app_data_dir().join("backups");
+    if !backups_dir.exists() {
+        return Ok(None);
+    }
+
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+    for entry in fs::read_dir(&backups_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let is_backup = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| (n.starts_with("sordi_backup_") || n.starts_with("database-backup-")) && n.ends_with(".db"))
+            .unwrap_or(false);
+        if !is_backup {
+            continue;
+        }
+        let modified = entry.metadata().map_err(|e| e.to_string())?.modified().map_err(|e| e.to_string())?;
+        if newest.as_ref().map(|(t, _)| modified > *t).unwrap_or(true) {
+            newest = Some((modified, path));
+        }
+    }
+
+    let Some((modified, path)) = newest else { return Ok(None) };
+    let size = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+    let datetime: chrono::DateTime<chrono::Local> = modified.into();
+    Ok(Some((datetime.to_rfc3339(), size)))
+}
+
+/// Stages a chosen backup file to be restored on the next launch, then
+/// restarts the app. A restore can't safely overwrite the live database
+/// file while this process still holds it open through the shared
+/// `Mutex<Connection>` — instead this copies the chosen file to
+/// `<app_data_dir>/pending_restore.db` and calls `AppHandle::restart()`;
+/// `lib.rs::run()`'s `setup()` checks for that marker before opening the
+/// database on the next launch, takes a pre-restore safety snapshot of
+/// whatever is still live, then swaps the restored file into place.
+#[tauri::command]
+pub fn restore_database(source_path: String, app: AppHandle) -> Result<(), String> {
+    let source = PathBuf::from(&source_path);
+    if !source.is_file() {
+        return Err("Fichier de sauvegarde introuvable".to_string());
+    }
+
+    let pending = app_data_dir().join("pending_restore.db");
+    fs::copy(&source, &pending).map_err(|e| e.to_string())?;
+
+    app.restart();
 }
 
 // ============================================================================
@@ -8254,6 +8612,7 @@ mod ipc_arg_bridging_smoke_test {
                 crate::commands::create_expense,
                 crate::commands::get_project_profitability,
                 crate::commands::update_invoice,
+                crate::commands::update_invoice_status,
             ])
             // NOT tauri::generate_context!() — that macro embeds macOS
             // bundle metadata (Info.plist) via a symbol meant to exist once
@@ -9369,6 +9728,194 @@ mod ipc_arg_bridging_smoke_test {
             Some(original_number.as_str()),
             "an empty invoice_number in the update payload must not blank out the real one"
         );
+    }
+
+    // Accounting immutability: once an invoice has a real money/legal event
+    // recorded against it (paid here), update_invoice must reject any
+    // attempt to touch its header or line items — verified at the
+    // transaction layer, i.e. the UPDATE never runs at all, not just that
+    // the final row happens to look unchanged.
+    #[test]
+    fn update_invoice_blocks_when_paid() {
+        let app = build_test_app();
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let company_id = uuid::Uuid::new_v4().to_string();
+        {
+            let conn = app.state::<std::sync::Mutex<Connection>>();
+            let conn = conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO companies (id, name, created_at) VALUES (?1, 'Locked Invoice Test Co', ?2)",
+                params![company_id, chrono::Utc::now().to_rfc3339()],
+            )
+            .unwrap();
+        }
+
+        let client = invoke_json(
+            &webview,
+            "create_client",
+            serde_json::json!({ "data": { "company_id": company_id, "name": "Locked Invoice Client" } }),
+        );
+        let client_id = client["id"].as_str().unwrap().to_string();
+
+        let product = invoke_json(
+            &webview,
+            "create_product",
+            serde_json::json!({ "data": { "company_id": company_id, "code": "LOCK-01", "name": "Service", "unit_price": 50000.0 } }),
+        );
+        let product_id = product["id"].as_str().unwrap().to_string();
+
+        let invoice = invoke_json(
+            &webview,
+            "create_invoice",
+            serde_json::json!({
+                "data": {
+                    "company_id": company_id,
+                    "client_id": client_id,
+                    "invoice_date": "2026-08-26",
+                    "items": [{ "product_id": product_id, "quantity": 1.0, "unit_price": 50000.0 }]
+                }
+            }),
+        );
+        let invoice_id = invoice["id"].as_str().unwrap().to_string();
+        let original_notes = invoice["notes"].clone();
+
+        // Mark it paid, exactly as the "Payée" status dropdown does.
+        invoke_json(
+            &webview,
+            "update_invoice_status",
+            serde_json::json!({ "id": invoice_id, "status": "paid" }),
+        );
+
+        // Now attempt a header edit — must be rejected before any UPDATE
+        // runs, with the machine-checkable INVOICE_LOCKED prefix the
+        // frontend matches on.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            invoke_json(
+                &webview,
+                "update_invoice",
+                serde_json::json!({
+                    "id": invoice_id,
+                    "data": {
+                        "company_id": company_id,
+                        "client_id": client_id,
+                        "invoice_date": "2026-08-26",
+                        "notes": "Tampered after payment",
+                        "items": [{ "product_id": product_id, "quantity": 1.0, "unit_price": 50000.0 }]
+                    }
+                }),
+            )
+        }));
+        assert!(result.is_err(), "update_invoice should reject editing a paid invoice");
+        let panic_payload = result.unwrap_err();
+        let error_message = panic_payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| panic_payload.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        assert!(
+            error_message.contains("INVOICE_LOCKED"),
+            "expected the machine-checkable INVOICE_LOCKED error code, got: {}",
+            error_message
+        );
+
+        // Prove the transaction layer, not just the API response: the
+        // stored row must be byte-for-byte unchanged from before the
+        // rejected update attempt.
+        let conn = app.state::<std::sync::Mutex<Connection>>();
+        let conn = conn.lock().unwrap();
+        let stored_notes: Option<String> = conn
+            .query_row("SELECT notes FROM invoices WHERE id = ?1", params![invoice_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            stored_notes.as_deref().unwrap_or(""),
+            original_notes.as_str().unwrap_or(""),
+            "a rejected update_invoice call must leave the stored row completely untouched"
+        );
+    }
+
+    // Audit-trail integrity: a real invoice always carries its official
+    // sequential number from the moment it's created (never a placeholder
+    // that only becomes "real" later), so reverting one back to "draft"
+    // must be rejected regardless of its current payment status.
+    #[test]
+    fn update_invoice_status_blocks_reverting_numbered_invoice_to_draft() {
+        let app = build_test_app();
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("failed to build mock webview");
+
+        let company_id = uuid::Uuid::new_v4().to_string();
+        {
+            let conn = app.state::<std::sync::Mutex<Connection>>();
+            let conn = conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO companies (id, name, created_at) VALUES (?1, 'Draft Revert Test Co', ?2)",
+                params![company_id, chrono::Utc::now().to_rfc3339()],
+            )
+            .unwrap();
+        }
+
+        let client = invoke_json(
+            &webview,
+            "create_client",
+            serde_json::json!({ "data": { "company_id": company_id, "name": "Draft Revert Client" } }),
+        );
+        let client_id = client["id"].as_str().unwrap().to_string();
+
+        let product = invoke_json(
+            &webview,
+            "create_product",
+            serde_json::json!({ "data": { "company_id": company_id, "code": "DRAFT-01", "name": "Service", "unit_price": 20000.0 } }),
+        );
+        let product_id = product["id"].as_str().unwrap().to_string();
+
+        // Freshly created, still just "issued" (never paid) — the guard
+        // must fire purely off the invoice carrying a real number, not off
+        // any payment/lock status.
+        let invoice = invoke_json(
+            &webview,
+            "create_invoice",
+            serde_json::json!({
+                "data": {
+                    "company_id": company_id,
+                    "client_id": client_id,
+                    "invoice_date": "2026-08-26",
+                    "items": [{ "product_id": product_id, "quantity": 1.0, "unit_price": 20000.0 }]
+                }
+            }),
+        );
+        let invoice_id = invoice["id"].as_str().unwrap().to_string();
+        assert_eq!(invoice["status"].as_str(), Some("issued"));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            invoke_json(
+                &webview,
+                "update_invoice_status",
+                serde_json::json!({ "id": invoice_id, "status": "draft" }),
+            )
+        }));
+        assert!(result.is_err(), "update_invoice_status should reject reverting a numbered invoice to draft");
+        let panic_payload = result.unwrap_err();
+        let error_message = panic_payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| panic_payload.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        assert!(
+            error_message.contains("INVOICE_LOCKED"),
+            "expected the machine-checkable INVOICE_LOCKED error code, got: {}",
+            error_message
+        );
+
+        let conn = app.state::<std::sync::Mutex<Connection>>();
+        let conn = conn.lock().unwrap();
+        let stored_status: String = conn
+            .query_row("SELECT status FROM invoices WHERE id = ?1", params![invoice_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(stored_status, "issued", "the stored status must remain unchanged after a rejected transition");
     }
 
     // Reproduces the reported bug: a payment whose invoice no longer

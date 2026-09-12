@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   RiAddLine as Plus,
@@ -11,9 +11,11 @@ import {
   RiGroupLine as Users,
   RiUserAddLine as UserAddIcon,
   RiMapPinLine as MapPinIcon,
+  RiErrorWarningLine as AlertCircle,
 } from "@remixicon/react";
 import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
 import { MetricStrip } from "@/components/ui/metric-strip";
+import { cn } from "@/lib/utils";
 import { useClients, useCreateClient, useDeleteClient, useClientOverviewStatsMap, type CreateClientData } from "@/hooks/useClients";
 import { exportToCSV, parseCSV, validateClientImport } from "@/lib/csvUtils";
 import { computeClientStatus } from "@/lib/clientOverview";
@@ -21,6 +23,7 @@ import { ClientStatusBadge } from "@/components/ClientStatusBadge";
 import { toast } from "sonner";
 import { useSecureSession } from "@/hooks/useSecureSession";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 
 export default function ClientsPage() {
   const navigate = useNavigate();
@@ -31,19 +34,25 @@ export default function ClientsPage() {
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: clients, isLoading, refetch } = useClients();
+  const { data: clients, isLoading, isError, refetch } = useClients();
   const { data: overviewStatsByClientId } = useClientOverviewStatsMap();
   const createClient = useCreateClient();
   const deleteClient = useDeleteClient();
 
-  const newThisMonth = (clients ?? []).filter((c) => {
+  // These three derive from the full (now 100+) client list on every
+  // render — memoized so they only re-run when the list or the search
+  // query actually changes, not on every unrelated state update.
+  const newThisMonth = useMemo(() => (clients ?? []).filter((c) => {
     const created = new Date(c.created_at);
     const now = new Date();
     return created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth();
-  }).length;
-  const wilayasCovered = new Set((clients ?? []).map((c) => c.wilaya).filter(Boolean)).size;
+  }).length, [clients]);
+  const wilayasCovered = useMemo(
+    () => new Set((clients ?? []).map((c) => c.wilaya).filter(Boolean)).size,
+    [clients]
+  );
 
-  const filteredClients = clients?.filter(client => {
+  const filteredClients = useMemo(() => clients?.filter(client => {
     if (!searchQuery.trim()) return true;
 
     const query = searchQuery.toLowerCase().trim();
@@ -63,6 +72,15 @@ export default function ClientsPage() {
       client.city?.toLowerCase().includes(query) ||
       client.address?.toLowerCase().includes(query)
     );
+  }), [clients, searchQuery]);
+
+  // Desktop keyboard ergonomics — N opens a new client, Escape clears the
+  // search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: filteredClients ?? [],
+    onOpen: (client: any) => navigate(`/clients/${client.id}`),
+    onCreate: () => navigate("/clients/new"),
+    onEscape: () => setSearchQuery(""),
   });
 
   const handleDelete = async () => {
@@ -222,14 +240,17 @@ export default function ClientsPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clients & Relations</h1>
-              <p className="text-xs text-slate-500 mt-1">Gérez vos clients</p>
+          {/* Header — single compact desktop row, title/count left, search +
+              utility icons + primary CTA right. */}
+          <div className="h-9 mb-3 flex items-center justify-between gap-4 animate-fade-in-down">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold text-foreground truncate">Clients &amp; Relations</h1>
+              <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums shrink-0">
+                {clients?.length || 0}
+              </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -237,35 +258,43 @@ export default function ClientsPage() {
                 accept=".csv"
                 className="hidden"
               />
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Rechercher par nom, code, téléphone..."
+                className="h-[30px] w-64 text-xs bg-background border-border/80 rounded-md pl-7"
+                containerClassName="shrink-0"
+              />
 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isImporting}
-                className="w-10 h-10 rounded-xl border border-slate-200/70 bg-white flex items-center justify-center hover:bg-slate-50 transition-all active:scale-[0.96]"
+                className="h-[30px] w-[30px] rounded-md border border-border/80 bg-card flex items-center justify-center hover:bg-muted/60 transition-colors"
                 title="Importer des clients"
               >
-                <Upload className="w-4 h-4 text-slate-500" />
+                <Upload className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
 
               <button
                 onClick={handleExport}
                 disabled={!clients || clients.length === 0}
-                className="w-10 h-10 rounded-xl border border-slate-200/70 bg-white flex items-center justify-center hover:bg-slate-50 transition-all active:scale-[0.96]"
+                className="h-[30px] w-[30px] rounded-md border border-border/80 bg-card flex items-center justify-center hover:bg-muted/60 transition-colors disabled:opacity-50"
                 title="Exporter les clients"
               >
-                <Download className="w-4 h-4 text-slate-500" />
+                <Download className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
 
-              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/clients/new")}>
-                <Plus className="w-4 h-4" />
+              <Button className="h-[30px] px-3 text-xs font-medium rounded-md shadow-xs gap-1.5" onClick={() => navigate("/clients/new")}>
+                <Plus className="w-3.5 h-3.5" />
                 Nouveau client
+                <kbd className="text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
               </Button>
             </div>
           </div>
 
           {/* Metric strip — shared KPI ribbon component (same shape as the
               Dashboard's Tier 2), replacing the old single floating stat box. */}
-          <div className="mb-6 animate-fade-in-up animation-delay-100">
+          <div className="mb-4 animate-fade-in-up animation-delay-100">
             <MetricStrip
               cells={[
                 { key: "total", label: "Total Clients", value: String(clients?.length || 0), numericValue: clients?.length || 0, format: (v) => String(Math.round(v)), icon: Users },
@@ -275,34 +304,34 @@ export default function ClientsPage() {
             />
           </div>
 
-          {/* Search */}
-          <div className="mb-6 animate-fade-in-up animation-delay-150">
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Rechercher par nom, code, téléphone..."
-              containerClassName="w-full md:w-80"
-            />
-          </div>
-
-          {/* Table — borderless outer surface, resting directly on the page
-              canvas (was a bg-card/border/shadow-card box), matching the
-              Invoices.tsx table pattern. */}
-          <div className="animate-fade-in-up animation-delay-200">
+          {/* Edge-to-edge desktop data grid. */}
+          <div className="animate-fade-in-up animation-delay-200 border border-border/80 rounded-md bg-card overflow-hidden w-full">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Code</TableHead>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden md:table-cell">Téléphone</TableHead>
-                  <TableHead className="hidden lg:table-cell">Wilaya</TableHead>
-                  <TableHead>Statut</TableHead>
+                <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Code</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Nom</TableHead>
+                  <TableHead className="hidden md:table-cell text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Téléphone</TableHead>
+                  <TableHead className="hidden lg:table-cell text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Wilaya</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Statut</TableHead>
                   <TableHead className="w-14"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableLoading columns={6} rows={5} />
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        icon={AlertCircle}
+                        tone="destructive"
+                        title="Échec du chargement des données"
+                        description="Une erreur est survenue lors du chargement des clients."
+                        action={{ label: "Réessayer", onClick: () => refetch() }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ) : filteredClients?.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6}>
@@ -321,12 +350,16 @@ export default function ClientsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredClients?.map((client) => (
+                  filteredClients?.map((client, index) => (
                     <TableRow
                       key={client.id}
-                      className="cursor-pointer"
+                      className={cn(
+                        "h-8 text-xs border-b border-border/40 hover:bg-muted/20 transition-colors cursor-pointer",
+                        focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                      )}
                       dimmed={client.is_active === false}
                       onClick={() => navigate(`/clients/${client.id}`)}
+                      onMouseEnter={() => setFocusedIndex(index)}
                     >
                       <TableCell className="text-muted-foreground font-mono tabular-nums tracking-tight">{client.code || "-"}</TableCell>
                       <TableCell className="font-medium max-w-[240px]">

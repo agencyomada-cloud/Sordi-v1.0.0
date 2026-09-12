@@ -15,6 +15,27 @@
       "when": 1787181550157,
       "tag": "0001_wakeful_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789160705994,
+      "tag": "0002_military_blacklash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789165417986,
+      "tag": "0003_productive_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789166750850,
+      "tag": "0004_nifty_triathlon",
+      "breakpoints": true
     }
   ]
 }

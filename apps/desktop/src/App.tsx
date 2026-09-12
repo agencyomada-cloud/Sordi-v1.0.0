@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { LicenseBanner } from "@/components/LicenseBanner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { SecureSessionProvider } from "@/hooks/useSecureSession";
@@ -23,6 +22,7 @@ import DeliveryDetail from "./pages/DeliveryDetail";
 import NewDelivery from "./pages/NewDelivery";
 import EditDelivery from "./pages/EditDelivery";
 import Payments from "./pages/Payments";
+import Relances from "./pages/Relances";
 import Products from "./pages/Products";
 import SalesAnalysis from "./pages/SalesAnalysis";
 import History from "./pages/History";
@@ -48,6 +48,8 @@ import { useLanguage } from "@/hooks/useLanguage";
 import EmployeeDetail from "./pages/EmployeeDetail";
 import NotFound from "./pages/NotFound";
 import Widget from "./pages/Widget";
+import SplashScreen from "./pages/SplashScreen";
+import { useSplashDismissal } from "@/hooks/useSplashDismissal";
 
 const queryClient = new QueryClient();
 
@@ -62,10 +64,35 @@ function LanguageBootstrap() {
 // widget.rs) loads this same index.html/App bundle with ?view=widget — it's
 // a companion glance-view of the already-running main window, not its own
 // authenticated session, so it skips the router/AppLayout/ProtectedRoute/
-// Toaster/LicenseBanner tree entirely and just needs the data providers.
+// Toaster/TrialBanner tree entirely and just needs the data providers.
 const isWidgetWindow = new URLSearchParams(window.location.search).get("view") === "widget";
 
+// The splashscreen window (see tauri.conf.json's "splashscreen" window and
+// splashscreen.rs) loads this same bundle with ?view=splash — purely
+// decorative and fully self-contained (SplashScreen.tsx has zero data
+// dependencies), so it only needs ThemeProvider for correct light/dark
+// `bg-background`/`border-border` colors, nothing else from the app shell.
+const isSplashWindow = new URLSearchParams(window.location.search).get("view") === "splash";
+
+// Fires the close_splashscreen IPC call once this (the "main") window's
+// own bootstrap has actually settled — see useSplashDismissal for what
+// "settled" means and why. Rendered as its own component (not called
+// directly in App) purely so its hooks only run in the main-window render
+// tree below, never in the widget or splash branches above/below it.
+function SplashDismissalBootstrap() {
+  useSplashDismissal();
+  return null;
+}
+
 const App = () => {
+  if (isSplashWindow) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+        <SplashScreen />
+      </ThemeProvider>
+    );
+  }
+
   if (isWidgetWindow) {
     return (
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
@@ -85,6 +112,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
     <WorkspaceProvider>
     <TooltipProvider>
+      <SplashDismissalBootstrap />
       <LanguageBootstrap />
       <Toaster
         position="bottom-center"
@@ -95,7 +123,6 @@ const App = () => {
         richColors
         closeButton
       />
-      <LicenseBanner />
       <BrowserRouter>
         <SecureSessionProvider>
           <Routes>
@@ -119,6 +146,7 @@ const App = () => {
               <Route path="/deliveries/:id/edit" element={<EditDelivery />} />
               <Route path="/deliveries/new" element={<NewDelivery />} />
               <Route path="/payments" element={<Payments />} />
+              <Route path="/relances" element={<Relances />} />
               <Route path="/products" element={<Products />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/analyses" element={<SalesAnalysis />} />

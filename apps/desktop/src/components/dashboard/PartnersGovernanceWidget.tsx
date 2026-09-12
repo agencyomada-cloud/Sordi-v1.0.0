@@ -2,13 +2,14 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, EyeOff, ChevronRight, Users2, Plus } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@sordi/ui";
+import { Button, Card, CardHeader, CardTitle, CardContent } from "@sordi/ui";
 import { usePartners } from "@/hooks/usePartners";
 import { db, type PartnerWithdrawal } from "@/lib/database";
 import { cn } from "@/lib/utils";
 
-const BENTO_CARD_CLASS =
-  "bg-white/90 border-slate-200/70 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.03)] rounded-2xl transition-all dark:bg-card dark:border-border";
+// Flat native desktop panel, matching Index.tsx's own DESKTOP_CARD_CLASS —
+// no floating-card shadow/translucency, just a hairline border.
+const DESKTOP_CARD_CLASS = "bg-card border-border/80 rounded-md shadow-none";
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 0 }).format(amount) + " DA";
@@ -77,8 +78,8 @@ export function PartnersGovernanceWidget() {
   const share2 = totalDraws > 0 && p2 ? (p2.withdrawn / totalDraws) * 100 : 50;
 
   return (
-    <Card className={cn("flex flex-col h-full", BENTO_CARD_CLASS)}>
-      <CardHeader className="flex flex-row items-center justify-between pb-3 shrink-0">
+    <Card className={cn("flex flex-col h-full p-3.5", DESKTOP_CARD_CLASS)}>
+      <CardHeader className="flex flex-row items-center justify-between p-0 pb-2.5 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
             Gouvernance &amp; Retraits ({currentYear})
@@ -114,20 +115,22 @@ export function PartnersGovernanceWidget() {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 min-h-0 flex flex-col justify-between p-5 pt-0 space-y-4">
+      <CardContent className="flex-1 min-h-0 flex flex-col justify-between p-0 space-y-4">
         {partners.length === 0 ? (
           <div className="py-8 text-center flex flex-col items-center justify-center space-y-2.5 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
               <Users2 className="w-5 h-5" />
             </div>
             <p className="text-xs text-slate-500">Aucun associé configuré pour l'exercice {currentYear}</p>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[30px] px-3 text-xs rounded-md gap-1.5"
               onClick={() => navigate("/partners")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-sm transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Configurer les associés</span>
-            </button>
+              Configurer les associés
+            </Button>
           </div>
         ) : (
           <div className="py-2">

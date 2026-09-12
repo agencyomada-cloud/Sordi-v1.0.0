@@ -1,15 +1,24 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Input, Textarea, Button } from "@sordi/ui";
 import {
   RiAddLine as Plus,
   RiDeleteBinLine as Trash2,
-  RiCheckLine as Check,
-  RiExpandUpDownLine as ChevronsUpDown
+  RiExpandUpDownLine as ChevronsUpDown,
+  RiArrowUpSLine as ChevronUp,
+  RiArrowDownSLine as ChevronDown,
+  RiBookmarkLine as BookmarkPlus,
+  RiLoader4Line as Loader2,
 } from "@remixicon/react";
-import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useCreateProduct } from "@/hooks/useProducts";
 import { DatePicker } from "@/components/ui/date-picker";
 import { numberToWords } from "@/lib/numberToWords";
+import { getContrastTextColor } from "@/lib/colorContrast";
+import { InvoiceLogoPlaceholder } from "./InvoiceLogoPlaceholder";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
 import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
+import { ClientPickerCombobox } from "./ClientPickerCombobox";
+import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
+import { useScaleToFitContainer } from "./scaleToFitContext";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
 
 import { InteractiveStampZone } from "./InteractiveStampZone";
@@ -40,16 +49,55 @@ export function EditableInvoiceStructure({
   const primaryColor = settings?.primary_color || "#476CFF";
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
+  const scaleContainer = useScaleToFitContainer();
   const {
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
     isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel, isTaxExempt,
     formatCurrency,
-    updateInvoiceField, updateClient, handlePaymentModeChange,
+    updateInvoiceField, selectClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleAddCustomItem, handleDeleteItem,
+    items, moveItemUp, moveItemDown,
   } = logic;
+
+  const createProduct = useCreateProduct();
+  // Registers a custom-typed line (no product_id — not yet in the catalog)
+  // using its CURRENT live values, unlike ProductPickerCombobox's own
+  // "Enregistrer au catalogue" (which only fires at add-time, before a
+  // price/unit has even been typed in). A generated reference code, same
+  // convention as that picker, since the catalog requires one.
+  const handleSaveItemToCatalog = async (item: any) => {
+    const name = (item.product_name || item.products?.name || item.name || "").trim();
+    if (!name || createProduct.isPending) return;
+    try {
+      const code = `CUSTOM-${Date.now().toString(36).toUpperCase()}`;
+      await createProduct.mutateAsync({
+        code,
+        name,
+        unit_price: item.unit_price || 0,
+        unit: item.products?.unit || item.unit || undefined,
+        tva_rate: item.tva_rate,
+      });
+      toast.success("Produit ajouté au catalogue");
+    } catch {
+      // useCreateProduct's mutation already toasts the error.
+    }
+  };
+
+  // Enter in the price/quantity fields opens the same "Ajouter un article"
+  // picker the trailing row's button does — keyboard-first multi-line entry
+  // without leaving the keyboard: type price/qty, Enter, type the next
+  // item's name in the picker (autofocused), select/Enter again, its
+  // quantity is auto-focused (see ProductPickerCombobox's focusLineQuantity)
+  // and the cycle repeats.
+  const handleLineEntryKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      setOpenPopoverIndex(-1);
+    }
+  };
 
   return (
     <div id="invoice-preview">
@@ -62,33 +110,53 @@ export function EditableInvoiceStructure({
           <div
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-black font-sans mx-auto border border-border/40 rounded-2xl shadow-xl print:border-none print:rounded-none print:shadow-none print:m-0 mb-8"
+            className="a4 relative bg-white dark:bg-white text-black font-sans mx-auto select-text border border-border/80 dark:border-neutral-700 shadow-sm rounded-[2px] print:border-none print:shadow-none print:m-0 mb-8"
             style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
+            {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
               <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[3mm] pl-[5mm] flex flex-col items-start gap-1">
-                {settings?.logo_data && (
-                  <img src={settings.logo_data} className="h-9 w-auto max-w-[160px] object-contain object-left" alt="Logo" />
+                {settings?.logo_data ? (
+                  <img
+                    src={settings.logo_data}
+                    style={{ maxHeight: Number(settings?.logo_size) || 60, maxWidth: 180 }}
+                    className="h-auto w-auto object-contain object-left"
+                    alt="Logo"
+                  />
+                ) : (
+                  // No logo uploaded — a minimal upload cue only. The
+                  // company's legal identity already appears in the
+                  // footer's legal block, so repeating it here (a plain
+                  // "Mon Entreprise" name + RC/NIF line) was just clutter
+                  // stacked under an already-obvious "add your logo" slot.
+                  <InvoiceLogoPlaceholder />
                 )}
-                <span className="text-xs font-semibold tracking-wide text-slate-800 uppercase">
-                  {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-                </span>
               </div>
-              {settings?.company_name && (
+              {/* Only shown alongside a real logo — this badge IS the
+                  header's one company-name display when there's no logo to
+                  pair it with, so showing it there too would just repeat
+                  the typographic fallback above it. */}
+              {settings?.logo_data && settings?.company_name && (
                 <div className="absolute right-0 bottom-0 w-[71.5mm] h-[7.8mm] flex items-center justify-center px-[5mm] text-[8.5pt] font-bold leading-none whitespace-nowrap text-white z-2 tracking-wide uppercase" style={{ backgroundColor: primaryColor }}>
                   {settings.company_name}
                 </div>
               )}
             </header>
 
-            <main className="absolute left-0 top-[33.9mm] w-full h-[229.8mm] overflow-hidden bg-white">
+            {/* Height trimmed from the full 229.8mm (297 - 33.9 header -
+                33.3 footer) down to 220mm — the reclaimed 9.8mm becomes a
+                clean white buffer between main's own content (which still
+                ends with its own pb-[8mm] and the page-number line) and the
+                footer legal-info band's top border, instead of the two
+                sitting flush against each other. */}
+            <main className="absolute left-0 top-[33.9mm] w-full h-[220mm] overflow-hidden bg-white">
               {settings?.body_pattern_data && (
                 <div className="absolute inset-0 w-full h-full bg-white z-0 overflow-hidden">
                   <img src={settings.body_pattern_data} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none" />
                 </div>
               )}
 
-              <div className="relative w-full h-full z-1 px-[8mm] pt-[5mm] pb-[5mm] flex flex-col justify-between">
+              <div className="relative w-full h-full z-1 px-[8mm] pt-[5mm] pb-[15mm] flex flex-col justify-between">
                 <div>
                   <div className="text-center mb-4">
                     <h1 className="text-lg font-semibold tracking-[-0.02em] uppercase text-gray-800">
@@ -100,34 +168,20 @@ export function EditableInvoiceStructure({
                     <div className="w-[55%] space-y-1">
                       <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Destinataire</div>
 
-                      {clients && clients.length > 0 ? (
-                        <Popover open={openClientCombo} onOpenChange={setOpenClientCombo}>
-                          <PopoverTrigger asChild>
-                            <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-sm font-bold uppercase text-black hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
-                              {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="start">
-                            <Command>
-                              <CommandInput placeholder="Rechercher un client..." />
-                              <CommandList>
-                                <CommandEmpty>Aucun client trouvé.</CommandEmpty>
-                                <CommandGroup>
-                                  {clients.map((client) => (
-                                    <CommandItem key={client.id} value={client.name} onSelect={() => { updateClient(client.id, clients); setOpenClientCombo(false); }}>
-                                      <Check className={cn("mr-2 h-4 w-4", invoice.clients?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                      {client.name}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        <div className="font-extrabold text-sm text-black uppercase mb-1">{invoice.clients?.name || invoice.client_name || ""}</div>
-                      )}
+                      <ClientPickerCombobox
+                        clients={clients}
+                        selectedClientId={invoice.clients?.id}
+                        open={openClientCombo}
+                        onOpenChange={setOpenClientCombo}
+                        onSelectClient={(client) => { selectClient(client); setOpenClientCombo(false); }}
+                        container={scaleContainer}
+                        trigger={
+                          <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-sm font-bold uppercase text-black hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
+                            {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        }
+                      />
 
                       {invoice.use_secondary_register && invoice.selected_secondary_address ? (
                         <div className="text-gray-700 uppercase text-[11px] font-semibold">{invoice.selected_secondary_address}</div>
@@ -224,64 +278,87 @@ export function EditableInvoiceStructure({
                     </div>
                   </div>
 
-                  <div className="mb-6">
-                    <table className="w-full border-collapse text-xs table-fixed">
-                      <thead>
-                        <tr className="border-y border-gray-300">
-                          <th className="py-2 text-left w-[42%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Désignation / Prestation</th>
-                          <th className="py-2 text-right w-[15%] text-[11px] font-medium tracking-wider uppercase text-gray-400">P.U (HT)</th>
-                          <th className="py-2 text-right w-[7%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Qté</th>
-                          <th className="py-2 text-center w-[16%] text-[11px] font-medium tracking-wider uppercase text-gray-400">U.M</th>
-                          <th className="py-2 text-right w-[20%] text-[11px] font-medium tracking-wider uppercase text-gray-400">Total HT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageItems.map((item: any, relIdx: number) => {
-                          const globalIdx = startIdx + relIdx;
-                          const unit = item.products?.unit || item.unit || "TN";
-                          return (
-                            <tr key={globalIdx} className="border-b border-gray-200 group hover:bg-gray-50 relative">
-                              <td className="py-2.5 font-semibold uppercase align-top">
-                                {item.product_name || item.products?.name || item.name || ""}
-                                {(item.product_description || item.products?.description || item.description) && (
-                                  <div className="font-normal text-[10px] normal-case mt-0.5 text-gray-500">{item.product_description || item.products?.description || item.description}</div>
-                                )}
-                              </td>
-                              <td className="py-2.5 align-top font-mono whitespace-nowrap min-w-[130px]">
-                                <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-xs" />
-                              </td>
-                              <td className="py-2.5 align-top font-mono whitespace-nowrap">
-                                <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-6 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-xs" />
-                              </td>
-                              <td className="py-2.5 text-center align-top uppercase text-gray-500 text-[10px] leading-tight break-words">{unit}</td>
-                              <td className="py-2.5 text-right align-top font-mono tabular-nums tracking-tight font-semibold relative group-hover:pr-8 whitespace-nowrap min-w-[130px]">
-                                {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
-                                <button className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 p-1 hover:bg-red-50 rounded" onClick={() => handleDeleteItem(globalIdx)} title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {isLastPage && (
-                          <tr>
-                            <td colSpan={5} className="p-0">
-                              <ProductPickerCombobox
-                                products={products}
-                                excludeProductIds={logic.items.map((it: any) => it.product_id)}
-                                open={openPopoverIndex === -1}
-                                onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
-                                onSelectProduct={(p) => handleAddProduct(p, logic.items.length - 1)}
-                                onAddCustomItem={(name) => handleAddCustomItem(name, logic.items.length - 1)}
-                                nextIndex={logic.items.length}
-                                formatCurrency={formatCurrency}
-                                trigger={
-                                  <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un article</Button>
-                                }
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="mb-6 text-xs">
+                    <div
+                      className="flex items-center gap-2 px-2 py-2 text-[11px] font-medium tracking-wider uppercase"
+                      style={{ backgroundColor: primaryColor, color: getContrastTextColor(primaryColor) }}
+                    >
+                      <div className="flex-1 min-w-[260px] text-left">Désignation / Prestation</div>
+                      <div className="w-[120px] text-right">P.U (HT)</div>
+                      <div className="w-[70px] text-right">Qté</div>
+                      <div className="w-[130px] text-center">U.M</div>
+                      <div className="w-[130px] text-right">Total HT</div>
+                      <div className="w-[70px]" />
+                    </div>
+                    {pageItems.map((item: any, relIdx: number) => {
+                      const globalIdx = startIdx + relIdx;
+                      const unit = item.products?.unit || item.unit || "TN";
+                      return (
+                        <div key={globalIdx} className="flex items-start gap-2 border-b border-gray-200 py-2.5 group hover:bg-gray-50">
+                          <div className="flex-1 min-w-[260px] font-semibold uppercase pt-1 leading-6">
+                            {item.product_name || item.products?.name || item.name || ""}
+                            {(item.product_description || item.products?.description || item.description) && (
+                              <div className="font-normal text-[10px] normal-case mt-1 leading-tight text-gray-500">{item.product_description || item.products?.description || item.description}</div>
+                            )}
+                          </div>
+                          <div className="w-[120px] font-mono pt-1">
+                            <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-6 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-xs" />
+                          </div>
+                          <div className="w-[70px] font-mono pt-1">
+                            <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-6 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-xs" />
+                          </div>
+                          <div className="w-[130px] text-center uppercase text-gray-500 text-[11px] leading-6 whitespace-nowrap overflow-hidden text-ellipsis px-1 pt-1" title={unit}>{unit}</div>
+                          <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-xs">
+                            {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                          </div>
+                          <div className="w-[70px] flex items-center justify-end gap-0.5 pt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            {!item.product_id && (item.product_name || item.name) && (
+                              <button
+                                onClick={() => handleSaveItemToCatalog(item)}
+                                disabled={createProduct.isPending}
+                                className="rounded p-1 text-zinc-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40"
+                                title="Enregistrer comme nouveau produit au catalogue"
+                              >
+                                {createProduct.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkPlus className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => moveItemUp(globalIdx)}
+                              disabled={globalIdx === 0}
+                              className="rounded p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                              title="Monter"
+                            ><ChevronUp className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => moveItemDown(globalIdx)}
+                              disabled={globalIdx === items.length - 1}
+                              className="rounded p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                              title="Descendre"
+                            ><ChevronDown className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => handleDeleteItem(globalIdx)}
+                              className="rounded p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                              title="Supprimer"
+                            ><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {isLastPage && (
+                      <ProductPickerCombobox
+                        products={products}
+                        excludeProductIds={items.map((it: any) => it.product_id)}
+                        open={openPopoverIndex === -1}
+                        onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
+                        onSelectProduct={(p) => handleAddProduct(p, items.length - 1)}
+                        onAddCustomItem={(name) => handleAddCustomItem(name, items.length - 1)}
+                        nextIndex={items.length}
+                        formatCurrency={formatCurrency}
+                        container={scaleContainer}
+                        trigger={
+                          <Button variant="ghost" className="w-full h-8 text-xs text-gray-500 hover:text-gray-900 rounded-none bg-gray-50 border-none"><Plus className="w-4 h-4 mr-1" /> Ajouter un article</Button>
+                        }
+                      />
+                    )}
                   </div>
 
                   {(() => {
@@ -354,7 +431,7 @@ export function EditableInvoiceStructure({
 
                   {isLastPage && (
                     <>
-                      <div className="mb-4">
+                      <div className="mt-8 mb-4">
                         {showMontantEnLettres && (
                           <div className="mb-3">
                             <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">
@@ -369,11 +446,17 @@ export function EditableInvoiceStructure({
                             signature block to the right, same as before. */}
                         <div className="flex justify-end items-start">
                           <div className="mr-8 flex flex-col items-center">
+                            {/* No onStampSizeChange/onStampSizeCommit here
+                                on purpose — that's what makes
+                                InteractiveStampZone render its on-canvas
+                                hover slider. Stamp size is now a single
+                                control in the "Personnaliser" drawer
+                                ("Taille du cachet"), writing straight to
+                                settings.stamp_size like every other
+                                branding setting. */}
                             <InteractiveStampZone
                               settings={settings}
                               stampSize={stampSize}
-                              onStampSizeChange={onStampSizeChange}
-                              onStampSizeCommit={onStampSizeCommit}
                               showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
                             />
                           </div>
@@ -383,7 +466,7 @@ export function EditableInvoiceStructure({
                   )}
                 </div>
 
-                <div className="text-center font-bold text-xs">{pageIndex + 1}</div>
+                <div className="text-xs text-zinc-400 font-mono tracking-widest text-center mt-6">{pageIndex + 1} / {pages.length}</div>
               </div>
             </main>
 
@@ -407,17 +490,7 @@ export function EditableInvoiceStructure({
                   )}
                 </section>
 
-                <section className="relative pt-[6mm]">
-                  {(settings?.footer_logo_data || settings?.company_name) && (
-                    <div className="absolute top-0 left-0 h-[8mm] w-[43mm] flex items-center">
-                      {settings?.footer_logo_data ? (
-                        <img src={settings.footer_logo_data} alt="Footer Logo" className="h-full w-full object-contain object-left" />
-                      ) : (
-                        <span className="font-extrabold text-[9pt] text-black tracking-tight uppercase">{settings.company_name}</span>
-                      )}
-                    </div>
-                  )}
-
+                <section className="pt-[6mm]">
                   <div className="pt-[0.1mm] text-[7.1pt] leading-[1.65] whitespace-nowrap">
                     {settings?.company_email && <div className="font-bold">{settings.company_email}</div>}
                     {settings?.company_website && <div>{settings.company_website}</div>}

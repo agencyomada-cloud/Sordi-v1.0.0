@@ -199,6 +199,10 @@ export default {
           "0%, 100%": { transform: "translate(0px, 0px) scale(1)" },
           "50%": { transform: "translate(-24px, -20px) scale(1.12)" },
         },
+        "splash-indeterminate": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(300%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -216,6 +220,7 @@ export default {
         "splash-out": "splash-out 0.4s cubic-bezier(0.4, 0, 1, 1) forwards",
         "ambient-drift": "ambient-drift 12s ease-in-out infinite",
         "ambient-drift-reverse": "ambient-drift-reverse 14s ease-in-out infinite",
+        "splash-indeterminate": "splash-indeterminate 1.1s ease-in-out infinite",
       },
     },
   },

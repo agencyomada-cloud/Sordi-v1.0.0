@@ -1,21 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 import { CONTRACT_SERVICE_CATALOG } from '@/lib/contractServices';
 import type { ContractServiceKey } from '@/lib/database';
-
-Font.register({
-  family: 'Montserrat',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'JetBrains Mono',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
-  ]
-});
+import './pdfFonts';
 
 const formatMoney = (amount: number | null | undefined): string => {
   if (amount === null || amount === undefined || isNaN(amount)) return '0,00 DZD';

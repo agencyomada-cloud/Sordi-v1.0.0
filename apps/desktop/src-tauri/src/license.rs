@@ -138,6 +138,59 @@ pub fn compute_device_fingerprint() -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Human-readable Machine ID (for manual/offline license activation — the
+// user reads this off the screen and sends it to support, unlike
+// compute_device_fingerprint() above, which is an opaque value embedded
+// silently in the license token and never shown). Deliberately a SEPARATE
+// hash of the same raw platform id, not a truncation of the device
+// fingerprint — a different domain-separation prefix means the two values
+// are cryptographically unlinked, so this display code can't be used to
+// derive or guess the token's real fingerprint claim.
+// ---------------------------------------------------------------------------
+
+/// SHA-256 of the raw platform id (same per-OS source as
+/// compute_device_fingerprint — IOPlatformUUID / MachineGuid / machine-id),
+/// falling back to the hashed hostname if that read fails for any reason
+/// (sandboxing, a stripped-down OS, `ioreg`/`reg` missing, ...). Formatted
+/// as `SRD-XXXX-XXXX-XXXX`: the first 12 hex chars of the hash, uppercased
+/// and grouped — short enough to read aloud or retype, long enough (48 bits)
+/// that collisions between real machines aren't a practical concern.
+pub fn compute_machine_id() -> Result<String, String> {
+    let (raw, domain) = match raw_platform_id() {
+        Ok(id) => (id, "sordi-machine-id-v1:"),
+        Err(_) => (fallback_machine_seed()?, "sordi-machine-id-fallback-v1:"),
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    hasher.update(raw.as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    let hex12 = &digest[..12];
+
+    Ok(format!(
+        "SRD-{}-{}-{}",
+        hex12[0..4].to_uppercase(),
+        hex12[4..8].to_uppercase(),
+        hex12[8..12].to_uppercase()
+    ))
+}
+
+/// Last-resort seed when the OS-level hardware id can't be read at all —
+/// the machine's own hostname, via the `hostname` command every mainstream
+/// OS ships (macOS, Linux, Windows all have it), rather than adding a
+/// platform-detection crate just for this rare fallback path.
+fn fallback_machine_seed() -> Result<String, String> {
+    let output = std::process::Command::new("hostname")
+        .output()
+        .map_err(|e| format!("failed to run hostname: {e}"))?;
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if name.is_empty() {
+        return Err("hostname command returned no output".to_string());
+    }
+    Ok(name)
+}
+
+// ---------------------------------------------------------------------------
 // Token model + local verification
 // ---------------------------------------------------------------------------
 
@@ -294,7 +347,37 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
-pub async fn activate(license_key: String) -> Result<LicenseStatus, String> {
+/// A raw signed license token is 3 non-empty dot-separated segments
+/// (JWT's own wire shape: header.payload.signature) — a lookup key issued
+/// by apps/api (the online path) is an opaque short reference code with no
+/// reason to ever collide with that shape. This is only a cheap routing
+/// hint, not the actual security boundary: whichever path it sends the
+/// input down, the input still has to pass either the server's own checks
+/// or verify_local()'s full Ed25519 signature+expiry+fingerprint
+/// verification before anything is written to disk.
+fn looks_like_jwt(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('.').collect();
+    parts.len() == 3 && parts.iter().all(|p| !p.is_empty())
+}
+
+/// Offline path — for a token an administrator handed over directly (via
+/// WhatsApp, a file, a keygen'd string pasted straight into the UI), never
+/// touching the network at all. Entirely local: Ed25519 signature, expiry,
+/// and *this* machine's own device fingerprint, exactly the same check
+/// require_active_license() re-runs on every subsequent write operation —
+/// so a token that activates here is guaranteed to keep working, not just
+/// pass a weaker one-time check.
+fn activate_offline(token: &str) -> Result<LicenseStatus, String> {
+    verify_local(token)?;
+    write_local_token(token)?;
+    Ok(current_status())
+}
+
+/// Online path — the original behavior, unchanged: exchange a short lookup
+/// key for a real signed token via apps/api, then verify it locally before
+/// trusting it (catches a public/private key mismatch immediately instead
+/// of silently writing an unverifiable token to disk).
+async fn activate_online(license_key: &str) -> Result<LicenseStatus, String> {
     let device_fingerprint = compute_device_fingerprint()?;
     let client = reqwest::Client::new();
     let response = client
@@ -315,12 +398,42 @@ pub async fn activate(license_key: String) -> Result<LicenseStatus, String> {
     }
 
     let body: ActivateResponse = response.json().await.map_err(|e| format!("unexpected server response: {e}"))?;
-    // Confirms the token we just received actually verifies locally before
-    // trusting it — catches a public/private key mismatch immediately
-    // instead of silently writing an unverifiable token to disk.
     verify_local(&body.signed_token)?;
     write_local_token(&body.signed_token)?;
     Ok(current_status())
+}
+
+/// Single entry point for the "Clé de licence" field — accepts either a
+/// short online lookup key (apps/api exchange) or a raw signed token handed
+/// over directly for fully offline activation. See looks_like_jwt() for how
+/// the two are told apart, and activate_offline()/activate_online() for
+/// what actually verifies each.
+pub async fn activate(license_key: String) -> Result<LicenseStatus, String> {
+    let trimmed = license_key.trim();
+
+    // Already token-shaped — go straight to offline verification. Sending
+    // a JWT to the online lookup-key endpoint would never make sense (the
+    // server expects an opaque reference code, not a token it would have
+    // to have issued itself), so there's no reason to touch the network
+    // first when the input already looks like one.
+    if looks_like_jwt(trimmed) {
+        return activate_offline(trimmed);
+    }
+
+    match activate_online(trimmed).await {
+        Ok(status) => Ok(status),
+        Err(online_err) => {
+            // Network/server failure on what looked like a lookup key —
+            // still worth one offline attempt in case it's actually a
+            // token that the structural check above didn't catch (or the
+            // caller genuinely has no network at all). If that also
+            // fails, surface the original online error: it's almost
+            // always the more informative one for a real lookup-key typo,
+            // and activate_offline's error on a non-token string would
+            // just be a confusing "invalid signature" message.
+            activate_offline(trimmed).or(Err(online_err))
+        }
+    }
 }
 
 /// Background, non-blocking refresh — called by the frontend right after
@@ -391,6 +504,176 @@ mod tests {
         assert_eq!(claims.device_fingerprint, "cross-lang-test-fingerprint");
     }
 
+    // Mirrors src/bin/keygen.rs's own signing call exactly (same Ed25519
+    // algorithm, same dev/test private key, same LicenseClaims shape) —
+    // proving this signing recipe round-trips through this module's real
+    // verify_signature_and_expiry()/verify_local() is exactly what proves
+    // the keygen's output does too, without a fragile process-spawn
+    // dependency on the separate `keygen` binary actually being built
+    // first. Private key duplicated here rather than imported from the
+    // bin target, since a bin can depend on its package's lib but not the
+    // reverse — and this stays #[cfg(test)]-only either way, never
+    // compiled into the real shipped app.
+    const KEYGEN_DEV_PRIVATE_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKNhRYsZAot08PVuxuSgcwJRKJ4FNwMadQSY/PJE1B0w\n-----END PRIVATE KEY-----\n";
+
+    fn sign_test_token(claims: &LicenseClaims) -> String {
+        let encoding_key = jsonwebtoken::EncodingKey::from_ed_pem(KEYGEN_DEV_PRIVATE_KEY_PEM.as_bytes())
+            .expect("embedded dev private key must parse");
+        jsonwebtoken::encode(&jsonwebtoken::Header::new(Algorithm::EdDSA), claims, &encoding_key)
+            .expect("signing with a valid Ed25519 key must not fail")
+    }
+
+    #[test]
+    fn keygen_produced_token_verifies_against_this_machine() {
+        let fingerprint = compute_device_fingerprint().expect("this test machine must support fingerprinting");
+        let iat = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = LicenseClaims {
+            client_reference_id: "Client Test SARL".to_string(),
+            device_fingerprint: fingerprint,
+            iat,
+            exp: iat + 365 * 86_400,
+        };
+
+        let token = sign_test_token(&claims);
+
+        // The full path require_active_license() ultimately depends on:
+        // signature + expiry + THIS machine's own fingerprint matching.
+        let verified = verify_local(&token).expect("a freshly keygen'd token for this exact machine must verify");
+        assert_eq!(verified.client_reference_id, "Client Test SARL");
+        assert_eq!(verified.device_fingerprint, claims.device_fingerprint);
+    }
+
+    #[test]
+    fn keygen_produced_token_for_a_different_machine_is_rejected() {
+        // The whole point of the fingerprint check — a token that's
+        // perfectly validly signed still must not activate on a machine
+        // it wasn't issued for.
+        let iat = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let claims = LicenseClaims {
+            client_reference_id: "Someone Else SARL".to_string(),
+            device_fingerprint: "not-this-machines-fingerprint".to_string(),
+            iat,
+            exp: iat + 365 * 86_400,
+        };
+        let token = sign_test_token(&claims);
+
+        // Signature+expiry alone still passes (it's a genuinely valid token)...
+        assert!(verify_signature_and_expiry(&token).is_ok());
+        // ...but the full local check, which also compares the fingerprint
+        // to this machine's own, must reject it.
+        assert!(verify_local(&token).is_err());
+    }
+
+    #[test]
+    fn keygen_produced_expired_token_is_rejected() {
+        let iat = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let fingerprint = compute_device_fingerprint().expect("this test machine must support fingerprinting");
+        let claims = LicenseClaims {
+            client_reference_id: "Expired Test SARL".to_string(),
+            device_fingerprint: fingerprint,
+            iat: iat.saturating_sub(400 * 86_400),
+            exp: iat.saturating_sub(35 * 86_400), // expired 35 days ago
+        };
+        let token = sign_test_token(&claims);
+        assert!(verify_local(&token).is_err(), "an expired token must not verify even with a correct signature and fingerprint");
+    }
+
+    #[test]
+    fn looks_like_jwt_recognizes_real_tokens_and_rejects_lookup_keys() {
+        assert!(looks_like_jwt(NODE_SIGNED_TOKEN), "a real signed token must be recognized");
+        // Plausible online lookup-key shapes — none should be mistaken for
+        // a token, or activate() would skip the network exchange entirely.
+        assert!(!looks_like_jwt("SORDI-XTEST1"));
+        assert!(!looks_like_jwt("ABCD-1234-EFGH-5678"));
+        assert!(!looks_like_jwt(""));
+        // Malformed/incomplete token shapes must not pass the structural
+        // check either (empty segments) — they'll still fail the real
+        // crypto check either way, but this keeps the routing honest.
+        assert!(!looks_like_jwt("header..signature"));
+        assert!(!looks_like_jwt("only.two"));
+    }
+
+    // These are the first tests in this module to touch the filesystem
+    // (write_local_token/current_status/delete_local_token all go through
+    // license_file_path(), which panics if init() was never called). Points
+    // it at the OS temp dir — NEVER the real app_data_dir — so these tests
+    // can't touch a real install's license.token under any circumstance.
+    // init() itself is idempotent (OnceLock::set(), result discarded), so
+    // calling it from every test that needs it is safe regardless of which
+    // one the test runner happens to execute first.
+    fn init_test_license_dir() {
+        init(&std::env::temp_dir());
+    }
+
+    // license_file_path() is one path, global for the whole process
+    // (OnceLock — by design, it models "one license file per install").
+    // Every test that writes/reads it therefore shares that single file on
+    // disk; `cargo test` runs tests in parallel by default, so without
+    // this they race — one test's write/delete can land between another's
+    // write and its own read-back assertion. Guarding each with this lock
+    // serializes just this handful of file-touching tests, not the whole
+    // suite.
+    static TEST_LICENSE_FILE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn activate_offline_unlocks_with_a_keygen_token_for_this_machine() {
+        let _guard = TEST_LICENSE_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        init_test_license_dir();
+        let fingerprint = compute_device_fingerprint().expect("this test machine must support fingerprinting");
+        let iat = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let claims = LicenseClaims {
+            client_reference_id: "Offline Path Test SARL".to_string(),
+            device_fingerprint: fingerprint,
+            iat,
+            exp: iat + 365 * 86_400,
+        };
+        let token = sign_test_token(&claims);
+
+        let status = activate_offline(&token).expect("a valid token for this machine must activate offline");
+        assert_eq!(status.state, "active");
+        assert_eq!(status.client_reference_id.as_deref(), Some("Offline Path Test SARL"));
+
+        // Cleanup — other tests in this module (current_status() callers)
+        // share the same on-disk license.token via LICENSE_FILE_PATH, set
+        // once for the whole test binary by whichever test runs init()
+        // first; leaving an "active" token behind would leak into them.
+        delete_local_token();
+    }
+
+    // The task's own end-to-end ask: pasting a keygen-generated JWT into
+    // the app's real activate() entry point (the exact fn the
+    // activate_license Tauri command calls) must unlock the app fully
+    // offline — no mock server, because a JWT-shaped input short-circuits
+    // to activate_offline() before activate() ever reaches its first
+    // .await, so this genuinely never touches the network.
+    #[tokio::test]
+    async fn pasting_a_keygen_jwt_into_activate_unlocks_offline() {
+        let _guard = TEST_LICENSE_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        init_test_license_dir();
+        let fingerprint = compute_device_fingerprint().expect("this test machine must support fingerprinting");
+        let iat = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let claims = LicenseClaims {
+            client_reference_id: "Client WhatsApp Delivery SARL".to_string(),
+            device_fingerprint: fingerprint,
+            iat,
+            exp: iat + 365 * 86_400,
+        };
+        let token = sign_test_token(&claims);
+
+        // Exactly what a user pasting into the ActivationModal's "Clé de
+        // licence" field produces: the raw string, whitespace and all.
+        let pasted = format!("  {token}  \n");
+
+        let status = activate(pasted).await.expect("pasting a valid offline token must activate successfully");
+        assert_eq!(status.state, "active");
+        assert_eq!(status.client_reference_id.as_deref(), Some("Client WhatsApp Delivery SARL"));
+
+        delete_local_token();
+    }
+
     #[test]
     fn rejects_a_tampered_signature() {
         let mut tampered = NODE_SIGNED_TOKEN.to_string();
@@ -426,5 +709,44 @@ mod tests {
         let a = compute_device_fingerprint();
         let b = compute_device_fingerprint();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn machine_id_is_stable_and_correctly_formatted() {
+        let a = compute_machine_id().expect("should always succeed, real id or hostname fallback");
+        let b = compute_machine_id().expect("should always succeed, real id or hostname fallback");
+        assert_eq!(a, b, "must be stable across repeated calls, same as the device fingerprint");
+
+        // SRD-XXXX-XXXX-XXXX: 4 segments, 12 uppercase hex chars total.
+        let segments: Vec<&str> = a.split('-').collect();
+        assert_eq!(segments.len(), 4, "expected SRD-XXXX-XXXX-XXXX, got: {a}");
+        assert_eq!(segments[0], "SRD");
+        for group in &segments[1..] {
+            assert_eq!(group.len(), 4, "each group must be 4 hex chars, got: {group}");
+            assert!(
+                group.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase()),
+                "expected uppercase hex, got: {group}"
+            );
+        }
+    }
+
+    #[test]
+    fn machine_id_and_device_fingerprint_are_cryptographically_unlinked() {
+        // Same raw platform id feeds both, but different domain-separation
+        // prefixes — the whole point being that this user-visible code
+        // can't be used to derive the token's real (never-shown)
+        // fingerprint claim. Not a rigorous proof, just a sanity check that
+        // the machine id's hex payload isn't literally a substring of the
+        // fingerprint's hash.
+        let machine_id = compute_machine_id().expect("should always succeed");
+        let hex_groups = machine_id.strip_prefix("SRD-").expect("must start with SRD-");
+        let hex_only = hex_groups.replace('-', "").to_lowercase();
+
+        if let Ok(fingerprint) = compute_device_fingerprint() {
+            assert!(
+                !fingerprint.contains(&hex_only),
+                "machine id's hash payload must not be a substring of the device fingerprint"
+            );
+        }
     }
 }

@@ -10,51 +10,10 @@ import {
   resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
 import { chunkItems } from '@/lib/paginationUtils';
-
-// The four selectable document fonts (Paramètres > Thème de la facture PDF >
-// Police) — all registered up front; react-pdf only actually fetches the
-// family a given Text style references, so registering all four here costs
-// nothing beyond bookkeeping. Keep in sync with INVOICE_PDF_FONTS.
-Font.register({
-  family: 'Montserrat',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf' },
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Poppins',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf' },
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf' },
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
-  ]
-});
-// Fixed monospace face for all numeric/fiscal data (unit prices, quantities,
-// VAT, dates, invoice IDs, RC/NIF/AI/NIS) — not user-selectable like the
-// four body fonts above, always JetBrains Mono per the Swiss-minimalist
-// numeric-scale spec.
-Font.register({
-  family: 'JetBrains Mono',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
-  ]
-});
+import { getContrastTextColor } from '@/lib/colorContrast';
+import { PdfStatusBadge } from './PdfStatusBadge';
+import { PDF_PAGE_BASE, STANDARD_MARGIN_PT, LOGO_MAX_WIDTH_PT, resolveLogoMaxHeight, PX_TO_PT_SCALE } from '@/services/export/pdfGeometry';
+import './pdfFonts';
 
 export type { PDFInvoiceItem, PDFInvoice, PDFClient, PDFSettings } from './invoicePdfShared';
 
@@ -70,17 +29,16 @@ interface InvoicePDFDocumentProps {
  */
 export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProps) {
   const primaryColor = settings?.primary_color || "#476CFF";
+  const headerTextColor = getContrastTextColor(primaryColor);
   const fontFamily = resolveInvoicePdfFontFamily(settings);
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
-  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
-  // 595.28 / 793.700787 = 0.75 pt/px
   const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
   // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
   // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
   // range (80-400), making the control look broken above that point.
-  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampWidth = Math.min(200, Math.round(rawSize * PX_TO_PT_SCALE));
   const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
   const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
   const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
@@ -98,8 +56,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
   const styles = StyleSheet.create({
     page: {
-      width: 595.28,
-      height: 841.89,
+      ...PDF_PAGE_BASE,
       padding: 0,
       fontFamily,
       fontSize: 9,
@@ -138,13 +95,16 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       width: '50%',
       height: 72.85,
       paddingTop: 14.17,
-      paddingLeft: 14.17,
+      // Synced to the page's 52pt (~18.5mm) executive print margin, so the
+      // logo/company-name block's left edge lands exactly on the same
+      // vertical grid line as the client block, table, and legal text below.
+      paddingLeft: STANDARD_MARGIN_PT,
       paddingBottom: 14.17,
       justifyContent: 'center',
     },
     logoImage: {
-      height: '100%',
-      width: '100%',
+      maxHeight: resolveLogoMaxHeight(settings),
+      maxWidth: LOGO_MAX_WIDTH_PT,
       objectFit: 'contain',
     },
     companyNameBadge: {
@@ -181,13 +141,18 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       left: 0,
       right: 0,
       bottom: 0,
-      paddingHorizontal: 11.34,
+      // 52pt (~18.5mm) — an executive-grade print margin, the single left/
+      // right grid line every section (client block, table, totals, legal
+      // amount, signature box) aligns to via this shared container.
+      paddingHorizontal: STANDARD_MARGIN_PT,
       paddingTop: 14.17,
-      paddingBottom: 5.67,
+      // Bumped from 5.67 (~2mm) — same "footer content was crammed against
+      // the band edge" fix already applied to the interactive editor canvas.
+      paddingBottom: 17,
     },
     titleContainer: {
       alignItems: 'center',
-      marginBottom: 14,
+      marginBottom: 24,
     },
     titleText: {
       fontSize: 13,
@@ -201,7 +166,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 16,
+      marginBottom: 20,
     },
     clientBox: { width: '55%' },
     clientHeaderLabel: {
@@ -257,24 +222,21 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
     tableContainer: {
       width: '100%',
-      marginBottom: 16,
+      marginBottom: 18,
     },
     tableHeaderRow: {
       flexDirection: 'row',
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(0,0,0,0.15)',
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(0,0,0,0.15)',
+      backgroundColor: primaryColor,
       alignItems: 'center',
     },
     tableHeaderCell: {
       fontFamily,
       fontSize: 7.5,
-      color: '#9ca3af',
+      color: headerTextColor,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
-      paddingVertical: 6,
-      paddingHorizontal: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
     },
     tableRow: {
       flexDirection: 'row',
@@ -292,7 +254,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       fontSize: 9,
       color: '#000000',
       paddingVertical: 6,
-      paddingHorizontal: 4,
+      paddingHorizontal: 10,
     },
 
     // Notes + totals share one row (notesRow) so they read as a single
@@ -304,25 +266,30 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
 
     totalsRightContainer: { alignItems: 'flex-end', marginBottom: 14 },
     totalsRightColumn: { alignItems: 'flex-end' },
-    totalsBox: { width: '42%' },
+    // Fixed pt width, not a percentage — see the other two themes for why:
+    // a % here only holds up if every ancestor's own width matches the
+    // page's full content width, which the notes+totals flex row doesn't
+    // guarantee. 230pt is generous for "1 190 000.00 DZD" at this size.
+    totalsBox: { width: 230 },
     totalsRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      alignItems: 'center',
       paddingVertical: 4,
     },
-    totalsLabel: { fontSize: 8, fontFamily, color: '#6b7280' },
-    totalsValueText: { fontFamily: 'JetBrains Mono', fontSize: 8, color: '#000000', textAlign: 'right' },
+    totalsLabel: { fontSize: 8, fontFamily, color: '#6b7280', flexShrink: 0 },
+    totalsValueText: { fontFamily: 'JetBrains Mono', fontSize: 8, color: '#000000', textAlign: 'right', flexShrink: 0 },
     ttcRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-end',
+      alignItems: 'center',
       paddingTop: 8,
       marginTop: 3,
       borderTopWidth: 1,
       borderTopColor: '#000000',
     },
-    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#000000' },
-    ttcValueText: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: '#000000', textAlign: 'right' },
+    ttcLabel: { fontSize: 10, fontFamily, fontWeight: 'bold', color: '#000000', flexShrink: 0 },
+    ttcValueText: { fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 'bold', color: '#000000', textAlign: 'right', flexShrink: 0 },
 
     bottomBlock: { marginBottom: 12 },
     wordsTitle: { fontSize: 7.5, fontFamily, fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
@@ -348,10 +315,23 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       position: 'relative',
     },
     signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
+    // Only applied to the outer box when no stamp/signature image was
+    // uploaded — a real stamp image fills styles.signatureBox exactly at
+    // its own dynamic dimensions (bound to settings.stamp_size), so a
+    // border there would frame the company's actual stamp like a
+    // placeholder. This dashed frame + fixed 140x75 footprint exists only
+    // to give the empty "Cachet et Signature" slot visible definition.
+    signatureBoxEmptyFrame: { borderWidth: 1, borderColor: '#D1D5DB', borderStyle: 'dashed' },
     signatureBoxLabel: { fontSize: 8, fontFamily, fontWeight: 'bold', color: '#000000', textDecoration: 'underline', marginBottom: 4 },
     signatureBoxPlaceholder: { fontSize: 7, fontFamily, color: '#9ca3af', textTransform: 'uppercase' },
     stampImage: { position: 'absolute', objectFit: 'contain', opacity: 0.85, transform: 'rotate(-2deg)' },
     signatureImage: { position: 'absolute', objectFit: 'contain' },
+    // Legal accounting pagination ("1 / 1", "1 / 2") — docked to the fixed
+    // footer band's top edge, directly under its horizontal rule, instead
+    // of sitting in-flow after the stamp block: an in-flow page number on a
+    // short, single-item invoice used to float awkwardly in the middle of
+    // the empty page instead of anchoring to the true page bottom.
+    pageNumber: { position: 'absolute', top: 3, left: 0, right: 0, fontSize: 7.5, fontFamily: 'Courier', color: '#a1a1aa', letterSpacing: 1, textAlign: 'center' },
 
     footer: {
       position: 'absolute',
@@ -365,36 +345,33 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     footerInner: {
       position: 'absolute',
-      left: 5.67,
-      right: 5.67,
+      // Synced to the page's 52pt (~18.5mm) executive print margin — the
+      // same left/right grid line every other section aligns to.
+      left: STANDARD_MARGIN_PT,
+      right: STANDARD_MARGIN_PT,
       top: 9.92,
       bottom: 5.67,
       flexDirection: 'row',
     },
 
-    legalCol: { width: 187.08, paddingLeft: 11.9, justifyContent: 'flex-end', height: '100%' },
+    // Column widths scaled down proportionally to fit the footer's now-52pt
+    // margins while keeping the same balance between the legal/company/
+    // contact columns.
+    legalCol: { width: 158, paddingLeft: 11.9, justifyContent: 'flex-end', height: '100%' },
     legalColTextWrapper: { position: 'relative' },
     legalYellowBar: { position: 'absolute', left: -11.9, top: 1.5, bottom: 1.5, width: 2.13, backgroundColor: primaryColor },
     legalRow: { flexDirection: 'row', marginBottom: 2 },
-    legalLabel: { width: 80, fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000' },
+    legalLabel: { width: 71, fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000' },
     legalColon: { width: 8, fontSize: 7.1, fontFamily, fontWeight: 'bold', textAlign: 'center' },
     legalValue: { fontSize: 7.1, fontFamily, color: '#000000' },
 
-    companyInfoCol: { width: 195.59, paddingHorizontal: 4, justifyContent: 'flex-end', paddingBottom: 2.8, height: '100%' },
+    companyInfoCol: { width: 164, paddingHorizontal: 4, justifyContent: 'flex-end', paddingBottom: 2.8, height: '100%' },
     addressText: { fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000', marginBottom: 4, lineHeight: 1.3 },
     ribText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.3 },
 
-    contactCol: { flex: 1, flexDirection: 'row', position: 'relative', height: '100%' },
-    // Sized to the footer logo's own footprint now that the QR box (which
-    // previously drove this width) is gone — the logo is still absolutely
-    // positioned so it renders regardless of this width, but this keeps
-    // contactRightBox's start point clear of the logo instead of a leftover
-    // QR-sized gap.
-    contactLeftBox: { width: 121.9, height: '100%', position: 'relative' },
-    footerLogoBox: { position: 'absolute', top: 0, left: 0, height: 22.7, width: 121.9, justifyContent: 'center' },
-    footerLogoText: { fontSize: 9, fontFamily, fontWeight: 'bold', color: '#000000', textTransform: 'uppercase' },
+    contactCol: { flex: 1, position: 'relative', height: '100%' },
     sordiWatermark: { position: 'absolute', bottom: 1, left: 0, right: 0, textAlign: 'center', fontSize: 5.5, color: '#9ca3af' },
-    contactRightBox: { marginLeft: 7.1, flex: 1, justifyContent: 'flex-end', height: '100%' },
+    contactRightBox: { flex: 1, justifyContent: 'flex-end', height: '100%' },
     contactEmailText: { fontSize: 7.1, fontFamily, fontWeight: 'bold', color: '#000000', lineHeight: 1.65 },
     contactDetailText: { fontSize: 7.1, fontFamily, color: '#000000', lineHeight: 1.65 },
   });
@@ -407,16 +384,22 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
         return (
       <Page key={pageIndex} size="A4" style={styles.page}>
 
+        {isFirstPage && <PdfStatusBadge status={invoice.status} />}
+
         <View style={styles.header} fixed>
           <View style={styles.headerLogoContainer}>
+            {/* No logo uploaded — collapse to empty space on the issued
+                PDF, not a placeholder box or a repeated company-name line
+                (the legal footer block already carries that). */}
             {settings?.logo_data && (
               <Image src={settings.logo_data} style={styles.logoImage} />
             )}
-            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#1e293b', textTransform: 'uppercase', marginTop: 3 }}>
-              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-            </Text>
           </View>
-          {settings?.company_name && (
+          {/* Only shown alongside a real logo — this badge IS the header's
+              one company-name display when there's no logo to pair it
+              with, so showing it there too would just repeat the
+              typographic fallback above it. */}
+          {settings?.logo_data && settings?.company_name && (
             <View style={styles.companyNameBadge}>
               <Text style={styles.companyNameText}>{settings.company_name}</Text>
             </View>
@@ -587,7 +570,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
               <View style={[styles.signatureRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]} wrap={false}>
                 {flags.showMontantEnLettres ? (
-                  <View style={{ maxWidth: 280, paddingRight: 16 }}>
+                  // width (not maxWidth) so the amount always gets the full
+                  // 62% column instead of shrink-wrapping to its own text —
+                  // a narrow maxWidth was forcing long French amounts like
+                  // "...ALGÉRIENS..." to hyphen-break mid-word.
+                  <View style={{ width: '62%', paddingRight: 16 }}>
                     <Text style={styles.wordsTitle}>Arrêté la présente facture à la somme de</Text>
                     <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
                   </View>
@@ -598,7 +585,13 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                   {mainStampUrl && (
                     <Text style={[styles.signatureBoxLabel, { textAlign: 'center' }]}>Cachet et Signature</Text>
                   )}
-                  <View style={[styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]}>
+                  <View
+                    style={
+                      mainStampUrl
+                        ? [styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]
+                        : [styles.signatureBox, styles.signatureBoxEmptyFrame, { width: 140, minWidth: 140, height: 75 }]
+                    }
+                  >
                     {!mainStampUrl ? (
                       <View style={styles.signatureBoxEmpty}>
                         <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
@@ -646,6 +639,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
         </View>
 
         <View style={styles.footer} fixed>
+          <Text style={styles.pageNumber}>{pageIndex + 1} / {pages.length}</Text>
           <View style={styles.footerInner}>
             <View style={styles.legalCol}>
               <View style={styles.legalColTextWrapper}>
@@ -700,19 +694,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
             </View>
 
             <View style={styles.contactCol}>
-              <View style={styles.contactLeftBox}>
-                {(settings?.footer_logo_data || settings?.company_name) && (
-                  <View style={styles.footerLogoBox}>
-                    {settings?.footer_logo_data ? (
-                      <Image src={settings.footer_logo_data} style={{ height: '100%', width: '100%', objectFit: 'contain', objectPosition: 'left' }} />
-                    ) : (
-                      <Text style={styles.footerLogoText}>{settings?.company_name}</Text>
-                    )}
-                  </View>
-                )}
-              </View>
-
-              <View style={[styles.contactRightBox, { paddingLeft: 8 }]}>
+              <View style={styles.contactRightBox}>
                 {settings?.company_email && <Text style={styles.contactEmailText}>{settings.company_email}</Text>}
                 {settings?.company_website && <Text style={styles.contactDetailText}>{settings.company_website}</Text>}
                 {phones.map((p, i) => (

@@ -42,8 +42,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     onInvoiceChange({ ...invoice, [field]: value });
   };
 
-  const updateClient = (clientId: string, clients?: any[]) => {
-    const selectedClient = clients?.find(c => c.id === clientId);
+  const applyClientToInvoice = (selectedClient: any) => {
     updateInvoiceField('clients', selectedClient ? {
       id: selectedClient.id,
       name: selectedClient.name,
@@ -56,6 +55,13 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
       ai: selectedClient.ai || null,
     } : undefined);
   };
+
+  // Takes the full client object rather than an id + list to look it up in —
+  // ClientPickerCombobox always hands back a full object (from its own
+  // `clients` prop for an existing one, or straight from the create mutation
+  // for a brand-new one that isn't in that list yet), so there's never a
+  // need to re-look-up by id here.
+  const selectClient = (client: any) => applyClientToInvoice(client);
 
   const recalculateTotals = (
     itemsList: any[],
@@ -125,22 +131,32 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     const total = netHt + totalTva + newTimbre;
     const netTotal = total - withholdingAmount;
 
+    // Rounded once here rather than left to each display site — chained
+    // percentage/ratio math (discount, TVA, the timbre rate brackets) can
+    // leave residue past 2 decimals, which a naive Intl.NumberFormat call
+    // with only minimumFractionDigits set would round to 3 decimals instead
+    // of 2 (its maximumFractionDigits defaults to max(minimumFractionDigits,
+    // 3)). This is a live-preview estimate only — Rust recomputes the
+    // authoritative figures on save — but the preview shown before that
+    // point should still be clean.
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
     return {
-      subtotal_ht: newSubtotal,
-      tva_amount: totalTva,
-      timbre: newTimbre,
-      total_ttc: total,
+      subtotal_ht: round2(newSubtotal),
+      tva_amount: round2(totalTva),
+      timbre: round2(newTimbre),
+      total_ttc: round2(total),
       discount_rate: finalDiscountRate,
-      discount_amount: finalDiscountAmount,
-      discount_value: type === 'percent' ? finalDiscountRate : finalDiscountAmount,
-      discount: finalDiscountAmount,
+      discount_amount: round2(finalDiscountAmount),
+      discount_value: type === 'percent' ? finalDiscountRate : round2(finalDiscountAmount),
+      discount: round2(finalDiscountAmount),
       discount_type: type,
-      balance_due: total,
+      balance_due: round2(total),
       amount_paid: 0,
       payment_method: currentPaymentMode,
       withholding_rate: currentWithholdingRate,
-      withholding_amount: withholdingAmount,
-      net_total: netTotal,
+      withholding_amount: round2(withholdingAmount),
+      net_total: round2(netTotal),
       tax_mode: currentTaxMode,
     };
   };
@@ -230,6 +246,23 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     onInvoiceChange({ ...invoice, invoice_items: newItems, ...newTotals });
   };
 
+  // Pure reordering — the totals are a sum over all items regardless of
+  // their order, so unlike every handler above, these don't need to
+  // recompute or pass along newTotals at all.
+  const moveItemUp = (index: number) => {
+    if (index <= 0) return;
+    const newItems = [...items];
+    [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+    onInvoiceChange({ ...invoice, invoice_items: newItems });
+  };
+
+  const moveItemDown = (index: number) => {
+    if (index >= items.length - 1) return;
+    const newItems = [...items];
+    [newItems[index + 1], newItems[index]] = [newItems[index], newItems[index + 1]];
+    onInvoiceChange({ ...invoice, invoice_items: newItems });
+  };
+
   const isCreditNote = invoice.invoice_type === "credit_note";
   const isProforma = invoice.invoice_type === "proforma";
   const isDelivery = invoice.invoice_type === "delivery_note" || !!invoice.delivery_number;
@@ -297,7 +330,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     handleTaxModeChange,
     formatCurrency,
     updateInvoiceField,
-    updateClient,
+    selectClient,
     handlePaymentModeChange,
     handleDiscountRateChange,
     handleDiscountAmountChange,
@@ -305,6 +338,8 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     handleAddProduct,
     handleAddCustomItem,
     handleDeleteItem,
+    moveItemUp,
+    moveItemDown,
   };
 }
 

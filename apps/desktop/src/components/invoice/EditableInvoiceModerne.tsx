@@ -1,16 +1,26 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Input, Textarea, Button, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Input, Textarea, Button } from "@sordi/ui";
 import {
   RiAddLine as Plus,
   RiDeleteBinLine as Trash2,
-  RiCheckLine as Check,
-  RiExpandUpDownLine as ChevronsUpDown
+  RiExpandUpDownLine as ChevronsUpDown,
+  RiArrowUpSLine as ChevronUp,
+  RiArrowDownSLine as ChevronDown,
+  RiBookmarkLine as BookmarkPlus,
+  RiLoader4Line as Loader2,
 } from "@remixicon/react";
+import { toast } from "sonner";
+import { useCreateProduct } from "@/hooks/useProducts";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import { numberToWords } from "@/lib/numberToWords";
+import { getContrastTextColor } from "@/lib/colorContrast";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
 import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
+import { ClientPickerCombobox } from "./ClientPickerCombobox";
+import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
+import { useScaleToFitContainer } from "./scaleToFitContext";
 import { EditableInvoiceLogic } from "./useEditableInvoiceLogic";
+import { InvoiceLogoPlaceholder } from "./InvoiceLogoPlaceholder";
 
 import { InteractiveStampZone } from "./InteractiveStampZone";
 
@@ -38,18 +48,52 @@ export function EditableInvoiceModerne({
   onStampSizeCommit,
 }: Props) {
   const accent = settings?.primary_color || "#476CFF";
+  const headerTextColor = getContrastTextColor(accent);
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
+  const scaleContainer = useScaleToFitContainer();
   const {
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
     isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel, isTaxExempt,
     formatCurrency,
-    updateInvoiceField, updateClient, handlePaymentModeChange,
+    updateInvoiceField, selectClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleAddCustomItem, handleDeleteItem,
+    items, moveItemUp, moveItemDown,
   } = logic;
+
+  const createProduct = useCreateProduct();
+  // Registers a custom-typed line (no product_id — not yet in the catalog)
+  // using its CURRENT live values, unlike ProductPickerCombobox's own
+  // "Enregistrer au catalogue" (which only fires at add-time, before a
+  // price/unit has even been typed in). A generated reference code, same
+  // convention as that picker, since the catalog requires one.
+  const handleSaveItemToCatalog = async (item: any) => {
+    const name = (item.product_name || item.products?.name || item.name || "").trim();
+    if (!name || createProduct.isPending) return;
+    try {
+      const code = `CUSTOM-${Date.now().toString(36).toUpperCase()}`;
+      await createProduct.mutateAsync({
+        code,
+        name,
+        unit_price: item.unit_price || 0,
+        unit: item.products?.unit || item.unit || undefined,
+        tva_rate: item.tva_rate,
+      });
+      toast.success("Produit ajouté au catalogue");
+    } catch {
+      // useCreateProduct's mutation already toasts the error.
+    }
+  };
+
+  const handleLineEntryKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      setOpenPopoverIndex(-1);
+    }
+  };
 
   return (
     <div id="invoice-preview">
@@ -62,20 +106,29 @@ export function EditableInvoiceModerne({
           <div
             key={pageIndex}
             id={`invoice-preview-page-${pageIndex + 1}`}
-            className="a4 relative bg-white text-[#111827] mx-auto border border-border/40 rounded-2xl shadow-xl print:border-none print:rounded-none print:shadow-none print:m-0 mb-8"
+            className="a4 relative bg-white dark:bg-white text-[#111827] mx-auto select-text border border-border/80 dark:border-neutral-700 shadow-sm rounded-[2px] print:border-none print:shadow-none print:m-0 mb-8"
             style={{ width: '210mm', height: '297mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily: resolveInvoiceHtmlFontFamily(settings) }}
           >
+            {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
             <div className="flex flex-col h-full">
               <div className="flex justify-between items-center px-[14mm] py-[9mm]" style={{ backgroundColor: accent }}>
                 <div className="flex flex-col items-start gap-1.5">
-                  {settings?.logo_data && (
-                    <div className="bg-white rounded-lg px-3 py-2 inline-block max-w-[160px]">
-                      <img src={settings.logo_data} className="h-7 max-w-[136px] object-contain" alt="Logo" />
+                  {settings?.logo_data ? (
+                    <div className="bg-white rounded-lg px-3 py-2 inline-block max-w-[188px]">
+                      <img
+                        src={settings.logo_data}
+                        style={{ maxHeight: Number(settings?.logo_size) || 60, maxWidth: 180 }}
+                        className="h-auto w-auto object-contain"
+                        alt="Logo"
+                      />
                     </div>
+                  ) : (
+                    // No logo uploaded — a minimal upload cue only, tinted
+                    // for the colored band. The company's legal identity
+                    // already appears in the footer's legal block, so
+                    // repeating it here was just clutter.
+                    <InvoiceLogoPlaceholder tone="onAccent" />
                   )}
-                  <span className="text-white text-xs font-semibold tracking-wide uppercase">
-                    {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-                  </span>
                 </div>
                 <div className="text-right">
                   <div className="text-white text-[13pt] font-semibold tracking-[-0.02em] uppercase">
@@ -96,38 +149,24 @@ export function EditableInvoiceModerne({
               </div>
 
               <div className="flex-1 px-[14mm] py-[9mm] flex flex-col justify-between overflow-hidden">
-                <div>
+                <div className="pb-[15mm]">
                   <div className="flex gap-3 mb-5">
                     <div className="flex-1 bg-gray-50 rounded-[10px] p-3.5">
                       <div className="text-[7pt] uppercase tracking-wide font-bold mb-1.5" style={{ color: accent }}>Destinataire</div>
-                      {clients && clients.length > 0 ? (
-                        <Popover open={openClientCombo} onOpenChange={setOpenClientCombo}>
-                          <PopoverTrigger asChild>
-                            <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-[10.5pt] font-bold uppercase hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
-                              {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
-                              <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="start">
-                            <Command>
-                              <CommandInput placeholder="Rechercher un client..." />
-                              <CommandList>
-                                <CommandEmpty>Aucun client trouvé.</CommandEmpty>
-                                <CommandGroup>
-                                  {clients.map((client) => (
-                                    <CommandItem key={client.id} value={client.name} onSelect={() => { updateClient(client.id, clients); setOpenClientCombo(false); }}>
-                                      <Check className={cn("mr-2 h-4 w-4", invoice.clients?.id === client.id ? "opacity-100" : "opacity-0")} />
-                                      {client.name}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      ) : (
-                        <div className="text-[10.5pt] font-bold uppercase mb-1">{invoice.clients?.name || invoice.client_name || ""}</div>
-                      )}
+                      <ClientPickerCombobox
+                        clients={clients}
+                        selectedClientId={invoice.clients?.id}
+                        open={openClientCombo}
+                        onOpenChange={setOpenClientCombo}
+                        onSelectClient={(client) => { selectClient(client); setOpenClientCombo(false); }}
+                        container={scaleContainer}
+                        trigger={
+                          <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-[10.5pt] font-bold uppercase hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
+                            {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
+                            <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        }
+                      />
                       {(invoice.clients?.address || invoice.client_address) && <div className="text-[8pt] text-gray-600 mb-1">{invoice.clients?.address || invoice.client_address}</div>}
                       <div className="font-mono text-[7.5pt] text-gray-500 leading-relaxed space-y-0.5">
                         {(invoice.clients?.rc || invoice.client_rc) && <div>RC {invoice.clients?.rc || invoice.client_rc}</div>}
@@ -166,59 +205,84 @@ export function EditableInvoiceModerne({
                     </div>
                   </div>
 
-                  <div className="rounded-[10px] overflow-hidden mb-4" style={{ border: `0.75px solid ${accent}30` }}>
-                    <table className="w-full text-[8.5pt] table-fixed" style={{ borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: `${accent}14` }}>
-                          <th className="text-left px-2.5 py-1.5 w-[42%] text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: accent }}>Désignation / Prestation</th>
-                          <th className="text-right px-2.5 py-1.5 w-[15%] text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: accent }}>P.U (HT)</th>
-                          <th className="text-right px-2.5 py-1.5 w-[7%] text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: accent }}>Qté</th>
-                          <th className="text-center px-2.5 py-1.5 w-[16%] text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: accent }}>U.M</th>
-                          <th className="text-right px-2.5 py-1.5 w-[20%] text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: accent }}>Total HT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageItems.map((item: any, relIdx: number) => {
-                          const globalIdx = startIdx + relIdx;
-                          const unit = item.products?.unit || item.unit || "TN";
-                          return (
-                            <tr key={globalIdx} className={cn("group relative", relIdx % 2 === 1 ? "bg-gray-50/70" : "")}>
-                              <td className="px-2.5 py-2 font-bold">{item.product_name || item.products?.name || item.name || ""}</td>
-                              <td className="px-2.5 py-2 text-right font-mono whitespace-nowrap min-w-[130px]">
-                                <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} className="h-5 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-[8.5pt]" />
-                              </td>
-                              <td className="px-2.5 py-2 text-right font-mono whitespace-nowrap">
-                                <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} className="h-5 w-full text-right bg-transparent border-none shadow-none p-0 focus-visible:ring-0 font-mono tabular-nums tracking-tight text-[8.5pt]" />
-                              </td>
-                              <td className="px-2.5 py-2 text-center text-gray-500 text-[7.5pt] uppercase leading-tight break-words">{unit}</td>
-                              <td className="px-2.5 py-2 text-right relative group-hover:pr-6 font-mono tabular-nums tracking-tight font-semibold whitespace-nowrap min-w-[130px]">
-                                {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
-                                <button className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-red-500 p-1" onClick={() => handleDeleteItem(globalIdx)} title="Supprimer"><Trash2 className="w-3 h-3" /></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {isLastPage && (
-                          <tr>
-                            <td colSpan={5} className="p-0">
-                              <ProductPickerCombobox
-                                products={products}
-                                excludeProductIds={logic.items.map((it: any) => it.product_id)}
-                                open={openPopoverIndex === -1}
-                                onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
-                                onSelectProduct={(p) => handleAddProduct(p, logic.items.length - 1)}
-                                onAddCustomItem={(name) => handleAddCustomItem(name, logic.items.length - 1)}
-                                nextIndex={logic.items.length}
-                                formatCurrency={formatCurrency}
-                                trigger={
-                                  <Button variant="ghost" className="w-full h-7 text-[8pt] text-gray-400 hover:text-gray-700 rounded-none border-none"><Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un article</Button>
-                                }
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="rounded-[10px] overflow-hidden mb-4 text-[8.5pt]" style={{ border: `0.75px solid ${accent}30` }}>
+                    <div className="flex items-center gap-2 px-2.5 py-1.5" style={{ backgroundColor: accent }}>
+                      <div className="flex-1 min-w-[260px] text-left text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: headerTextColor }}>Désignation / Prestation</div>
+                      <div className="w-[120px] text-right text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: headerTextColor }}>P.U (HT)</div>
+                      <div className="w-[70px] text-right text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: headerTextColor }}>Qté</div>
+                      <div className="w-[130px] text-center text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: headerTextColor }}>U.M</div>
+                      <div className="w-[130px] text-right text-[7.5pt] uppercase font-bold tracking-wide" style={{ color: headerTextColor }}>Total HT</div>
+                      <div className="w-[70px]" />
+                    </div>
+                    {pageItems.map((item: any, relIdx: number) => {
+                      const globalIdx = startIdx + relIdx;
+                      const unit = item.products?.unit || item.unit || "TN";
+                      return (
+                        <div key={globalIdx} className={cn("flex items-start gap-2 px-2.5 py-2 group", relIdx % 2 === 1 ? "bg-gray-50/70" : "")}>
+                          <div className="flex-1 min-w-[260px] font-bold pt-1 leading-6">
+                            {item.product_name || item.products?.name || item.name || ""}
+                            {(item.product_description || item.products?.description || item.description) && (
+                              <div className="font-normal text-[7.5pt] leading-tight mt-1 text-gray-500">{item.product_description || item.products?.description || item.description}</div>
+                            )}
+                          </div>
+                          <div className="w-[120px] font-mono pt-1">
+                            <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-5 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-[8.5pt]" />
+                          </div>
+                          <div className="w-[70px] font-mono pt-1">
+                            <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-5 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-[8.5pt]" />
+                          </div>
+                          <div className="w-[130px] text-center text-gray-500 text-[11px] uppercase leading-6 whitespace-nowrap overflow-hidden text-ellipsis px-1 pt-1" title={unit}>{unit}</div>
+                          <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-[8.5pt]">
+                            {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                          </div>
+                          <div className="w-[70px] flex items-center justify-end gap-0.5 pt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                            {!item.product_id && (item.product_name || item.name) && (
+                              <button
+                                onClick={() => handleSaveItemToCatalog(item)}
+                                disabled={createProduct.isPending}
+                                className="rounded p-1 text-zinc-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40"
+                                title="Enregistrer comme nouveau produit au catalogue"
+                              >
+                                {createProduct.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkPlus className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => moveItemUp(globalIdx)}
+                              disabled={globalIdx === 0}
+                              className="rounded p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                              title="Monter"
+                            ><ChevronUp className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => moveItemDown(globalIdx)}
+                              disabled={globalIdx === items.length - 1}
+                              className="rounded p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                              title="Descendre"
+                            ><ChevronDown className="w-3.5 h-3.5" /></button>
+                            <button
+                              onClick={() => handleDeleteItem(globalIdx)}
+                              className="rounded p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                              title="Supprimer"
+                            ><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {isLastPage && (
+                      <ProductPickerCombobox
+                        products={products}
+                        excludeProductIds={items.map((it: any) => it.product_id)}
+                        open={openPopoverIndex === -1}
+                        onOpenChange={(open) => setOpenPopoverIndex(open ? -1 : null)}
+                        onSelectProduct={(p) => handleAddProduct(p, items.length - 1)}
+                        onAddCustomItem={(name) => handleAddCustomItem(name, items.length - 1)}
+                        nextIndex={items.length}
+                        formatCurrency={formatCurrency}
+                        container={scaleContainer}
+                        trigger={
+                          <Button variant="ghost" className="w-full h-7 text-[8pt] text-gray-400 hover:text-gray-700 rounded-none border-none"><Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un article</Button>
+                        }
+                      />
+                    )}
                   </div>
                   {(() => {
                     const notesBox = (
@@ -286,7 +350,7 @@ export function EditableInvoiceModerne({
                   {isLastPage && (
                     <>
                       {showMontantEnLettres && (
-                        <div className="mb-5">
+                        <div className="mt-8 mb-5">
                           <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
                             {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
                           </div>
@@ -294,7 +358,7 @@ export function EditableInvoiceModerne({
                         </div>
                       )}
 
-                      <div className="flex justify-end items-end">
+                      <div className={cn("flex justify-end items-end", !showMontantEnLettres && "mt-8")}>
                         <div className="flex flex-col items-center relative" style={{ minWidth: "160px" }}>
                           {(settings?.stamp_data || settings?.signature_data) && (
                             <>
@@ -302,17 +366,20 @@ export function EditableInvoiceModerne({
                               <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
                             </>
                           )}
+                          {/* No onStampSizeChange/onStampSizeCommit — stamp
+                              size is controlled from the "Personnaliser"
+                              drawer now, not an on-canvas hover slider. */}
                           <InteractiveStampZone
                             settings={settings}
                             stampSize={stampSize}
-                            onStampSizeChange={onStampSizeChange}
-                            onStampSizeCommit={onStampSizeCommit}
                             showTitle={false}
                           />
                         </div>
                       </div>
                     </>
                   )}
+
+                  <div className="text-xs text-zinc-400 font-mono tracking-widest text-center mt-6">{pageIndex + 1} / {pages.length}</div>
                 </div>
 
                 <div className="pt-2 mt-2 flex justify-between" style={{ borderTop: `1.5px solid ${accent}` }}>

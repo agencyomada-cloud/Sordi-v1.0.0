@@ -9,50 +9,10 @@ import {
   getDocumentSectionFlags,
   resolveInvoicePdfFontFamily,
 } from './invoicePdfShared';
-
-// The four selectable document fonts (Paramètres > Thème de la facture PDF >
-// Police) — all registered up front; react-pdf only actually fetches the
-// family a given Text style references, so registering all four here costs
-// nothing beyond bookkeeping. Keep in sync with INVOICE_PDF_FONTS.
-Font.register({
-  family: 'Montserrat',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCtr6Ew-.ttf' },
-    { src: 'https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCuM70w-.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf' },
-    { src: 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Poppins',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJA.ttf' },
-    { src: 'https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V1s.ttf', fontWeight: 'bold' },
-  ]
-});
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWubEbWmT.ttf' },
-    { src: 'https://fonts.gstatic.com/s/roboto/v51/KFOMCnqEu92Fr1ME7kSn66aGLdTylUAMQXC89YmC2DPNWuYjammT.ttf', fontWeight: 'bold' },
-  ]
-});
-// Fixed monospace face for all numeric/fiscal data — not user-selectable
-// like the four body fonts above, always JetBrains Mono per the
-// Swiss-minimalist numeric-scale spec.
-Font.register({
-  family: 'JetBrains Mono',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf', fontWeight: 'semibold' },
-    { src: 'https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tjPQ.ttf', fontWeight: 'bold' },
-  ]
-});
+import { getContrastTextColor } from '@/lib/colorContrast';
+import { PdfStatusBadge } from './PdfStatusBadge';
+import { PDF_PAGE_BASE, STANDARD_MARGIN_PT, LOGO_MAX_WIDTH_PT, resolveLogoMaxHeight, PX_TO_PT_SCALE } from '@/services/export/pdfGeometry';
+import './pdfFonts';
 
 interface InvoiceTemplateModerneProps {
   invoice: PDFInvoice;
@@ -75,19 +35,17 @@ function hexToRgba(hex: string, alpha: number): string {
  */
 export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateModerneProps) {
   const accent = settings?.primary_color || "#476CFF";
-  const accentSoft = hexToRgba(accent, 0.08);
   const accentBorder = hexToRgba(accent, 0.18);
+  const headerTextColor = getContrastTextColor(accent);
   const fontFamily = resolveInvoicePdfFontFamily(settings);
   const data = resolveInvoiceData(invoice);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
-  // Exact 1:1 proportional match between screen CSS (210mm = 793.7px) and PDF points (595.28pt)
-  // 595.28 / 793.700787 = 0.75 pt/px
   const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
   // 1:1-ish px->pt scale of the "Taille" slider, capped only at a page-safe
   // ceiling — the previous 90-180/135 clamp saturated by ~half the slider's
   // range (80-400), making the control look broken above that point.
-  const stampWidth = Math.min(200, Math.round(rawSize * 0.75));
+  const stampWidth = Math.min(200, Math.round(rawSize * PX_TO_PT_SCALE));
   const stampHeight = Math.min(220, Math.round(stampWidth * 1.17));
   const mainStampUrl = settings?.stamp_data || settings?.signature_data || "";
   const hasBoth = Boolean(settings?.stamp_data && settings?.signature_data);
@@ -98,19 +56,20 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     // it, normal-flow content on a long invoice could reach the page's
     // bottom edge and render underneath the footer instead of spilling onto
     // a new page.
-    page: { width: 595.28, height: 841.89, padding: 0, paddingBottom: 90, fontFamily, fontSize: 9, color: '#111827', backgroundColor: '#ffffff' },
+    page: { ...PDF_PAGE_BASE, padding: 0, paddingBottom: 90, fontFamily, fontSize: 9, color: '#111827', backgroundColor: '#ffffff' },
 
-    headerBand: { backgroundColor: accent, paddingHorizontal: 40, paddingVertical: 22, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    logoChip: { backgroundColor: '#ffffff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, maxWidth: 160 },
-    logoImage: { height: 28, maxWidth: 136, objectFit: 'contain' },
+    headerBand: { backgroundColor: accent, paddingHorizontal: STANDARD_MARGIN_PT, paddingVertical: 22, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    logoChip: { backgroundColor: '#ffffff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, maxWidth: 188 },
+    logoImage: { maxHeight: resolveLogoMaxHeight(settings), maxWidth: LOGO_MAX_WIDTH_PT, objectFit: 'contain' },
     companyNameWhite: { fontSize: 12, fontFamily, fontWeight: 'bold', color: '#ffffff', letterSpacing: 0.3 },
     headerRight: { alignItems: 'flex-end' },
     docTitle: { fontSize: 13, fontFamily, fontWeight: 'bold', color: '#ffffff', textTransform: 'uppercase', letterSpacing: -0.3 },
     docNumber: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: 'rgba(255,255,255,0.75)', marginTop: 5 },
 
-    body: { padding: 36, paddingTop: 20 },
+    // 52pt (~18.5mm) executive print margin, synced with headerBand.
+    body: { padding: STANDARD_MARGIN_PT, paddingTop: 24 },
 
-    cardsRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
+    cardsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
     card: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 10, padding: 14 },
     cardLabel: { fontSize: 7, color: accent, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily, fontWeight: 'bold', marginBottom: 6 },
     clientName: { fontSize: 10.5, fontFamily, fontWeight: 'bold', color: '#111827', textTransform: 'uppercase', marginBottom: 3 },
@@ -121,10 +80,11 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     metaRowValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 'bold', color: '#111827' },
     avoirNotice: { fontSize: 7.5, color: '#6b7280', marginTop: 6 },
 
-    tableWrap: { borderRadius: 10, overflow: 'hidden', borderWidth: 0.75, borderColor: accentBorder, marginBottom: 14 },
-    tableHeaderRow: { flexDirection: 'row', backgroundColor: accentSoft, paddingVertical: 7, paddingHorizontal: 10 },
-    tableHeaderCell: { fontSize: 7.5, color: accent, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily, fontWeight: 'bold' },
-    tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 10, alignItems: 'flex-start' },
+    tableWrap: { borderRadius: 10, overflow: 'hidden', borderWidth: 0.75, borderColor: accentBorder, marginBottom: 18 },
+    tableHeaderRow: { flexDirection: 'row', backgroundColor: accent, paddingVertical: 8, paddingHorizontal: 10 },
+    tableHeaderCell: { fontSize: 7.5, color: headerTextColor, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily, fontWeight: 'bold' },
+    pageNumber: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 16, fontSize: 7.5, fontFamily: 'Courier', color: '#a1a1aa', letterSpacing: 1, textAlign: 'center' },
+    tableRow: { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: 10, alignItems: 'flex-start' },
     tableRowAlt: { backgroundColor: '#fafafa' },
     colDesignation: { width: '40%' },
     colPrice: { width: '16%', textAlign: 'right' },
@@ -143,15 +103,22 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     notesText: { fontSize: 8.5, color: '#374151', lineHeight: 1.4 },
 
     totalsContainer: { alignItems: 'flex-end', marginBottom: 14 },
-    totalsBox: { width: '46%', backgroundColor: '#f9fafb', borderRadius: 10, padding: 12 },
-    totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
-    totalsLabel: { fontSize: 8.5, color: '#6b7280' },
-    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111827' },
+    // Fixed pt width, not a percentage — see InvoiceTemplateEpure for why:
+    // a % here only holds up if every ancestor's own width matches the
+    // page's full content width, which the notes+totals flex row doesn't
+    // guarantee. 230pt is generous for "1 190 000.00 DZD" at this size.
+    totalsBox: { width: 230, backgroundColor: '#f9fafb', borderRadius: 10, padding: 12 },
+    totalsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
+    totalsLabel: { fontSize: 8.5, color: '#6b7280', flexShrink: 0 },
+    totalsValue: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#111827', textAlign: 'right', flexShrink: 0 },
     ttcRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: accent, borderRadius: 7, paddingVertical: 7, paddingHorizontal: 10, marginTop: 6 },
-    ttcLabel: { fontSize: 9.5, fontFamily, fontWeight: 'bold', color: '#ffffff' },
-    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 'bold', color: '#ffffff' },
+    ttcLabel: { fontSize: 9.5, fontFamily, fontWeight: 'bold', color: '#ffffff', flexShrink: 0 },
+    ttcValue: { fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 'bold', color: '#ffffff', textAlign: 'right', flexShrink: 0 },
 
-    wordsBlock: { maxWidth: 280, paddingRight: 16 },
+    // width (not maxWidth) so the amount always gets the full 62% column
+    // instead of shrink-wrapping to its own text — a narrow maxWidth was
+    // forcing long French amounts to hyphen-break mid-word.
+    wordsBlock: { width: '62%', paddingRight: 16 },
     wordsLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
     wordsValue: { fontSize: 8.5, color: '#374151', lineHeight: 1.4, textTransform: 'uppercase' },
 
@@ -169,19 +136,24 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     },
     signatureBoxEmpty: { alignItems: 'center', justifyContent: 'center' },
     signatureBoxPlaceholder: { fontSize: 7, color: '#9ca3af', textTransform: 'uppercase' },
+    // Only applied when no stamp/signature image was uploaded — a real
+    // stamp image fills styles.signatureBox exactly at its own dynamic
+    // dimensions (bound to settings.stamp_size), so a border there would
+    // frame the company's actual stamp like a placeholder.
+    signatureBoxEmptyFrame: { borderWidth: 1, borderColor: '#D1D5DB', borderStyle: 'dashed' },
     signLine: { width: '100%', height: 0.75, backgroundColor: '#d1d5db', marginTop: 4, marginBottom: 8 },
     signLabel: { fontSize: 7.5, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 },
     stampImage: { position: 'absolute', objectFit: 'contain', opacity: 0.85, transform: 'rotate(-2deg)' },
     signatureImage: { position: 'absolute', objectFit: 'contain' },
 
-    footer: { position: 'absolute', left: 40, right: 40, bottom: 26, paddingTop: 10, borderTopWidth: 1.5, borderColor: accent },
+    footer: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 35, paddingTop: 10, borderTopWidth: 1.5, borderColor: accent },
     footerGrid: { flexDirection: 'row', justifyContent: 'space-between' },
     footerCol: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, maxWidth: 300 },
     footerItem: { fontSize: 6.8, color: '#6b7280' },
     footerItemStrong: { fontFamily, fontWeight: 'bold', color: '#374151' },
     footerContact: { alignItems: 'flex-end' },
     footerContactText: { fontSize: 6.8, color: '#6b7280', marginBottom: 1 },
-    sordiWatermark: { position: 'absolute', left: 40, right: 40, bottom: 6, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
+    sordiWatermark: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 6, textAlign: 'center', fontSize: 6, color: '#9ca3af' },
   });
 
   const legalItems: { label: string; value?: string }[] = [
@@ -196,16 +168,18 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     <Document title={`${data.docTitle} ${data.docNumber}`} author={settings?.company_name || undefined}>
       <Page size="A4" style={styles.page}>
 
+        <PdfStatusBadge status={invoice.status} />
+
         <View style={styles.headerBand} fixed>
           <View style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            {/* No logo uploaded — collapse to empty space on the issued
+                PDF, not a placeholder card or a repeated company-name line
+                (the legal footer block already carries that). */}
             {settings?.logo_data && (
               <View style={styles.logoChip}>
                 <Image src={settings.logo_data} style={styles.logoImage} />
               </View>
             )}
-            <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', letterSpacing: 0.5, color: '#ffffff', textTransform: 'uppercase', marginTop: 4 }}>
-              {settings?.legal_name || settings?.company_name || "EURL OMADA AGENCY"}
-            </Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.docTitle}>{data.docTitle}</Text>
@@ -352,14 +326,20 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             ) : (
               <View />
             )}
-            <View style={[styles.signBox, { width: stampWidth, minWidth: stampWidth }]}>
+            <View style={[styles.signBox, mainStampUrl ? { width: stampWidth, minWidth: stampWidth } : { width: 140, minWidth: 140 }]}>
               {mainStampUrl && (
                 <>
                   <Text style={styles.signLabel}>Cachet et signature</Text>
                   <View style={[styles.signLine, { width: stampWidth }]} />
                 </>
               )}
-              <View style={[styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]}>
+              <View
+                style={
+                  mainStampUrl
+                    ? [styles.signatureBox, { width: stampWidth, minWidth: stampWidth, height: stampHeight }]
+                    : [styles.signatureBox, styles.signatureBoxEmptyFrame, { width: 140, minWidth: 140, height: 75 }]
+                }
+              >
                 {!mainStampUrl ? (
                   <View style={styles.signatureBoxEmpty}>
                     <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
@@ -434,6 +414,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
         {settings?.license_active === false && (
           <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.1 — www.sordi.app</Text>
         )}
+        <Text style={styles.pageNumber} fixed render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
 
       </Page>
     </Document>

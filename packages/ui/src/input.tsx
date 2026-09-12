@@ -8,7 +8,12 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
       <input
         type={type}
         className={cn(
-          "flex h-11 w-full rounded-xl border border-slate-200/80 bg-slate-50/50 px-3.5 py-2 text-sm text-slate-900 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/10 focus-visible:border-blue-500 focus-visible:bg-white disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 dark:border-border/50 dark:bg-secondary/30 dark:text-foreground dark:placeholder:text-muted-foreground dark:focus-visible:bg-card",
+          // Desktop-compact density (h-8, rounded-md) and the actual
+          // --border/--primary tokens, not the hardcoded slate-200/
+          // blue-500 web-template literals this used to bypass them with
+          // — those never picked up a token change (e.g. the desktop
+          // cobalt accent) in light mode at all.
+          "flex h-8 w-full rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200",
           className,
         )}
         ref={ref}

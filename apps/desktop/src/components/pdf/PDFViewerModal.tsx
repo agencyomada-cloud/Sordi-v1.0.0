@@ -146,7 +146,7 @@ export function PDFViewerModal({
               size="sm"
               disabled={isSaving}
               onClick={handleSave}
-              className="bg-blue-600 hover:bg-blue-500 text-white space-x-1.5"
+              className="space-x-1.5"
             >
               <Download className="w-4 h-4" />
               <span>{isSaving ? "Enregistrement..." : "Télécharger PDF"}</span>

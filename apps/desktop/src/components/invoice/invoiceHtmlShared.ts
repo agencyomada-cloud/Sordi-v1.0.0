@@ -88,6 +88,7 @@ export interface LegalField {
 
 export function resolveLegalFields(settings: any): LegalField[] {
   return [
+    { label: 'Forme Juridique', value: settings?.company_legal_form },
     { label: 'N° Reg. Commerce', value: settings?.company_rc },
     { label: 'NIF', value: settings?.company_nif },
     { label: 'Articl. Imposition', value: settings?.company_ai },

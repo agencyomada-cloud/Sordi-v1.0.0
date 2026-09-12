@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ScaleToFitContainerContext } from "./scaleToFitContext";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { resolveInvoiceHtmlTheme } from "./invoiceHtmlShared";
 import { useEditableInvoiceLogic } from "./useEditableInvoiceLogic";
@@ -32,6 +33,7 @@ export function ScaleToFit({ children }: { children: React.ReactNode }) {
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const outer = outerRef.current;
@@ -59,21 +61,44 @@ export function ScaleToFit({ children }: { children: React.ReactNode }) {
     return () => resizeObserver.disconnect();
   }, [children]);
 
+  // Published once the scaled node exists, so descendants (via
+  // useScaleToFitContainer) can portal popovers into it instead of body.
+  useEffect(() => {
+    setContainer(innerRef.current);
+  }, []);
+
   return (
-    <div ref={outerRef} className="w-full">
+    // This owns the actual scroll region and horizontal centering for the
+    // whole canvas — NewInvoice.tsx's own wrapper around
+    // <EditableInvoicePreview> stays a plain, non-scrolling flex host.
+    // `overflow-x-hidden` here is a deliberate backstop, not the fix itself:
+    // the real fix is that nothing inside is allowed to force this box
+    // wider than its parent in the first place.
+    // pb-32: safe clearance below the document so scrolling to its bottom
+    // (legal text, stamp, totals) never ends up underneath the floating
+    // action dock — that dock is `fixed` over this scroll container, not
+    // inside it, so only extra bottom padding here (not anything on
+    // NewInvoice.tsx's non-scrolling wrapper one level up) actually gives
+    // the user room to scroll past it.
+    <div ref={outerRef} className="w-full h-full overflow-y-auto overflow-x-hidden flex justify-center pt-6 pb-32">
       <div
-        className="mx-auto"
-        style={{ width: naturalSize.width * scale || undefined, height: naturalSize.height * scale || undefined }}
+        style={{
+          margin: "0 auto",
+          width: naturalSize.width * scale || undefined,
+          height: naturalSize.height * scale || undefined,
+        }}
       >
         <div
           ref={innerRef}
           style={{
             transform: `scale(${scale})`,
-            transformOrigin: "top left",
+            transformOrigin: "top center",
             width: naturalSize.width || "max-content",
           }}
         >
-          {children}
+          <ScaleToFitContainerContext.Provider value={container}>
+            {children}
+          </ScaleToFitContainerContext.Provider>
         </div>
       </div>
     </div>

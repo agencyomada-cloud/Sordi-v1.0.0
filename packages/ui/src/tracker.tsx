@@ -62,10 +62,10 @@ const TrackerBlock = ({
       />
       {tooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/day:flex flex-col items-center pointer-events-none z-50 select-none transition-all duration-150 ease-out">
-          <div className="bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-[0_8px_20px_-4px_rgba(15,23,42,0.08)] text-slate-800 text-[11px] rounded-xl py-1.5 px-3 whitespace-nowrap">
+          <div className="bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-[0_8px_20px_-4px_rgba(15,23,42,0.08)] text-slate-800 text-[11px] rounded-xl py-1.5 px-3 whitespace-nowrap dark:bg-popover/95 dark:border-border dark:text-popover-foreground dark:shadow-elevated">
             {tooltip}
           </div>
-          <div className="w-2 h-2 bg-white/95 border-r border-b border-slate-200/90 rotate-45 -mt-1 shadow-xs" />
+          <div className="w-2 h-2 bg-white/95 border-r border-b border-slate-200/90 rotate-45 -mt-1 shadow-xs dark:bg-popover/95 dark:border-border" />
         </div>
       )}
     </div>

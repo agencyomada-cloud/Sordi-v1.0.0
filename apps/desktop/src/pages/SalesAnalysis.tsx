@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect } from "@sordi/ui";
-import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, DesktopSegmentedControl } from "@sordi/ui";
 import { ClientProductPivotTable } from "@/components/dashboard/ClientProductPivotTable";
 import { ClientCumulativeTable } from "@/components/dashboard/ClientCumulativeTable";
 
@@ -28,12 +27,12 @@ export default function SalesAnalysisPage() {
   const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
 
   return (
-    <main className="flex-1 min-w-0 p-4 md:p-8">
-          <div className="max-w-[1600px] mx-auto space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-30">
+    <main className="flex-1 min-w-0 p-6">
+          <div className="max-w-[1600px] mx-auto space-y-5">
+            <div className="h-9 mb-3 flex items-center justify-between gap-3 relative z-30">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Analyses & Rapports</h1>
-                <p className="text-xs text-slate-500 mt-1">
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">Analyses & Rapports</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Ventilation détaillée des ventes cumulées, par produit et par client
                 </p>
               </div>
@@ -45,10 +44,10 @@ export default function SalesAnalysisPage() {
                   selected={selectedMonths}
                   onChange={setSelectedMonths}
                   placeholder="Filtrer par mois..."
-                  className="w-56"
+                  className="w-56 h-[30px] text-xs"
                 />
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger className="w-24 h-[30px] text-xs rounded-md">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -57,28 +56,15 @@ export default function SalesAnalysisPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <DesktopSegmentedControl
+                  options={[
+                    { value: "pivot", label: "Analyse par Produit" },
+                    { value: "client", label: "Rapport Global Clients" },
+                  ]}
+                  value={view}
+                  onChange={(v) => setView(v as 'pivot' | 'client')}
+                />
               </div>
-            </div>
-
-            <div className="flex bg-muted/40 p-1 rounded-full border border-border/40 w-fit">
-              <button
-                onClick={() => setView('pivot')}
-                className={cn(
-                  "px-4 py-1.5 text-xs font-medium rounded-full transition-all",
-                  view === 'pivot' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Analyse par Produit
-              </button>
-              <button
-                onClick={() => setView('client')}
-                className={cn(
-                  "px-4 py-1.5 text-xs font-medium rounded-full transition-all",
-                  view === 'client' ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Rapport Global Clients
-              </button>
             </div>
 
             {view === 'pivot' ? (

@@ -5,7 +5,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  // Desktop-compact density: text-xs (was text-sm) at a fixed control
+  // height instead of the web-default py-driven sizing.
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-xs font-medium ring-offset-background transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -19,11 +21,16 @@ const buttonVariants = cva(
         ghost: "hover:bg-secondary hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // rounded-md (var(--radius), 6px), not rounded-full — a desktop
+      // control reads as a button via its border/fill, not a pill shape.
+      // h-8 is the standard desktop action-button height across all sizes;
+      // sm/lg only vary the horizontal padding, not the height, other than
+      // a small step down/up for genuinely dense or prominent contexts.
       size: {
-        default: "h-10 px-5 py-2 rounded-full",
-        sm: "h-9 rounded-full px-4",
-        lg: "h-12 rounded-full px-8",
-        icon: "h-10 w-10 rounded-full",
+        default: "h-8 px-2.5 rounded-md",
+        sm: "h-7 rounded-md px-2",
+        lg: "h-9 rounded-md px-4",
+        icon: "h-8 w-8 rounded-md",
       },
     },
     defaultVariants: {

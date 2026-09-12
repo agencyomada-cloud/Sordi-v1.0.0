@@ -15,11 +15,17 @@ import type { StatusBadgeTone } from "@sordi/ui";
  */
 export const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: StatusBadgeTone }> = {
   draft: { label: "Brouillon", variant: "neutral" },
-  issued: { label: "Émise", variant: "neutral" },
+  // Odoo convention: "validated, awaiting payment" reads as a distinct
+  // amber state, not gray-same-as-draft — the two are legally very
+  // different documents (draft is editable/non-binding, issued is a
+  // committed invoice) and looked identical before this.
+  issued: { label: "En attente", variant: "warning" },
   paid: { label: "Payée", variant: "success" },
-  partial: { label: "Partielle", variant: "warning" },
+  // Amber, not blue — "Partielle" is the same semantic family as "En
+  // attente" (money still outstanding), not a neutral informational state.
+  partial: { label: "Paiement partiel", variant: "warning" },
   overdue: { label: "En retard", variant: "error" },
-  cancelled: { label: "Annulée", variant: "neutral" },
+  cancelled: { label: "Annulée", variant: "error" },
   converted: { label: "Convertie", variant: "info" },
 };
 

@@ -14,6 +14,10 @@ export function useClients() {
       return await db.clients.getAll(activeCompanyId);
     },
     enabled: isReady,
+    // Client mutations invalidate this key explicitly — a 5-minute
+    // staleTime just avoids re-fetching the full (now 100+) client list on
+    // every window refocus.
+    staleTime: 1000 * 60 * 5,
   });
 }
 

@@ -101,3 +101,96 @@ export const licenseCreateSchema = z.object({
   expiresAt: z.string().datetime(),
   maxDevices: z.number().int().positive().optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Device telemetry & admin license issuing (apps/api/src/routes/telemetry.ts,
+// apps/api/src/routes/adminLicenses.ts)
+// ---------------------------------------------------------------------------
+
+// Mirrors telemetry.rs's HeartbeatPayload struct wire shape exactly — it has
+// no #[serde(rename_all)] attribute, so it serializes with its literal
+// snake_case Rust field names, not camelCase like the rest of this file's
+// schemas. Anonymous only, no PII fields accepted even if a future client
+// sent them.
+export const telemetryHeartbeatSchema = z.object({
+  machine_id: z.string().min(1),
+  device_fingerprint: z.string().min(1),
+  app_version: z.string().min(1),
+  invoices_count: z.number().int().nonnegative(),
+  clients_count: z.number().int().nonnegative(),
+  expenses_count: z.number().int().nonnegative(),
+  last_active_at: z.string().min(1).optional(),
+  // Added alongside the admin dashboard's "OS Platform" column — an older
+  // desktop build that hasn't rebuilt yet simply won't send this field, so
+  // it stays optional rather than breaking that client's heartbeat.
+  os_platform: z.string().min(1).optional(),
+});
+
+// Internal admin-only endpoint, same trust model as licenseCreateSchema
+// above — called by hand per sale, never exposed to any UI. Body shape is
+// plain camelCase (an admin/support tool request, not a wire-matched device
+// payload like telemetryHeartbeatSchema above).
+export const adminLicenseIssueSchema = z.object({
+  machineId: z.string().min(1),
+  validDays: z.number().int().positive(),
+  licenseType: z.enum(["yearly", "lifetime"]).optional(),
+});
+
+// GET /admin/devices query params — the admin portal's device list/search
+// and status-tab filter.
+export const adminDeviceListQuerySchema = z.object({
+  search: z.string().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+  status: z.enum(["trial", "active", "expired"]).optional(),
+});
+
+// PATCH /admin/devices/:machineId — an admin manually attaching customer
+// contact info to a device record after a sale/support conversation. Every
+// field optional and independently settable; empty string clears a field
+// (distinct from omitting it, which leaves the existing value untouched).
+export const adminDeviceUpdateSchema = z.object({
+  customerName: z.string().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  phoneNumber: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Landing page lead capture (apps/web's download modal -> apps/api's
+// POST /leads/download)
+// ---------------------------------------------------------------------------
+
+// Accepts every real-world way an Algerian mobile number gets typed:
+// national with leading 0 ("0553073909"), international with "+213"
+// ("+213553073909"), international with a bare "213" prefix, or already
+// just the bare 9-digit subscriber number the UI used to force via a fixed
+// "+213" prefix chip. Algerian mobile subscriber numbers are always 9
+// digits starting with 5, 6, or 7 (after any country code/leading zero is
+// stripped) — validated and normalized to that bare 9-digit form so every
+// stored phone number and every wa.me link built from it is consistent
+// regardless of how the visitor typed it in.
+const ALGERIAN_MOBILE_SUBSCRIBER = /^[567][0-9]{8}$/;
+
+function normalizeAlgerianPhone(raw: string): string | null {
+  let digits = raw.replace(/[^0-9]/g, "");
+  if (digits.startsWith("00213")) digits = digits.slice(5);
+  else if (digits.startsWith("213")) digits = digits.slice(3);
+  else if (digits.startsWith("0")) digits = digits.slice(1);
+  return ALGERIAN_MOBILE_SUBSCRIBER.test(digits) ? digits : null;
+}
+
+export const leadDownloadSchema = z.object({
+  name: z.string().min(1, "Le nom est requis"),
+  phone: z
+    .string()
+    .min(1, "Le numéro de téléphone est requis")
+    .transform((val, ctx) => {
+      const normalized = normalizeAlgerianPhone(val);
+      if (!normalized) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Numéro de téléphone invalide" });
+        return z.NEVER;
+      }
+      return normalized;
+    }),
+  company: z.string().optional(),
+  osType: z.enum(["macos", "windows"]),
+});

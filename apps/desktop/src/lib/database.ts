@@ -6,7 +6,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { mockStore } from "./mockStore";
 
-const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+export const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
 /**
  * The mock/demo fallback exists for exactly one situation: the app isn't
@@ -127,6 +127,11 @@ export interface LicenseStatus {
   expires_at: string | null;
 }
 
+export interface TelemetryStatus {
+  enabled: boolean;
+  lastSentAt: string | null;
+}
+
 export interface ClientSearchHit {
   id: string;
   name: string;
@@ -152,6 +157,8 @@ export interface Company {
   name: string;
   logo_base64: string | null;
   activity: string | null;
+  /** Algerian legal form — EURL, SARL, SPA, SNC, Auto-entrepreneur, Personne physique / Établissement individuel. */
+  legal_form: string | null;
   rc: string | null;
   nif: string | null;
   nis: string | null;
@@ -177,6 +184,7 @@ export interface CreateCompanyData {
   name: string;
   logo_base64?: string | null;
   activity?: string | null;
+  legal_form?: string | null;
   rc?: string | null;
   nif?: string | null;
   nis?: string | null;
@@ -689,6 +697,36 @@ export interface UpdateExpenseData {
   payment_method?: string;
   project_id?: string;
   is_paid: boolean;
+}
+
+// ============= ACTIVITÉS & RAPPELS =============
+// Odoo-chatter-style follow-up tasks attached to any record — distinct from
+// ActivityLog (the read-only audit trail behind History.tsx).
+
+export type ActivityEntityType = "invoice" | "client" | "supplier" | "quote";
+export type ActivityKind = "call" | "email" | "meeting" | "todo";
+
+export interface Activity {
+  id: string;
+  company_id: string | null;
+  entity_type: ActivityEntityType;
+  entity_id: string;
+  title: string;
+  activity_type: ActivityKind;
+  due_date: string;
+  done_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreateActivityData {
+  company_id: string;
+  entity_type: ActivityEntityType;
+  entity_id: string;
+  title: string;
+  activity_type: ActivityKind;
+  due_date: string;
+  notes?: string;
 }
 
 
@@ -1245,6 +1283,20 @@ export const db = {
     activate: (license_key: string): Promise<LicenseStatus> => safeInvoke("activate_license", { licenseKey: license_key }),
     verifyBackground: (): Promise<LicenseStatus> =>
       safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null })),
+    // Human-readable "SRD-XXXX-XXXX-XXXX" code for manual activation (see
+    // license.rs's compute_machine_id) — distinct from the opaque device
+    // fingerprint embedded in the license token itself, which is never
+    // exposed to the frontend at all.
+    getMachineId: (): Promise<string> => safeInvoke("get_machine_id", undefined, () => "SRD-0000-0000-0000"),
+  },
+  // Anonymous diagnostic heartbeat status/toggle — see telemetry.rs. The
+  // actual send is entirely background/Rust-side (fired once from
+  // lib.rs's setup(), never invoked from the frontend); these two just
+  // read/change the disclosed opt-out preference shown in Settings.
+  telemetry: {
+    getStatus: (): Promise<TelemetryStatus> =>
+      safeInvoke("get_telemetry_status", undefined, () => ({ enabled: true, lastSentAt: null })),
+    setEnabled: (enabled: boolean): Promise<void> => safeInvoke("set_telemetry_enabled", { enabled }, () => {}),
   },
   // Global search (Phase 1: clients + invoices — see search_global in commands.rs)
   search: {
@@ -1413,6 +1465,14 @@ export const db = {
     delete: (id: string): Promise<void> => safeInvoke("delete_expense", { id }, () => mockStore.deleteExpense(id)),
   },
 
+  activities: {
+    list: (company_id: string, entity_type?: ActivityEntityType, entity_id?: string): Promise<Activity[]> =>
+      safeInvoke("list_activities", { companyId: company_id, entityType: entity_type, entityId: entity_id }, () => []),
+    create: (data: CreateActivityData): Promise<Activity> => safeInvoke("create_activity", { data }, () => ({ ...data, id: crypto.randomUUID(), done_at: null, notes: data.notes ?? null, created_at: new Date().toISOString() } as Activity)),
+    complete: (id: string): Promise<Activity> => safeInvoke("complete_activity", { id }, () => { throw new Error("complete_activity not available in web mode"); }),
+    delete: (id: string): Promise<void> => safeInvoke("delete_activity", { id }, () => {}),
+  },
+
   // Dashboard
   dashboard: {
     getStats: (company_id: string, year?: number, months?: string[]): Promise<DashboardStats> => safeInvoke("get_dashboard_stats", { companyId: company_id, year, months }, () => mockStore.getDashboardStats(year, months)),
@@ -1577,6 +1637,15 @@ export const db = {
   database: {
     backup: (destPath?: string): Promise<string> =>
       safeInvoke("backup_database", { destPath }, () => Promise.reject(new Error("Database backup is not available outside the desktop app"))),
+    // [timestamp (RFC 3339), size in bytes] for the newest backup on disk
+    // (rolling or manual, whichever is newer), or null if none exists yet.
+    getLastBackupInfo: (): Promise<[string, number] | null> =>
+      safeInvoke("get_last_backup_info", undefined, () => Promise.resolve(null)),
+    // Stages `sourcePath` for restore and restarts the app to apply it (see
+    // the Rust command's doc comment) — the promise may never resolve since
+    // the process exits shortly after the backend accepts the request.
+    restore: (sourcePath: string): Promise<void> =>
+      safeInvoke("restore_database", { sourcePath }, () => Promise.reject(new Error("Database restore is not available outside the desktop app"))),
   },
 };
 

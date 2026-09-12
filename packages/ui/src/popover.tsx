@@ -7,11 +7,27 @@ const Popover = PopoverPrimitive.Root;
 
 const PopoverTrigger = PopoverPrimitive.Trigger;
 
+interface PopoverContentProps extends React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> {
+  /**
+   * Portal target. Radix computes the floating position from the trigger's
+   * `getBoundingClientRect()`, which is correct even under a scaled/
+   * transformed ancestor — but portaling to the default `document.body`
+   * escapes that ancestor's stacking/transform context entirely, and the
+   * two coordinate spaces then disagree (the classic "popover jumps to the
+   * top-left corner" bug for any trigger inside a `transform: scale(...)`
+   * wrapper). Passing the SAME transformed element here as `container` — so
+   * the popover renders back inside it — keeps trigger and content in one
+   * consistent coordinate space. Omit for the normal (unscaled) case; it's
+   * `undefined` by default, matching Radix's own default (`document.body`).
+   */
+  container?: HTMLElement | null;
+}
+
 const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
-  <PopoverPrimitive.Portal>
+  PopoverContentProps
+>(({ className, align = "center", sideOffset = 4, container, ...props }, ref) => (
+  <PopoverPrimitive.Portal container={container ?? undefined}>
     <PopoverPrimitive.Content
       ref={ref}
       align={align}

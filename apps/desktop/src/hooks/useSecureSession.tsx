@@ -286,14 +286,14 @@ export function SecureSessionProvider({ children }: { children: ReactNode }) {
                 variant="outline"
                 onClick={handleCancel}
                 disabled={isVerifying}
-                className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                className="rounded-xl"
               >
                 Annuler
               </Button>
               <Button
                 type="submit"
                 disabled={isVerifying}
-                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                className="rounded-xl"
               >
                 {isVerifying ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-1.5" />

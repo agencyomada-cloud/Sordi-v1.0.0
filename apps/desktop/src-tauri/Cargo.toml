@@ -1,12 +1,17 @@
 [package]
 name = "sordi"
-version = "1.0.4"
+version = "1.0.0"
 description = "Sordi"
 authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
+# Needed once a second binary (src/bin/keygen.rs) existed in this package —
+# without it, plain `cargo run` (what `tauri dev` invokes internally) can no
+# longer infer which binary to run and errors out instead of launching the
+# app. `cargo run --bin keygen` still works explicitly either way.
+default-run = "sordi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -72,6 +77,11 @@ block2 = "0.6"
 # get_ipc_response/assert_ipc_response) — dev-only, doesn't affect the real
 # app build since [dev-dependencies] only applies to `cargo test`.
 tauri = { version = "2.9.5", features = ["test"] }
+# Only for #[tokio::test] on license::activate() (an async fn) — already a
+# transitive dependency via reqwest's async client, just not previously
+# nameable from our own test code without being a direct dependency too.
+# Dev-only, doesn't affect the real app build.
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [features]
 # omada-agency branch only, never enabled by default — see license.rs's

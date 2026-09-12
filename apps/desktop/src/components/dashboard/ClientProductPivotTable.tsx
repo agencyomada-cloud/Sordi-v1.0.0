@@ -4,18 +4,16 @@ import { useSettings } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { db } from "@/lib/database";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Button, SearchInput, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
 import {
-    RiDownloadLine as Download,
-    RiDownloadLine as FileDown,
     RiTableLine as TableIcon,
-    RiLoader4Line as Loader2,
     RiArrowUpSLine,
     RiArrowDownSLine,
     RiExpandUpDownLine,
 } from "@remixicon/react";
 import { generateInvoicePDF } from "@/lib/pdfGenerator";
 import { cn } from "@/lib/utils";
+import { ExportActionMenu } from "@/components/ui/export-action-menu";
 
 interface CumulativeRecord {
     client_name: string;
@@ -176,7 +174,7 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
     const SortHeader = ({ label, sortKey, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "right" }) => (
         <TableHead
             numeric={align === "right"}
-            className="cursor-pointer select-none hover:text-foreground transition-colors"
+            className="cursor-pointer select-none hover:text-foreground transition-colors text-[11px] font-semibold text-muted-foreground uppercase px-3"
             onClick={() => toggleSort(sortKey)}
         >
             <span className={cn("inline-flex items-center gap-1", align === "right" && "flex-row-reverse")}>
@@ -192,66 +190,62 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
 
     if (isLoading) {
         return (
-            <Card>
-                <CardHeader className="flex flex-col gap-4">
+            <div className="border border-border/80 rounded-md bg-card overflow-hidden">
+                <div className="flex flex-col gap-3 p-4 border-b border-border/60">
                     <div className="flex flex-row items-center justify-between gap-4">
                         <div className="space-y-1.5">
-                            <Skeleton className="h-5 w-56" />
+                            <Skeleton className="h-4 w-56" />
                             <Skeleton className="h-3 w-40" />
                         </div>
-                        <Skeleton className="h-9 w-32 rounded-md" />
+                        <Skeleton className="h-7 w-32 rounded-md" />
                     </div>
-                    <Skeleton className="h-10 w-full sm:w-72 rounded-md" />
-                </CardHeader>
-                <CardContent className="p-0">
-                    <Table className="w-full text-sm">
-                        <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                                {Array.from({ length: 7 }).map((_, i) => (
-                                    <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
-                                ))}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableLoading columns={7} rows={6} numericColumns={[2, 3, 4, 5, 6]} />
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                    <Skeleton className="h-8 w-full sm:w-72 rounded-md" />
+                </div>
+                <Table className="w-full text-sm">
+                    <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                            {Array.from({ length: 7 }).map((_, i) => (
+                                <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableLoading columns={7} rows={6} numericColumns={[2, 3, 4, 5, 6]} />
+                    </TableBody>
+                </Table>
+            </div>
         );
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-col gap-4">
+        <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
+            <div className="flex flex-col gap-3 p-4 border-b border-border/60">
                 <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
                     <div>
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                            <TableIcon className="w-4 h-4 text-muted-foreground" />
+                        <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <TableIcon className="w-3.5 h-3.5 text-muted-foreground" />
                             Ventes Cumulées par Produit
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
                             {rows.length} ligne{rows.length > 1 ? "s" : ""} client × produit sur la période
                         </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={exportToCSV} className="h-9 px-3 text-xs gap-2">
-                        <FileDown className="w-4 h-4" />
-                        Exporter CSV
-                    </Button>
+                    <ExportActionMenu onExportCSV={exportToCSV} onExportPDF={exportToPDF} isExportingPDF={isExporting} pdfLabel="Exporter PDF A3" />
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="h-9 flex items-center justify-between gap-3">
                     <SearchInput
                         value={searchQuery}
                         onChange={setSearchQuery}
                         placeholder="Rechercher un client ou un produit..."
+                        className="h-[30px] text-xs bg-background border-border/80 rounded-md"
                         containerClassName="w-full sm:w-72"
                     />
 
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>Rapport imprimable :</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                        <span className="hidden md:inline">Rapport imprimable :</span>
                         <Select value={pdfMetric} onValueChange={(v) => setPdfMetric(v as MetricType)}>
-                            <SelectTrigger className="w-[150px] h-9 text-xs">
+                            <SelectTrigger className="w-[150px] h-[30px] text-xs rounded-md border-border/80">
                                 <SelectValue placeholder="Mesure" />
                             </SelectTrigger>
                             <SelectContent>
@@ -262,19 +256,14 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                                 <SelectItem value="total_quantity">Quantité</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Button variant="outline" size="sm" onClick={exportToPDF} disabled={isExporting} className="h-9 px-3 text-xs gap-2">
-                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                            {isExporting ? "Génération..." : "PDF A3"}
-                        </Button>
                     </div>
                 </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="p-0">
-                <div className="overflow-x-auto max-h-[600px] overflow-y-auto border-t border-border">
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <Table className="w-full text-sm">
                         <TableHeader className="sticky top-0 z-10 bg-muted/40">
-                            <TableRow className="hover:bg-transparent">
+                            <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
                                 <SortHeader label="Client" sortKey="client_name" />
                                 <SortHeader label="Produit" sortKey="product_name" />
                                 <SortHeader label="Quantité" sortKey="total_quantity" align="right" />
@@ -298,29 +287,29 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                                 </TableRow>
                             ) : (
                                 rows.map((r, i) => (
-                                    <TableRow key={`${r.client_name}-${r.product_name}-${i}`}>
-                                        <TableCell className="font-medium">{r.client_name}</TableCell>
-                                        <TableCell className="text-muted-foreground">{r.product_name}</TableCell>
-                                        <TableCell numeric>{new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 2 }).format(r.total_quantity)}</TableCell>
-                                        <TableCell numeric>{formatValue(r.total_ht)}</TableCell>
-                                        <TableCell numeric>{formatValue(r.total_tva)}</TableCell>
-                                        <TableCell numeric className="text-muted-foreground">{formatValue(r.total_timbre)}</TableCell>
-                                        <TableCell numeric className="font-semibold text-primary">{formatValue(r.total_ttc)}</TableCell>
+                                    <TableRow key={`${r.client_name}-${r.product_name}-${i}`} className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors">
+                                        <TableCell className="font-medium px-3">{r.client_name}</TableCell>
+                                        <TableCell className="text-muted-foreground px-3">{r.product_name}</TableCell>
+                                        <TableCell numeric className="font-medium px-3">{new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 2 }).format(r.total_quantity)}</TableCell>
+                                        <TableCell numeric className="font-medium px-3">{formatValue(r.total_ht)}</TableCell>
+                                        <TableCell numeric className="font-medium px-3">{formatValue(r.total_tva)}</TableCell>
+                                        <TableCell numeric className="font-medium text-muted-foreground px-3">{formatValue(r.total_timbre)}</TableCell>
+                                        <TableCell numeric className="font-semibold text-primary px-3">{formatValue(r.total_ttc)}</TableCell>
                                     </TableRow>
                                 ))
                             )}
                         </TableBody>
                         {rows.length > 0 && (
                             <tfoot>
-                                <TableRow className="bg-primary/5 hover:bg-primary/5 font-semibold border-t border-border">
-                                    <TableCell colSpan={2} className="uppercase tracking-wide text-xs text-primary">
+                                <TableRow className="h-9 bg-muted/30 border-t border-border/60 font-semibold text-xs font-mono tabular-nums hover:bg-muted/30">
+                                    <TableCell colSpan={2} className="uppercase tracking-wide text-xs text-primary font-sans px-3">
                                         Total {searchQuery ? "(filtré)" : "Général"}
                                     </TableCell>
-                                    <TableCell numeric className="text-primary">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatValue(totals.ht)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatValue(totals.tva)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatValue(totals.timbre)}</TableCell>
-                                    <TableCell numeric className="text-primary text-base">{formatValue(totals.ttc)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatValue(totals.ht)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatValue(totals.tva)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatValue(totals.timbre)}</TableCell>
+                                    <TableCell numeric className="text-primary text-sm px-3">{formatValue(totals.ttc)}</TableCell>
                                 </TableRow>
                             </tfoot>
                         )}
@@ -458,7 +447,7 @@ export const ClientProductPivotTable: React.FC<ClientProductPivotTableProps> = (
                         </div>
                     </div>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
     );
 };
+

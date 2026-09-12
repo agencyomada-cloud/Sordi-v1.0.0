@@ -32,7 +32,7 @@ const TONE_CLASSES: Record<StatusBadgeTone, string> = {
  *  (e.g. a DropdownMenuTrigger's clickable button). */
 export function statusBadgeVariants({ tone = "neutral", className }: { tone?: StatusBadgeTone; className?: string } = {}) {
   return cn(
-    "inline-flex items-center gap-1.5 rounded-full border text-[11px] font-medium px-2.5 py-0.5 transition-colors",
+    "inline-flex items-center gap-1.5 rounded-full border text-[11px] font-medium px-2.5 py-0.5 transition-colors whitespace-nowrap shrink-0",
     TONE_CLASSES[tone],
     className
   );

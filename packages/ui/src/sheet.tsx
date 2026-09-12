@@ -49,21 +49,55 @@ const sheetVariants = cva(
 
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> {}
+    VariantProps<typeof sheetVariants> {
+  /** Overrides the scrim's className — the default is a fairly dark
+   *  `bg-black/80`; a consumer wanting a subtler backdrop (e.g. a
+   *  slide-over that should still let the page underneath read as present)
+   *  can pass its own here instead. */
+  overlayClassName?: string;
+  /** Suppresses the built-in absolute-positioned close button — for a
+   *  consumer that wants its own close affordance inline in a custom
+   *  header instead (via the exported `SheetClose`). */
+  hideClose?: boolean;
+}
+
+// Same fix as DialogContent (dialog.tsx) — Sheet is built on the same
+// @radix-ui/react-dialog primitive, so it has the identical "Missing
+// Description" dev warning unless a real SheetDescription is present
+// somewhere in children (often nested inside SheetHeader) or the warning
+// is explicitly silenced via a real `aria-describedby={undefined}` prop.
+function containsSheetDescription(node: React.ReactNode): boolean {
+  return React.Children.toArray(node).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    if (child.type === SheetDescription) return true;
+    const nested = (child.props as { children?: React.ReactNode } | undefined)?.children;
+    return nested ? containsSheetDescription(nested) : false;
+  });
+}
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, ...props }, ref) => (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-        {children}
-        <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </SheetPrimitive.Close>
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  ),
+  ({ side = "right", className, overlayClassName, hideClose, children, ...props }, ref) => {
+    const hasDescription = containsSheetDescription(children);
+    return (
+      <SheetPortal>
+        <SheetOverlay className={overlayClassName} />
+        <SheetPrimitive.Content
+          ref={ref}
+          className={cn(sheetVariants({ side }), className)}
+          {...(!hasDescription ? { "aria-describedby": undefined } : {})}
+          {...props}
+        >
+          {children}
+          {!hideClose && (
+            <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </SheetPrimitive.Close>
+          )}
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    );
+  },
 );
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 

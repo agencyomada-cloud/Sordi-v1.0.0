@@ -332,7 +332,7 @@ export default function NewCreditNotePage() {
 
             <Button
               onClick={handleSubmit}
-              className="bg-red-600 hover:bg-red-700 gap-2"
+              className="gap-2"
               disabled={!clientId || !selectedInvoiceId || items.every(i => i.quantity === 0) || createInvoice.isPending}
             >
               {createInvoice.isPending ? "Création..." : "Créer l'avoir"}

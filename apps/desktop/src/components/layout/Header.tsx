@@ -25,45 +25,32 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
       <header
         ref={ref}
         data-tauri-drag-region
-        // h-[72px] (not h-16) so this row's own vertical center sits a
-        // little further down the window — closer to where the Sidebar's
-        // wordmark lands below its h-9 traffic-light clearance strip,
-        // instead of the topbar's controls floating right at the very top
-        // edge while the sidebar logo sits a full row lower.
-        // Clean, bright translucent surface matching the Sidebar — barely-
-        // there blur, hairline border, no glowing frame.
-        // Dark mode stays fully transparent as before.
-        className="h-[72px] flex items-center justify-between px-8 ps-20 lg:ps-8 bg-white/70 backdrop-blur-xl border-b border-slate-200/50 dark:bg-transparent dark:backdrop-blur-none dark:border-transparent"
+        // Strict native titlebar height (40px) — the sidebar's own h-9
+        // drag-region strip above its wordmark already clears the macOS
+        // traffic lights (they land in the sidebar's top-left corner, not
+        // this header, since the header starts to the right of it), so no
+        // extra left inset is needed here beyond the mobile-hamburger
+        // clearance below lg.
+        //
+        // A 3-column `grid` here (equal 1fr tracks) used to force the right
+        // action cluster into a fixed 1/3 of the header regardless of how
+        // narrow the window got — once that cell was narrower than its own
+        // content (Facture button + 3 icon buttons + account menu, no
+        // shrink protection), the buttons visually spilled out of their
+        // grid cell and overlapped the search box next to it. A `flex
+        // justify-between` row instead gives the shrink-0 zones (this one
+        // and the right cluster below) their real content width first, and
+        // only the search zone in the middle actually compresses.
+        className="h-10 flex items-center justify-between gap-3 px-4 ps-16 lg:ps-4 bg-background/95 backdrop-blur-sm border-b border-border/80 select-none overflow-hidden"
       >
-        {/* Search sits at the very left, ahead of the title — every page
-            already repeats its own title as a large H1 right below this
-            bar, so this corner is better spent on the one thing that's
-            actually missing from the rest of the row: a way to jump
-            anywhere from anywhere. Styled as a pill input rather than a
-            bare icon button — it opens the exact same command palette on
-            click, just reads as "search field" rather than "hidden
-            action" at a glance. */}
-        <div className="flex items-center gap-4 min-w-0">
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent("open-command-palette"))}
-            aria-label="Rechercher"
-            className="flex items-center gap-2 w-64 md:w-80 shrink-0 rounded-xl bg-white/80 dark:bg-card/80 border border-slate-200/80 dark:border-border/60 shadow-xs px-3.5 py-1.5 text-xs text-slate-500 dark:text-muted-foreground hover:bg-white dark:hover:bg-card transition-colors duration-150"
-          >
-            <RiSearchLine className="w-3.5 h-3.5 shrink-0" />
-            <span className="flex-1 text-start truncate">Rechercher facture, client, projet...</span>
-            <span className="shrink-0 rounded-md border border-slate-200/80 dark:border-border/60 bg-slate-50 dark:bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:text-muted-foreground/80">
-              ⌘K
-            </span>
-          </button>
-
-          {/* Breadcrumb only — a flat page title (e.g. "Tableau de bord")
-              used to render here too, but every page already shows that
-              exact same title as its own large H1 right below this bar.
-              A breadcrumb earns its place because it says something the H1
-              doesn't (e.g. "Factures > FACT-2024-001"); a bare repeat of
-              the H1 doesn't, so it's gone rather than shown twice. */}
+        {/* Left — breadcrumb / current module title only. A flat page title
+            (e.g. "Tableau de bord") used to repeat here too, but every page
+            already shows that exact title as its own H1 below this bar — a
+            breadcrumb earns its place by saying something the H1 doesn't
+            (e.g. "Factures > FACT-2024-001"). */}
+        <div className="flex items-center gap-4 min-w-0 shrink">
           {breadcrumb && breadcrumb.length > 0 && (
-            <nav className="flex items-center gap-1.5 min-w-0 text-sm">
+            <nav className="flex items-center gap-1.5 min-w-0 text-xs font-medium">
               {breadcrumb.map((item, i) => {
                 const isLast = i === breadcrumb.length - 1;
                 return (
@@ -76,7 +63,7 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
                         {item.label}
                       </button>
                     ) : (
-                      <span className={isLast ? "font-semibold text-foreground truncate" : "text-muted-foreground truncate"}>
+                      <span className={isLast ? "font-medium text-foreground truncate" : "text-muted-foreground truncate"}>
                         {item.label}
                       </span>
                     )}
@@ -90,22 +77,48 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
           )}
         </div>
 
-        {/* Account identity, workspace, language, and theme are now all
-            unified behind WorkspaceAccountMenu (rightmost) — the sidebar
-            footer that used to hold the account card is gone, so this is
-            the one place both concepts live. Notifications/help stay as
-            plain minimal icon buttons — quiet by default, not competing
-            with the primary quick-action or the profile pill for
-            attention. */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Center — the one Quick Search trigger for the whole shell; opens
+            the same command palette the sidebar owns the state/dialog for.
+            The only zone allowed to actually compress: bounded so it never
+            shrinks below a usable width, but also never keeps growing past
+            320px just because the window has spare room. */}
+        <div className="flex items-center justify-center min-w-[180px] max-w-[320px] flex-1">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("open-command-palette"))}
+            aria-label="Rechercher"
+            className="flex items-center justify-between gap-2 w-full h-7 min-w-0 rounded-md bg-muted/40 hover:bg-muted/70 border border-border/60 px-3 text-xs text-muted-foreground transition-colors"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <RiSearchLine className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Rechercher facture, client, projet...</span>
+            </span>
+            <span className="shrink-0 rounded border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/80">
+              ⌘K
+            </span>
+          </button>
+        </div>
+
+        {/* Right — action cluster. Account identity, workspace, language,
+            and theme are all unified behind WorkspaceAccountMenu
+            (rightmost); notifications/help/widget stay as plain compact
+            icon buttons, quiet by default rather than competing with the
+            primary quick-action or the profile trigger for attention.
+            `shrink-0` on the whole cluster is what actually stops the
+            collision — it guarantees this zone keeps its full content
+            width and only the search zone above gives up space; Widget/
+            Help are the two truly redundant entries (both are also
+            reachable from the sidebar / ⌘K), so they're the first to go
+            once the window gets genuinely narrow. */}
+        <div className="flex items-center justify-end gap-2 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={() => navigate("/invoices/new")}
                 aria-label="Nouvelle facture"
-                className="w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-card flex items-center justify-center hover:bg-primary-hover hover:scale-105 active:scale-90 transition-all duration-200 ease-out ms-1.5"
+                className="h-7 px-2.5 rounded-md bg-primary text-primary-foreground text-xs font-medium flex items-center gap-1 hover:bg-primary-hover active:scale-[0.97] transition-all duration-150 shrink-0"
               >
-                <RiAddLine className="w-5 h-5 transition-transform duration-200" />
+                <RiAddLine className="w-3.5 h-3.5" />
+                Facture
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="center" sideOffset={8}>Nouvelle facture</TooltipContent>
@@ -116,7 +129,7 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
               <button
                 onClick={() => invoke("toggle_widget_window").catch(() => {})}
                 aria-label="Widget flottant"
-                className="p-2 rounded-lg text-slate-500 dark:text-muted-foreground hover:bg-slate-100 dark:hover:bg-secondary transition-colors duration-150"
+                className="hidden xl:flex h-7 w-7 shrink-0 rounded-md items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors duration-150"
               >
                 <WidgetIcon className="w-4 h-4" />
               </button>
@@ -125,17 +138,17 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <a
-                href="mailto:contact@sordi.app"
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("open-help-drawer"))}
                 aria-label={t("help")}
-                className="p-2 rounded-lg text-slate-500 dark:text-muted-foreground hover:bg-slate-100 dark:hover:bg-secondary transition-colors duration-150"
+                className="hidden xl:flex h-7 w-7 shrink-0 rounded-md items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors duration-150"
               >
                 <RiQuestionLine className="w-4 h-4" />
-              </a>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("help")}</TooltipContent>
           </Tooltip>
-          <div className="w-px h-6 bg-border/60 mx-1" />
+          <div className="hidden xl:block w-px h-5 bg-border/60 mx-1 shrink-0" />
           <WorkspaceAccountMenu />
         </div>
       </header>

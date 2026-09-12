@@ -16,6 +16,19 @@ const envSchema = z.object({
   // — not a user login, just enough to keep it off the open internet until
   // there's a real admin UI/account system.
   LICENSE_ADMIN_SECRET: z.string().min(16, "LICENSE_ADMIN_SECRET must be set to a real secret"),
+
+  // Lead-download notification email (see services/notifyService.ts) — both
+  // optional. Genuinely absent (not just empty) in most dev setups until an
+  // admin sets up a real Resend account, so the notifier no-ops rather than
+  // failing startup when either is missing.
+  RESEND_API_KEY: z.string().min(1).optional(),
+  ADMIN_NOTIFICATION_EMAIL: z.string().email().optional(),
+
+  // Landing page download CTAs (apps/web) — placeholder targets until real
+  // installer artifacts are hosted somewhere. Defaulted rather than
+  // required so the API and web app still boot without them configured.
+  DOWNLOAD_URL_MACOS: z.string().min(1).default("/downloads/sordi-finance-mac.dmg"),
+  DOWNLOAD_URL_WINDOWS: z.string().min(1).default("/downloads/sordi-finance-windows.exe"),
 });
 
 const parsed = envSchema.safeParse(process.env);

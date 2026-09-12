@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.*.example
+apps/desktop/src-tauri/target
+apps/api/.pgdata
+apps/api/backups
+.git
+.claude
+**/*.log

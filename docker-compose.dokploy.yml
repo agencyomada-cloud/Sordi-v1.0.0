@@ -1,0 +1,73 @@
+# Production compose file for Dokploy. Build context is the repo root for
+# both `web` and `api` (see the comment at the top of each Dockerfile for
+# why — pnpm workspace resolution needs the root manifests). Reads secrets
+# from .env.production (see .env.production.example at repo root) via
+# Dokploy's own env-file injection, not committed here.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sordi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sordi}
+    volumes:
+      - sordi_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sordi} -d ${POSTGRES_DB:-sordi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sordi_internal
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sordi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sordi}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      PORT: 4000
+      # Comma-separated: the production web domain plus every Tauri desktop
+      # origin the app can ship a request from (see apps/api/src/env.ts and
+      # LICENSING.md — Tauri's webview reports one of these three depending
+      # on OS/build config, all three are listed defensively).
+      CORS_ORIGIN: ${PUBLIC_WEB_URL},tauri://localhost,http://tauri.localhost,http://localhost
+      LICENSE_PRIVATE_KEY_PEM: ${LICENSE_PRIVATE_KEY_PEM}
+      LICENSE_ADMIN_SECRET: ${LICENSE_ADMIN_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL:-}
+      DOWNLOAD_URL_MACOS: ${DOWNLOAD_URL_MACOS}
+      DOWNLOAD_URL_WINDOWS: ${DOWNLOAD_URL_WINDOWS}
+    networks:
+      - sordi_internal
+      - sordi_public
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - sordi_public
+
+networks:
+  sordi_internal:
+    # Postgres <-> api only — never exposed to the public network.
+    internal: true
+  sordi_public:
+    # Dokploy's own reverse proxy / Traefik routes to these from the outside.
+
+volumes:
+  sordi_pg_data:

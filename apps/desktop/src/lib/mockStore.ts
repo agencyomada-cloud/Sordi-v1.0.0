@@ -29,6 +29,7 @@ const DEFAULT_COMPANIES: Company[] = [
     name: "Mon Entreprise",
     logo_base64: null,
     activity: null,
+    legal_form: null,
     rc: null,
     nif: null,
     nis: null,
@@ -73,7 +74,6 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   stamp_size: "96",
   signature_data: "",
   signature_size: "96",
-  footer_logo_data: "",
   body_pattern_data: "",
   qr_code_data: "",
 };
@@ -2378,6 +2378,7 @@ export const mockStore = {
       name: data.name,
       logo_base64: data.logo_base64 || null,
       activity: data.activity || null,
+      legal_form: data.legal_form || null,
       rc: data.rc || null,
       nif: data.nif || null,
       nis: data.nis || null,

@@ -12,7 +12,7 @@ import {
   RiStore2Line as StoreIcon,
   RiArrowDownSLine as ChevronDown,
 } from "@remixicon/react";
-import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, Label, Input, Textarea, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Tooltip, TooltipTrigger, TooltipContent, Collapsible, CollapsibleTrigger, CollapsibleContent, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@sordi/ui";
+import { Button, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableLoading, EmptyState, Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, MultiSelect, Label, Input, Textarea, Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, Tooltip, TooltipTrigger, TooltipContent, Collapsible, CollapsibleTrigger, CollapsibleContent, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, StatusBadge } from "@sordi/ui";
 import { MetricStrip } from "@/components/ui/metric-strip";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, useExpenseStats } from "@/hooks/useExpenses";
@@ -20,6 +20,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { cn } from "@/lib/utils";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import type { Expense } from "@/lib/database";
 
 const isExpensePaid = (expense: Expense) => expense.is_paid !== false;
@@ -216,6 +217,15 @@ const Expenses = () => {
     return matchesSearch && matchesMonth && matchesStatus;
   }) || [];
 
+  // Desktop keyboard ergonomics — N opens the new-expense dialog, Escape
+  // clears the search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: filteredExpenses,
+    onOpen: (expense: Expense) => openEditDialog(expense),
+    onCreate: () => setIsDialogOpen(true),
+    onEscape: () => setSearchQuery(""),
+  });
+
   const paidCount = (expenses ?? []).filter(isExpensePaid).length;
   const pendingCount = (expenses ?? []).length - paidCount;
 
@@ -251,20 +261,18 @@ const Expenses = () => {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dépenses & Charges</h1>
-              <p className="text-xs text-slate-500 mt-1">Gérez vos charges et suivez vos dépenses</p>
-            </div>
+          <div className="h-9 mb-3 flex items-center justify-between gap-4">
+            <h1 className="text-sm font-semibold text-foreground truncate">Dépenses &amp; Charges</h1>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button className="h-[30px] px-3 text-xs font-medium rounded-md shadow-xs gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
                   Nouvelle Charge
+                  <kbd className="ml-1 text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md rounded-3xl">
+              <DialogContent className="max-w-md rounded-xl border border-border/80 shadow-2xl p-5">
                 <DialogHeader>
                   <DialogTitle>Ajouter une charge</DialogTitle>
                 </DialogHeader>
@@ -505,7 +513,7 @@ const Expenses = () => {
           </div>
 
           {/* Metric strip — shared KPI ribbon component. */}
-          <div className="mb-6">
+          <div className="mb-4">
             <MetricStrip
               cells={[
                 { key: "total", label: "Total Charges", value: formatCurrency(stats?.total || 0), numericValue: stats?.total || 0, format: formatCurrency, icon: Receipt, sublabel: `${stats?.count || 0} charges` },
@@ -536,6 +544,7 @@ const Expenses = () => {
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
+              className="h-[30px] text-xs bg-background border-border/80 rounded-md"
               containerClassName="flex-1 max-w-sm"
             />
 
@@ -581,18 +590,18 @@ const Expenses = () => {
             ))}
           </div>
 
-          {/* Table — borderless outer surface, resting directly on the page canvas. */}
-          <div>
+          {/* Edge-to-edge desktop data grid. */}
+          <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Catégorie</TableHead>
-                  <TableHead className="hidden md:table-cell">Description</TableHead>
-                  <TableHead className="hidden lg:table-cell">Projet</TableHead>
-                  <TableHead className="hidden sm:table-cell">Mode</TableHead>
-                  <TableHead numeric>Montant</TableHead>
-                  <TableHead>Statut</TableHead>
+                <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Catégorie</TableHead>
+                  <TableHead className="hidden md:table-cell text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description</TableHead>
+                  <TableHead className="hidden lg:table-cell text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Projet</TableHead>
+                  <TableHead className="hidden sm:table-cell text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Mode</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Montant</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Statut</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -616,8 +625,16 @@ const Expenses = () => {
                       />
                     </TableCell>
                   </TableRow>
-                ) : filteredExpenses.map((expense) => (
-                  <TableRow key={expense.id} onDoubleClick={() => openEditDialog(expense)} className="cursor-pointer">
+                ) : filteredExpenses.map((expense, index) => (
+                  <TableRow
+                    key={expense.id}
+                    onDoubleClick={() => openEditDialog(expense)}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                    className={cn(
+                      "h-8 text-xs border-b border-border/40 hover:bg-muted/20 transition-colors cursor-pointer",
+                      focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                    )}
+                  >
                     <TableCell className="text-muted-foreground">
                       {new Date(expense.expense_date).toLocaleDateString("fr-FR")}
                     </TableCell>
@@ -651,15 +668,9 @@ const Expenses = () => {
                       -{formatCurrency(expense.amount)}
                     </TableCell>
                     <TableCell>
-                      {isExpensePaid(expense) ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
-                          Payée
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
-                          À payer
-                        </span>
-                      )}
+                      <StatusBadge tone={isExpensePaid(expense) ? "success" : "warning"}>
+                        {isExpensePaid(expense) ? "Payée" : "À payer"}
+                      </StatusBadge>
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
@@ -667,7 +678,7 @@ const Expenses = () => {
                           <TooltipTrigger asChild>
                             <button
                               onClick={() => openEditDialog(expense)}
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all"
                             >
                               <Pencil className="w-4 h-4 text-muted-foreground" />
                             </button>
@@ -678,7 +689,7 @@ const Expenses = () => {
                           <TooltipTrigger asChild>
                             <button
                               onClick={() => setExpenseToDelete(expense)}
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all"
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </button>
@@ -699,7 +710,7 @@ const Expenses = () => {
           double-click on the row itself, pre-populated from the expense
           being edited. */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
-        <DialogContent className="max-w-md rounded-3xl">
+        <DialogContent className="max-w-md rounded-xl border border-border/80 shadow-2xl p-5">
           <DialogHeader>
             <DialogTitle>Modifier la charge</DialogTitle>
           </DialogHeader>

@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Sordi",
-  "version": "1.0.4",
-  "identifier": "com.sordi.app",
+  "productName": "Sordi Finance",
+  "version": "1.0.0",
+  "identifier": "com.sordi.finance",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5180",
@@ -13,7 +13,8 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Sordi",
+        "label": "main",
+        "title": "Sordi Finance",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -23,7 +24,22 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "decorations": true,
-        "trafficLightPosition": { "x": 18, "y": 22 }
+        "trafficLightPosition": { "x": 18, "y": 22 },
+        "visible": false
+      },
+      {
+        "label": "splashscreen",
+        "url": "/?view=splash",
+        "width": 440,
+        "height": 280,
+        "resizable": false,
+        "decorations": false,
+        "center": true,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "focus": true
       },
       {
         "label": "widget",
@@ -61,6 +77,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "bundleName": "Sordi Finance"
+    }
   }
 }

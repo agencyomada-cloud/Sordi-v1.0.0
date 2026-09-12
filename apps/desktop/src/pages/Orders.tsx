@@ -27,6 +27,8 @@ import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftOrderInput } from "@/lib/emailDrafter";
 import { useSecureSession } from "@/hooks/useSecureSession";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
+import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "neutral" | "success" | "warning" | "error" }> = {
   draft: { label: "Brouillon", variant: "neutral" },
@@ -62,6 +64,15 @@ export default function OrdersPage() {
       (order.order_number || "").toLowerCase().includes(q) ||
       (order.clients?.name || "").toLowerCase().includes(q)
     );
+  });
+
+  // Desktop keyboard ergonomics — N opens a new order, Escape clears the
+  // search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: filteredOrders ?? [],
+    onOpen: (order: any) => navigate(`/orders/${order.id}`),
+    onCreate: () => navigate("/orders/new"),
+    onEscape: () => setSearchQuery(""),
   });
 
   const formatCurrency = (amount: number) => {
@@ -261,6 +272,7 @@ export default function OrdersPage() {
             <Button onClick={() => navigate("/orders/new")}>
               <Plus className="w-4 h-4 mr-2" />
               Nouveau BC
+              <kbd className="ml-1.5 text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
             </Button>
           </div>
 
@@ -350,14 +362,18 @@ export default function OrdersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOrders.map((order) => {
+                  filteredOrders.map((order, index) => {
                     const statusConfig = getOrderStatusConfig(order.status);
                     return (
                       <TableRow
                         key={order.id}
-                        className="cursor-pointer"
+                        className={cn(
+                          "cursor-pointer",
+                          focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                        )}
                         dimmed={order.status === "cancelled"}
                         onClick={() => navigate(`/orders/${order.id}`)}
+                        onMouseEnter={() => setFocusedIndex(index)}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
@@ -375,10 +391,17 @@ export default function OrdersPage() {
                           </Tooltip>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
-                          {format(new Date(order.order_date), "dd MMM yyyy", { locale: fr })}
+                          {/* date-fns' format() throws (not just prints
+                              "Invalid Date") on a null/malformed timestamp —
+                              a guard, not just optional chaining, is needed
+                              here to keep one bad row from crashing the
+                              whole table. */}
+                          {order.order_date && !isNaN(new Date(order.order_date).getTime())
+                            ? format(new Date(order.order_date), "dd MMM yyyy", { locale: fr })
+                            : "-"}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap">
-                          {order.delivery_date
+                          {order.delivery_date && !isNaN(new Date(order.delivery_date).getTime())
                             ? format(new Date(order.delivery_date), "dd MMM yyyy", { locale: fr })
                             : "-"}
                         </TableCell>

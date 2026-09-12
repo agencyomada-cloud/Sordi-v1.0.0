@@ -8,6 +8,7 @@ import {
   RiFileTextLine as FileTextIcon,
   RiCheckboxCircleLine as CheckIcon,
   RiTimeLine as ClockIcon,
+  RiErrorWarningLine as AlertCircle,
 } from "@remixicon/react";
 import {
   Button,
@@ -61,7 +62,7 @@ export default function ContractsPage() {
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewContract, setPreviewContract] = useState<Contract | null>(null);
 
-  const { data: contracts, isLoading } = useContracts();
+  const { data: contracts, isLoading, isError, refetch } = useContracts();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
   const { company } = useActiveCompany();
@@ -165,12 +166,12 @@ export default function ContractsPage() {
         <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Contrats</h1>
-              <p className="text-xs text-slate-500 mt-1">Générez et gérez les contrats de prestation de services clients</p>
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">Contrats</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">Générez et gérez les contrats de prestation de services clients</p>
             </div>
 
-            <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4" />
+            <Button variant="default" size="sm" className="h-[30px] px-3 text-xs rounded-md gap-1.5" onClick={() => setCreateOpen(true)}>
+              <Plus className="w-3.5 h-3.5" />
               Nouveau Contrat
             </Button>
           </div>
@@ -194,22 +195,34 @@ export default function ContractsPage() {
             />
           </div>
 
-          <div className="animate-fade-in-up animation-delay-200">
+          <div className="animate-fade-in-up animation-delay-200 border border-border/80 rounded-md bg-card overflow-hidden w-full">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Réf Contrat</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="hidden md:table-cell">Projet lié</TableHead>
-                  <TableHead className="hidden lg:table-cell">Services</TableHead>
-                  <TableHead numeric>Montant TTC</TableHead>
-                  <TableHead className="hidden sm:table-cell">Date</TableHead>
-                  <TableHead className="w-14"></TableHead>
+                <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Réf Contrat</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Client</TableHead>
+                  <TableHead className="hidden md:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Projet lié</TableHead>
+                  <TableHead className="hidden lg:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Services</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Montant TTC</TableHead>
+                  <TableHead className="hidden sm:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Date</TableHead>
+                  <TableHead className="w-14 text-[11px] font-semibold text-muted-foreground uppercase px-3"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableLoading columns={7} rows={5} />
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <EmptyState
+                        icon={AlertCircle}
+                        tone="destructive"
+                        title="Échec du chargement des données"
+                        description="Une erreur est survenue lors du chargement des contrats."
+                        action={{ label: "Réessayer", onClick: () => refetch() }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7}>
@@ -233,20 +246,20 @@ export default function ContractsPage() {
                       .map((key) => CONTRACT_SERVICE_CATALOG.find((s) => s.key === key)?.label)
                       .filter(Boolean);
                     return (
-                      <TableRow key={contract.id} className="cursor-pointer" onClick={() => handlePreview(contract)}>
-                        <TableCell className="font-medium font-mono text-xs">{contract.contract_ref}</TableCell>
-                        <TableCell className="text-muted-foreground">{client?.name ?? "-"}</TableCell>
-                        <TableCell className="text-muted-foreground hidden md:table-cell">{project?.name ?? "-"}</TableCell>
-                        <TableCell className="hidden lg:table-cell max-w-[220px] truncate text-xs text-muted-foreground">
+                      <TableRow key={contract.id} className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => handlePreview(contract)}>
+                        <TableCell className="font-medium font-mono px-3">{contract.contract_ref}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate px-3" title={client?.name ?? "-"}>{client?.name ?? "-"}</TableCell>
+                        <TableCell className="text-muted-foreground hidden md:table-cell max-w-[180px] truncate px-3" title={project?.name ?? "-"}>{project?.name ?? "-"}</TableCell>
+                        <TableCell className="hidden lg:table-cell max-w-[220px] truncate text-muted-foreground px-3" title={serviceLabels.join(", ") || "-"}>
                           {serviceLabels.join(", ") || "-"}
                         </TableCell>
-                        <TableCell numeric className="font-mono tabular-nums">{formatCurrency(contract.total_amount_ttc)}</TableCell>
-                        <TableCell className="text-muted-foreground hidden sm:table-cell">{formatDate(contract.created_at)}</TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell numeric className="font-mono tabular-nums font-medium px-3">{formatCurrency(contract.total_amount_ttc)}</TableCell>
+                        <TableCell className="text-muted-foreground hidden sm:table-cell px-3">{formatDate(contract.created_at)}</TableCell>
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
-                                <MoreHorizontal className="w-4 h-4" />
+                              <button className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all">
+                                <MoreHorizontal className="w-3.5 h-3.5" />
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">

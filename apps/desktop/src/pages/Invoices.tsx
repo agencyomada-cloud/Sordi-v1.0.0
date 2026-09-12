@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   RiAddLine as Plus,
@@ -15,8 +15,13 @@ import {
   RiFolderZipLine as FolderZip,
   RiLoader4Line as Loader2,
   RiFileCopyLine as Copy,
+  RiErrorWarningLine as AlertCircle,
+  RiFileTextLine as FileTextIcon,
+  RiFileList3Line as ProformaIcon,
+  RiScales3Line as Scales,
 } from "@remixicon/react";
-import { Button, Checkbox, SearchInput, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
+import { Button, Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent, DesktopSegmentedControl, StatusBadge } from "@sordi/ui";
+import { MetricStrip } from "@/components/ui/metric-strip";
 import { cn } from "@/lib/utils";
 import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
 import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
@@ -31,6 +36,10 @@ import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftInvoiceInput } from "@/lib/emailDrafter";
 import { useSecureSession } from "@/hooks/useSecureSession";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
+import { FacetedSearchInput, type SearchFacet } from "@/components/common/FacetedSearchInput";
+import { GridGroupBySelect, type GroupByOption } from "@/components/common/GridGroupBySelect";
+import { RiArrowDownSLine as ChevronDown, RiArrowRightSLine as ChevronRight } from "@remixicon/react";
 
 const tabs = [
   { label: "Toutes", status: undefined, type: undefined },
@@ -38,7 +47,14 @@ const tabs = [
   { label: "Proformas", status: undefined, type: "proforma" as InvoiceType },
   { label: "Avoirs", status: undefined, type: "credit_note" as InvoiceType },
   { label: "Payées", status: "paid" as InvoiceStatus, type: undefined },
-  { label: "Impayées", status: "issued" as InvoiceStatus, type: undefined },
+  { label: "En attente", status: "issued" as InvoiceStatus, type: undefined },
+];
+
+const GROUP_BY_OPTIONS: GroupByOption[] = [
+  { value: "none", label: "Aucun regroupement" },
+  { value: "client", label: "Regrouper par Client" },
+  { value: "period", label: "Regrouper par Mois / Période" },
+  { value: "status", label: "Regrouper par Statut" },
 ];
 
 
@@ -55,7 +71,12 @@ export default function InvoicesPage() {
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab());
-  const { data: invoices, isLoading } = useInvoices(tabs[activeTab].status, tabs[activeTab].type);
+  const { data: invoices, isLoading, isError, refetch } = useInvoices(tabs[activeTab].status, tabs[activeTab].type);
+  // Unfiltered — the metric strip always summarizes the whole invoicing
+  // picture, independent of the active tab, matching how Suppliers.tsx and
+  // Products.tsx build their own strips from the full dataset rather than
+  // whatever subset the table happens to be showing.
+  const { data: allInvoices } = useInvoices();
   const deleteInvoice = useDeleteInvoice();
   const convertProforma = useConvertProforma();
   const { data: settings } = useSettings();
@@ -64,6 +85,9 @@ export default function InvoicesPage() {
   const { executeSecuredAction } = useSecureSession();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchFacets, setSearchFacets] = useState<SearchFacet[]>([]);
+  const [groupBy, setGroupBy] = useState("none");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
@@ -109,39 +133,140 @@ export default function InvoicesPage() {
     }
   };
 
-  const filteredInvoices = invoices?.filter((invoice: any) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      invoice.invoice_number?.toLowerCase().includes(searchLower) ||
-      invoice.clients?.name?.toLowerCase().includes(searchLower) ||
-      invoice.total_ttc?.toString().includes(searchLower)
-    );
-  })?.sort((a: any, b: any) => {
-    let aValue, bValue;
-    switch (sortConfig.key) {
-      case 'date':
-        aValue = new Date(a.invoice_date).getTime();
-        bValue = new Date(b.invoice_date).getTime();
-        break;
-      case 'number':
-        aValue = a.invoice_number || '';
-        bValue = b.invoice_number || '';
-        break;
-      case 'client':
-        aValue = a.clients?.name?.toLowerCase() || '';
-        bValue = b.clients?.name?.toLowerCase() || '';
-        break;
-      case 'amount':
-        aValue = a.total_ttc || 0;
-        bValue = b.total_ttc || 0;
-        break;
-      default:
-        return 0;
+  // Filter + sort over the full (now 200+) invoice list — memoized so it
+  // only re-runs when the data or the actual query/facets/sort change,
+  // not on every unrelated re-render (selection toggles, hover state,
+  // keyboard-nav focus, etc.).
+  const filteredInvoices = useMemo(() => {
+    return invoices?.filter((invoice: any) => {
+      const searchLower = searchQuery.toLowerCase();
+      const matchesQuery =
+        !searchQuery ||
+        invoice.invoice_number?.toLowerCase().includes(searchLower) ||
+        invoice.clients?.name?.toLowerCase().includes(searchLower) ||
+        invoice.total_ttc?.toString().includes(searchLower);
+
+      // Faceted pills — each is an additional AND condition on top of the
+      // plain-text query above, same "contains"/">=" semantics as the
+      // suggestion that created it (FacetedSearchInput just hands back
+      // {field, value}; interpreting the field is this page's job).
+      const matchesFacets = searchFacets.every((facet) => {
+        if (facet.field === "number") return (invoice.invoice_number || "").toLowerCase().includes(facet.value.toLowerCase());
+        if (facet.field === "client") return (invoice.clients?.name || "").toLowerCase().includes(facet.value.toLowerCase());
+        if (facet.field === "amount") return (invoice.total_ttc || 0) >= parseFloat(facet.value);
+        return true;
+      });
+
+      return matchesQuery && matchesFacets;
+    })?.sort((a: any, b: any) => {
+      let aValue, bValue;
+      switch (sortConfig.key) {
+        case 'date':
+          aValue = new Date(a.invoice_date).getTime();
+          bValue = new Date(b.invoice_date).getTime();
+          break;
+        case 'number':
+          aValue = a.invoice_number || '';
+          bValue = b.invoice_number || '';
+          break;
+        case 'client':
+          aValue = a.clients?.name?.toLowerCase() || '';
+          bValue = b.clients?.name?.toLowerCase() || '';
+          break;
+        case 'amount':
+          aValue = a.total_ttc || 0;
+          bValue = b.total_ttc || 0;
+          break;
+        default:
+          return 0;
+      }
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [invoices, searchQuery, searchFacets, sortConfig]);
+
+  // Group-by buckets — groupBy === "none" yields one unlabeled bucket so
+  // flat and grouped rendering share the same code path below. Order of
+  // groups follows first-appearance in the already-sorted list (so sorting
+  // by client A→Z + grouping by client naturally reads alphabetically).
+  // Subtotals mirror the row-level "-" convention for credit notes so a
+  // group's Total TTC matches what its rows visually sum to.
+  const invoiceGroups = useMemo(() => {
+    const list = filteredInvoices ?? [];
+    if (groupBy === "none") {
+      return [{ key: "__all__", title: "", invoices: list, total: 0 }];
     }
-    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
+    const order: string[] = [];
+    const map = new Map<string, { key: string; title: string; invoices: any[]; total: number }>();
+    for (const invoice of list) {
+      let key: string;
+      let title: string;
+      if (groupBy === "client") {
+        title = invoice.clients?.name || "Client inconnu";
+        key = `client:${title}`;
+      } else if (groupBy === "period") {
+        const d = new Date(invoice.invoice_date);
+        if (isNaN(d.getTime())) {
+          key = "period:unknown";
+          title = "Date inconnue";
+        } else {
+          key = `period:${d.getFullYear()}-${d.getMonth()}`;
+          const label = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+          title = label.charAt(0).toUpperCase() + label.slice(1);
+        }
+      } else {
+        key = `status:${invoice.status}`;
+        title = getInvoiceStatusConfig(invoice.status).label;
+      }
+      if (!map.has(key)) {
+        map.set(key, { key, title, invoices: [], total: 0 });
+        order.push(key);
+      }
+      const group = map.get(key)!;
+      group.invoices.push(invoice);
+      group.total += invoice.invoice_type === "credit_note" ? -(invoice.total_ttc || 0) : (invoice.total_ttc || 0);
+    }
+    return order.map((key) => map.get(key)!);
+  }, [filteredInvoices, groupBy]);
+
+  const groupPrefix = groupBy === "client" ? "Client" : groupBy === "period" ? "Période" : groupBy === "status" ? "Statut" : "";
+
+  // Flat visible order (skips collapsed groups' rows) — both the keyboard
+  // hook's arrow/Enter navigation and the row-index-based highlight below
+  // must agree on this exact order, or a hidden row could end up "focused".
+  const visibleInvoices = useMemo(
+    () => invoiceGroups.flatMap((group) => (collapsedGroups.has(group.key) ? [] : group.invoices)),
+    [invoiceGroups, collapsedGroups]
+  );
+
+  // O(1) lookup from an invoice back to its position in visibleInvoices, so
+  // the grouped render below doesn't do an O(n) indexOf per row.
+  const indexById = useMemo(
+    () => new Map(visibleInvoices.map((invoice, i) => [invoice.id, i])),
+    [visibleInvoices]
+  );
+
+  // Desktop keyboard ergonomics — N opens a new invoice, Escape clears the
+  // search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: visibleInvoices,
+    onOpen: (invoice: any) => navigate(`/invoices/${invoice.id}`),
+    onCreate: () => navigate("/invoices/new"),
+    onEscape: () => {
+      setSearchQuery("");
+      setSearchFacets([]);
+    },
   });
+
+  const toggleGroupCollapsed = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-DZ", {
@@ -149,6 +274,19 @@ export default function InvoicesPage() {
       currency: "DZD",
     }).format(amount);
   };
+
+  // Metric strip — pure summation over fields the backend already computes
+  // (total_ttc, amount_paid, balance_due) and stores per invoice; nothing
+  // here recalculates a document's own totals or payment status.
+  const realInvoices = (allInvoices ?? []).filter((inv: any) => inv.invoice_type === "invoice" && inv.status !== "cancelled" && inv.status !== "draft");
+  const creditNotes = (allInvoices ?? []).filter((inv: any) => inv.invoice_type === "credit_note" && inv.status !== "cancelled");
+  const totalFacture = realInvoices.reduce((sum: number, inv: any) => sum + (inv.total_ttc || 0), 0)
+    - creditNotes.reduce((sum: number, inv: any) => sum + (inv.total_ttc || 0), 0);
+  const totalEncaisse = realInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_paid || 0), 0);
+  const unpaidInvoices = realInvoices.filter((inv: any) => inv.status === "issued" || inv.status === "partial");
+  const resteARecouvrer = unpaidInvoices.reduce((sum: number, inv: any) => sum + (inv.balance_due ?? (inv.total_ttc || 0) - (inv.amount_paid || 0)), 0);
+  const today = new Date();
+  const facturesEnRetard = unpaidInvoices.filter((inv: any) => inv.due_date && new Date(inv.due_date) < today).length;
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("fr-FR", {
@@ -251,10 +389,20 @@ export default function InvoicesPage() {
 
   const clearSelection = () => setSelectedInvoices([]);
 
-  const handleCopyId = (id: string) => {
-    navigator.clipboard.writeText(id).then(
-      () => toast.success("ID copié dans le presse-papiers"),
-      () => toast.error("Impossible de copier l'ID")
+  // Smart Business Copy — a client-ready one-line summary (reference,
+  // amount, status/balance), not the raw internal UUID, which is useless
+  // for anything a business owner would actually paste into an email or
+  // WhatsApp message to a client.
+  const handleCopyInvoiceSummary = (invoice: any) => {
+    const reference = invoice.invoice_number || invoice.id;
+    const balance = invoice.balance_due ?? 0;
+    const summary =
+      balance > 0
+        ? `Facture N° ${reference} | Montant: ${formatCurrency(invoice.total_ttc)} | Reste dû: ${formatCurrency(balance)}`
+        : `Facture N° ${reference} — ${formatCurrency(invoice.total_ttc)} (${getInvoiceStatusConfig(invoice.status).label})`;
+    navigator.clipboard.writeText(summary).then(
+      () => toast.success("Résumé de la facture copié"),
+      () => toast.error("Impossible de copier le résumé")
     );
   };
 
@@ -327,180 +475,11 @@ export default function InvoicesPage() {
     }
   };
 
-  return (
-    <>
-      {/* Off-screen Preview for PDF Generation */}
-      <div className="fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]">
-        {pdfInvoice && <InvoicePreview invoice={pdfInvoice} />}
-      </div>
-
-      <main className="flex-1 p-8 pt-4 min-w-0">
-          <div className="max-w-[1600px] mx-auto w-full">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Facturation & Créances</h1>
-              <p className="text-xs text-slate-500 mt-1">Gérez vos factures, proformas et avoirs</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Button variant="outline" onClick={() => navigate("/invoices/credit-note/new")}>
-                <MinusCircle className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Avoir</span>
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/proformas/new")}>
-                <Plus className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Proforma</span>
-              </Button>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/invoices/new")}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nouvelle facture
-              </Button>
-            </div>
-          </div>
-
-          {/* Tabs and Search — rest directly on the page canvas, no card
-              wrapper; a single hairline divider closes off the filter row
-              instead of a full bordered/shadowed box. */}
-          {/* xl, not md — the filter tabs need their own full-width row to
-              show all of them; sharing a row with the sort-select+search at
-              md's 768px squeezed the (overflow-x-auto) tabs strip down to
-              where the last tab was visually cut off mid-word with no
-              indication it was scrollable. */}
-          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-border/40 animate-fade-in-up animation-delay-100">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {tabs.map((tab, index) => (
-                <Button
-                  key={tab.label}
-                  variant={activeTab === index ? "default" : "outline"}
-                  onClick={() => handleTabChange(index)}
-                  className={cn(
-                    "rounded-full px-4 border-0",
-                    activeTab === index
-                      ? "bg-primary text-primary-foreground shadow-md"
-                      : "bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  {tab.label}
-                </Button>
-              ))}
-              <span className="text-xs text-muted-foreground font-mono tabular-nums ps-2 shrink-0 whitespace-nowrap">
-                {invoices?.length || 0} facture{(invoices?.length || 0) > 1 ? "s" : ""}
-              </span>
-            </div>
-
-            <div className="flex gap-3 w-full md:w-auto">
-              <Select
-                value={`${sortConfig.key}-${sortConfig.direction}`}
-                onValueChange={(val) => {
-                  const [key, direction] = val.split('-');
-                  setSortConfig({ key, direction: direction as 'asc' | 'desc' });
-                }}
-              >
-                <SelectTrigger className="w-[180px] h-11 bg-secondary/30 border-border/50 rounded-xl">
-                  <SelectValue placeholder="Trier par..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date-desc">Date (Plus récent)</SelectItem>
-                  <SelectItem value="date-asc">Date (Plus ancien)</SelectItem>
-                  <SelectItem value="number-asc">N° Facture (Croissant)</SelectItem>
-                  <SelectItem value="number-desc">N° Facture (Décroissant)</SelectItem>
-                  <SelectItem value="client-asc">Client (A-Z)</SelectItem>
-                  <SelectItem value="client-desc">Client (Z-A)</SelectItem>
-                  <SelectItem value="amount-desc">Montant (Plus grand)</SelectItem>
-                  <SelectItem value="amount-asc">Montant (Plus petit)</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <SearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-                containerClassName="flex-1 md:w-72"
-              />
-            </div>
-          </div>
-
-          {/* Bulk action bar */}
-          <div className="pt-4">
-            <BulkActionBar count={selectedInvoices.length} onClear={clearSelection}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full text-xs"
-                onClick={handleBulkMarkPaid}
-                disabled={isBulkMarkingPaid}
-              >
-                {isBulkMarkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Marquer comme payées
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full text-xs"
-                onClick={handleBulkDownloadZip}
-                disabled={isBulkDownloading}
-              >
-                {isBulkDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderZip className="w-3.5 h-3.5" />}
-                Télécharger en lot
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full text-xs text-destructive hover:text-destructive"
-                onClick={() => setBulkDeleteDialogOpen(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Supprimer la sélection
-              </Button>
-            </BulkActionBar>
-          </div>
-
-          {/* Table — borderless outer surface, resting directly on the page
-              canvas (was a bg-card/border/shadow-card box around the whole
-              block); only the row dividers now separate content. */}
-          <div className="animate-fade-in-up animation-delay-200">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="[&:has([role=checkbox])]:pl-5">
-                    <Checkbox
-                      checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  <TableHead>N°</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="hidden md:table-cell">Date</TableHead>
-                  <TableHead numeric>Montant</TableHead>
-                  <TableHead className="hidden sm:table-cell">Statut</TableHead>
-                  <TableHead className="w-14"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableLoading columns={7} rows={5} />
-                ) : filteredInvoices?.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      <EmptyState
-                        type="invoices"
-                        title="Aucune facture"
-                        description={searchQuery ? "Essayez une autre recherche" : "Créez votre première facture"}
-                        action={searchQuery ? {
-                          label: "Effacer la recherche",
-                          onClick: () => setSearchQuery(""),
-                        } : {
-                          label: "Créer",
-                          onClick: () => navigate("/invoices/new"),
-                        }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredInvoices?.map((invoice) => {
+  // Row renderer shared by the flat list and the grouped-by view below —
+  // `index` is always this invoice's position in the flat VISIBLE order
+  // (visibleInvoices), so keyboard-nav highlighting stays correct whether
+  // grouping is on or off.
+  const renderInvoiceRow = (invoice: any, index: number) => {
                     const isCreditNote = invoice.invoice_type === "credit_note";
                     const isProforma = invoice.invoice_type === "proforma";
                     const statusConfig = getInvoiceStatusConfig(invoice.status);
@@ -508,9 +487,13 @@ export default function InvoicesPage() {
                     return (
                       <TableRow
                         key={invoice.id}
-                        className="cursor-pointer"
+                        className={cn(
+                          "h-9 border-border/40 hover:bg-muted/20 text-xs cursor-pointer",
+                          focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                        )}
                         dimmed={isCancelled}
                         onClick={() => navigate(`/invoices/${invoice.id}`)}
+                        onMouseEnter={() => setFocusedIndex(index)}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
@@ -569,7 +552,15 @@ export default function InvoicesPage() {
                                 <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "issued" })}>
                                   Émise (Impayée)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}>
+                                <DropdownMenuItem
+                                  disabled={invoice.invoice_type === "invoice" || invoice.invoice_type === "credit_note"}
+                                  onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}
+                                  title={
+                                    invoice.invoice_type === "invoice" || invoice.invoice_type === "credit_note"
+                                      ? "Ce document porte un numéro séquentiel officiel et ne peut pas être remis en brouillon"
+                                      : undefined
+                                  }
+                                >
                                   Brouillon
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "cancelled" })}>
@@ -579,9 +570,13 @@ export default function InvoicesPage() {
                             </DropdownMenu>
                           </div>
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell onClick={(e) => e.stopPropagation()} className="w-24 shrink-0 text-right">
                           {/* Hidden until the row is hovered/focused — Linear-style
-                              contextual actions instead of permanently-visible icon clutter. */}
+                              contextual actions instead of permanently-visible icon clutter.
+                              The cell itself has a fixed w-24 so opacity toggling never
+                              changes the column's reserved width (it always had one, just
+                              implicitly — this makes it explicit and guards against future
+                              button-count changes reflowing every row on hover). */}
                           <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -589,13 +584,13 @@ export default function InvoicesPage() {
                                   className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleCopyId(invoice.id);
+                                    handleCopyInvoiceSummary(invoice);
                                   }}
                                 >
                                   <Copy className="w-4 h-4" />
                                 </button>
                               </TooltipTrigger>
-                              <TooltipContent side="top">Copier l'ID</TooltipContent>
+                              <TooltipContent side="top">Copier le résumé</TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -671,7 +666,269 @@ export default function InvoicesPage() {
                         </TableCell>
                       </TableRow>
                     );
-                  })
+  };
+
+  return (
+    <>
+      {/* Off-screen Preview for PDF Generation */}
+      <div className="fixed left-[-9999px] top-0 opacity-0 pointer-events-none z-[-100]">
+        {pdfInvoice && <InvoicePreview invoice={pdfInvoice} />}
+      </div>
+
+      <main className="flex-1 p-8 pt-4 min-w-0">
+          <div className="max-w-[1600px] mx-auto w-full">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Facturation & Créances</h1>
+              <p className="text-xs text-slate-500 mt-1">Gérez vos factures, proformas et avoirs</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Single compact document-type control — the titlebar's own
+                  "+ Facture" already covers plain invoice creation, so this
+                  no longer duplicates it as a second full-size blue button;
+                  it exists for Proforma/Avoir, with Facture kept as a third
+                  option for anyone already on this page. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-[30px] px-3 text-xs rounded-md gap-1.5">
+                    <Plus className="w-3.5 h-3.5" />
+                    Créer un document
+                    <kbd className="ml-1 text-[10px] font-mono text-muted-foreground/70 border border-border/60 rounded px-1 py-px">N</kbd>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate("/invoices/new")}>
+                    <FileTextIcon className="w-4 h-4 mr-2" />
+                    Facture
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/proformas/new")}>
+                    <ProformaIcon className="w-4 h-4 mr-2" />
+                    Proforma
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/invoices/credit-note/new")}>
+                    <MinusCircle className="w-4 h-4 mr-2" />
+                    Avoir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Metric strip */}
+          <div className="mb-6 animate-fade-in-up animation-delay-100">
+            <MetricStrip
+              cells={[
+                { key: "facture", label: "Total Facturé (TTC)", value: formatCurrency(totalFacture), numericValue: totalFacture, format: formatCurrency, icon: FileTextIcon },
+                { key: "encaisse", label: "Total Encaissé", value: formatCurrency(totalEncaisse), numericValue: totalEncaisse, format: formatCurrency, icon: CreditCard },
+                {
+                  key: "reste",
+                  label: "Reste à Recouvrer",
+                  value: formatCurrency(resteARecouvrer),
+                  numericValue: resteARecouvrer,
+                  format: formatCurrency,
+                  icon: Scales,
+                  trend: resteARecouvrer > 0 ? <StatusBadge tone="warning">À recouvrer</StatusBadge> : <StatusBadge tone="neutral">Soldé</StatusBadge>,
+                },
+                {
+                  key: "retard",
+                  label: "Factures en Retard",
+                  value: String(facturesEnRetard),
+                  numericValue: facturesEnRetard,
+                  format: (v) => String(Math.round(v)),
+                  icon: AlertCircle,
+                  trend: facturesEnRetard > 0 ? <StatusBadge tone="error">En retard</StatusBadge> : undefined,
+                },
+              ]}
+            />
+          </div>
+
+          {/* Tabs and Search — rest directly on the page canvas, no card
+              wrapper; a single hairline divider closes off the filter row
+              instead of a full bordered/shadowed box.
+              Two strict flex zones, never one unconstrained flex-between
+              row: the left (tabs) zone is `shrink-0` so it always renders
+              at its full intrinsic width and scrolls internally
+              (`overflow-x-auto`) rather than being squeezed by its sibling;
+              the right (search/group-by/sort) zone is `flex-1 justify-end`
+              with its own `max-w-xl` ceiling, and FacetedSearchInput is
+              wrapped in a fixed-footprint div (`w-64 min-w-[200px]
+              max-w-[280px]`) instead of sizing itself off a bare `w-72`
+              className — the input's own internal flex-row layout (pills +
+              text field) can't out-negotiate its neighbors for width. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 py-2 border-b border-border/40 animate-fade-in-up animation-delay-150">
+            <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+              <DesktopSegmentedControl
+                className="h-[30px]"
+                options={tabs.map((tab, index) => ({ value: String(index), label: tab.label }))}
+                value={String(activeTab)}
+                onChange={(value) => handleTabChange(Number(value))}
+              />
+              <span className="text-xs text-muted-foreground font-mono tabular-nums ps-2 shrink-0 whitespace-nowrap">
+                {invoices?.length || 0} facture{(invoices?.length || 0) > 1 ? "s" : ""}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-1 justify-end max-w-xl">
+              <div className="w-64 min-w-[200px] max-w-[280px]">
+                <FacetedSearchInput
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                  facets={searchFacets}
+                  onFacetsChange={setSearchFacets}
+                  placeholder="Rechercher..."
+                  className="w-full"
+                />
+              </div>
+
+              <GridGroupBySelect value={groupBy} onChange={setGroupBy} options={GROUP_BY_OPTIONS} />
+
+              <Select
+                value={`${sortConfig.key}-${sortConfig.direction}`}
+                onValueChange={(val) => {
+                  const [key, direction] = val.split('-');
+                  setSortConfig({ key, direction: direction as 'asc' | 'desc' });
+                }}
+              >
+                <SelectTrigger className="h-[30px] w-[160px] text-xs rounded-md border-border/80">
+                  <SelectValue placeholder="Trier par..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date-desc">Date (Plus récent)</SelectItem>
+                  <SelectItem value="date-asc">Date (Plus ancien)</SelectItem>
+                  <SelectItem value="number-asc">N° Facture (Croissant)</SelectItem>
+                  <SelectItem value="number-desc">N° Facture (Décroissant)</SelectItem>
+                  <SelectItem value="client-asc">Client (A-Z)</SelectItem>
+                  <SelectItem value="client-desc">Client (Z-A)</SelectItem>
+                  <SelectItem value="amount-desc">Montant (Plus grand)</SelectItem>
+                  <SelectItem value="amount-asc">Montant (Plus petit)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Bulk action bar */}
+          <div className="pt-4">
+            <BulkActionBar count={selectedInvoices.length} onClear={clearSelection}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs"
+                onClick={handleBulkMarkPaid}
+                disabled={isBulkMarkingPaid}
+              >
+                {isBulkMarkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Marquer comme payées
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs"
+                onClick={handleBulkDownloadZip}
+                disabled={isBulkDownloading}
+              >
+                {isBulkDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderZip className="w-3.5 h-3.5" />}
+                Télécharger en lot
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-full text-xs text-destructive hover:text-destructive"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer la sélection
+              </Button>
+            </BulkActionBar>
+          </div>
+
+          {/* Table — edge-to-edge desktop data grid: a clean bordered card
+              instead of a borderless surface, matching Suppliers.tsx's Phase
+              2 grid treatment. */}
+          <div className="animate-fade-in-up animation-delay-200 border border-border/80 rounded-md bg-card overflow-hidden w-full">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent h-8 bg-muted/40">
+                  <TableHead className="[&:has([role=checkbox])]:pl-5">
+                    <Checkbox
+                      checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
+                  <TableHead>N°</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead className="hidden md:table-cell">Date</TableHead>
+                  <TableHead numeric>Montant</TableHead>
+                  <TableHead className="hidden sm:table-cell">Statut</TableHead>
+                  <TableHead className="w-24"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableLoading columns={7} rows={5} />
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <EmptyState
+                        icon={AlertCircle}
+                        tone="destructive"
+                        title="Échec du chargement des données"
+                        description="Une erreur est survenue lors du chargement des factures."
+                        action={{ label: "Réessayer", onClick: () => refetch() }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : filteredInvoices?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>
+                      <EmptyState
+                        type="invoices"
+                        title="Aucune facture"
+                        description={searchQuery || searchFacets.length > 0 ? "Essayez une autre recherche" : "Créez votre première facture"}
+                        action={searchQuery || searchFacets.length > 0 ? {
+                          label: "Effacer la recherche",
+                          onClick: () => { setSearchQuery(""); setSearchFacets([]); },
+                        } : {
+                          label: "Créer",
+                          onClick: () => navigate("/invoices/new"),
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  groupBy === "none" ? (
+                    visibleInvoices.map((invoice, index) => renderInvoiceRow(invoice, index))
+                  ) : (
+                    invoiceGroups.map((group) => {
+                      const collapsed = collapsedGroups.has(group.key);
+                      return (
+                        <Fragment key={group.key}>
+                          <TableRow className="h-7 bg-muted/40 hover:bg-muted/40 border-y border-border/40">
+                            <TableCell colSpan={7} className="p-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleGroupCollapsed(group.key)}
+                                className="w-full h-7 font-semibold text-xs px-3 flex items-center justify-between gap-3 text-left"
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  {collapsed ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                                  <span className="truncate">
+                                    {groupPrefix}: {group.title} ({group.invoices.length} facture{group.invoices.length > 1 ? "s" : ""})
+                                  </span>
+                                </span>
+                                <span className="font-mono tabular-nums shrink-0">Total TTC: {formatCurrency(group.total)}</span>
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          {!collapsed && group.invoices.map((invoice) => renderInvoiceRow(invoice, indexById.get(invoice.id) ?? -1))}
+                        </Fragment>
+                      );
+                    })
+                  )
                 )}
               </TableBody>
             </Table>

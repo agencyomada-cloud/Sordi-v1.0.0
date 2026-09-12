@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { RiAddLine as Plus } from "@remixicon/react";
+import { RiAddLine as Plus, RiLoader4Line as Loader2 } from "@remixicon/react";
 import { Popover, PopoverContent, PopoverTrigger, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@sordi/ui";
+import { useCreateProduct } from "@/hooks/useProducts";
 
 interface ProductPickerComboboxProps {
   products?: any[];
@@ -17,6 +18,9 @@ interface ProductPickerComboboxProps {
   nextIndex: number;
   formatCurrency?: (n: number) => string;
   align?: "start" | "center" | "end";
+  /** Same scaled-canvas fix used by ClientPickerCombobox — see
+   *  PopoverContent's own doc comment in packages/ui for why. */
+  container?: HTMLElement | null;
 }
 
 function focusLineQuantity(index: number) {
@@ -51,8 +55,10 @@ export function ProductPickerCombobox({
   nextIndex,
   formatCurrency,
   align = "start",
+  container,
 }: ProductPickerComboboxProps) {
   const [query, setQuery] = useState("");
+  const createProduct = useCreateProduct();
 
   useEffect(() => {
     if (!open) setQuery("");
@@ -60,6 +66,9 @@ export function ProductPickerCombobox({
 
   const excluded = new Set(excludeProductIds.filter(Boolean).map(String));
   const availableProducts = products.filter((p) => !excluded.has(String(p.id)));
+  const hasMatches = availableProducts.some((p) =>
+    p.name?.toLowerCase().includes(query.trim().toLowerCase()) || p.code?.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   const handleSelect = (product: any) => {
     onSelectProduct(product);
@@ -75,28 +84,73 @@ export function ProductPickerCombobox({
     focusLineQuantity(nextIndex);
   };
 
+  // "+ Enregistrer au catalogue" — saves the typed name as a real product
+  // (auto-generated reference code, since the catalog requires one) so it's
+  // searchable/reusable on future invoices, then still uses it as this
+  // line's item exactly like handleAddCustom.
+  const handleSaveToCatalogue = async () => {
+    const name = query.trim();
+    if (!name || createProduct.isPending) return;
+    try {
+      const code = `CUSTOM-${Date.now().toString(36).toUpperCase()}`;
+      await createProduct.mutateAsync({ code, name, unit_price: 0 });
+      onAddCustomItem(name);
+      onOpenChange(false);
+      focusLineQuantity(nextIndex);
+    } catch {
+      // useCreateProduct's mutation already toasts the error.
+    }
+  };
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align={align}>
+      <PopoverContent className="w-80 p-0" align={align} container={container}>
         <Command shouldFilter>
           <CommandInput
             autoFocus
             value={query}
             onValueChange={setQuery}
+            onKeyDown={(e) => {
+              // Enter with no catalog match uses the typed text directly as
+              // a one-off custom line — cmdk only auto-selects a
+              // highlighted CommandItem on Enter, and CommandEmpty's button
+              // isn't one, so this has to be wired explicitly.
+              if (e.key === "Enter" && !hasMatches && query.trim()) {
+                e.preventDefault();
+                handleAddCustom();
+              }
+            }}
             placeholder="Rechercher par nom ou référence…"
           />
           <CommandList className="max-h-72">
             <CommandEmpty className="p-1">
               {query.trim() ? (
-                <button
-                  type="button"
-                  onClick={handleAddCustom}
-                  className="w-full flex items-center gap-2 rounded-sm px-2 py-2 text-left text-sm text-primary hover:bg-accent"
-                >
-                  <Plus className="w-3.5 h-3.5 shrink-0" />
-                  Ajouter «{query.trim()}» comme article personnalisé
-                </button>
+                <div className="space-y-0.5">
+                  {/* hover:bg-muted/80, not hover:bg-accent — this app's
+                      --accent token is the same saturated blue as --primary,
+                      so a text-primary label on a bg-accent hover used to
+                      turn blue-on-blue and vanish. A subtle neutral hover
+                      (Odoo/Apple HIG desktop convention) keeps the accent
+                      color legible against it instead of fighting it. */}
+                  <button
+                    type="button"
+                    onClick={handleAddCustom}
+                    className="w-full flex items-center gap-2 rounded-sm px-2 py-2 text-left text-sm text-primary font-medium hover:bg-muted/80"
+                  >
+                    <Plus className="w-3.5 h-3.5 shrink-0" />
+                    Ajouter «{query.trim()}» comme article personnalisé
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveToCatalogue}
+                    disabled={createProduct.isPending}
+                    className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  >
+                    {createProduct.isPending ? <Loader2 className="w-3 h-3 shrink-0 animate-spin" /> : <Plus className="w-3 h-3 shrink-0" />}
+                    Enregistrer au catalogue pour réutilisation future
+                  </button>
+                </div>
               ) : (
                 <span className="block px-2 py-1 text-muted-foreground">Aucun produit</span>
               )}

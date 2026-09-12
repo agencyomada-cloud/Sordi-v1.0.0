@@ -1,0 +1,163 @@
+/* App UI chrome typeface — same as apps/desktop, self-hosted via @fontsource
+   rather than a Google Fonts CDN import. Only the weights actually used
+   here; the admin portal has no PDF font picker like the desktop app, so it
+   doesn't need Montserrat/Poppins/Roboto/Space Grotesk. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens copied verbatim from apps/desktop/src/index.css — @sordi/ui
+   components reference these exact CSS variable names, so the admin portal
+   needs the same token set to render them correctly (same "Scarlet on
+   enterprise white / near-black" brand system). */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --surface: 0 0% 100%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 346 84% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 346 84% 45%;
+    --accent-soft: 346 70% 96%;
+
+    --secondary: 210 17% 95%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 17% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 346 84% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --warning: 32 95% 44%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 346 84% 55%;
+
+    --radius: 6px;
+    --radius-sm: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 8px;
+    --radius-full: 9999px;
+
+    --status-paid: 161 94% 30%;
+    --status-paid-bg: 152 81% 96%;
+    --status-pending: 32 95% 44%;
+    --status-pending-bg: 48 100% 96%;
+    --status-unpaid: 0 72% 51%;
+    --status-unpaid-bg: 0 86% 97%;
+    --status-draft: 215 16% 47%;
+    --status-draft-bg: 210 40% 96%;
+
+    --stat-positive: 161 94% 30%;
+    --stat-negative: 0 72% 51%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 346 84% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 346 84% 55%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 346 84% 55%;
+
+    --chart-1: 221 100% 50%;
+    --chart-2: 32 95% 44%;
+    --chart-3: 161 94% 30%;
+    --chart-4: 0 72% 51%;
+    --chart-5: 262 83% 58%;
+
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* The site is light-only by request — no prefers-color-scheme media
+     query wiring dark mode in automatically. This .dark block is kept
+     (unused, since nothing ever applies the class) only in case a manual
+     toggle is added later; delete it if that never happens. */
+  .dark {
+    --background: 225 15% 5%;
+    --foreground: 220 15% 94%;
+
+    --surface: 225 15% 5%;
+
+    --card: 222 15% 9%;
+    --card-foreground: 220 15% 94%;
+
+    --popover: 222 15% 8%;
+    --popover-foreground: 220 15% 94%;
+
+    --primary: 351 100% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 351 100% 66%;
+    --accent-soft: 351 35% 14%;
+
+    --secondary: 220 14% 12%;
+    --secondary-foreground: 220 15% 94%;
+
+    --muted: 220 14% 12%;
+    --muted-foreground: 220 10% 58%;
+
+    --accent: 351 100% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 13% 15%;
+    --input: 220 13% 15%;
+    --ring: 351 100% 58%;
+
+    --warning: 38 92% 58%;
+    --stat-positive: 158 64% 52%;
+    --status-paid: 158 64% 52%;
+
+    --sidebar-background: 222 15% 9%;
+    --sidebar-foreground: 220 15% 94%;
+    --sidebar-primary: 351 100% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 351 100% 58%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 13% 15%;
+    --sidebar-ring: 351 100% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply text-foreground antialiased selection:bg-primary/20 selection:text-primary;
+    font-size: 16px;
+    line-height: 1.6;
+    background-color: hsl(var(--background));
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+}

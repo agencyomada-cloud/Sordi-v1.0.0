@@ -1,8 +1,15 @@
 pub mod database;
 mod biometric;
 mod commands;
-mod license;
+mod demo_seed;
+// pub, not mod: src/bin/keygen.rs (a separate dev-only binary, never bundled
+// into the shipped app — see its own module doc) links against this crate's
+// lib target to reuse LicenseClaims/compute_device_fingerprint directly,
+// rather than duplicating that schema and risking drift.
+pub mod license;
 mod pdf_service;
+mod splashscreen;
+mod telemetry;
 mod widget;
 #[cfg(test)]
 mod seed_test_data;
@@ -20,8 +27,10 @@ pub fn run() {
       tauri_plugin_window_state::Builder::default()
         // Only the widget's position/size is meant to persist across
         // restarts — the main window's sizing stays exactly what
-        // tauri.conf.json declares.
-        .with_denylist(&["main"])
+        // tauri.conf.json declares, and the splashscreen is always
+        // fixed-size + centered, never worth remembering a position for
+        // (it's also short-lived — created and closed every single launch).
+        .with_denylist(&["main", "splashscreen"])
         // Exclude VISIBLE: the plugin's default flags restore/re-show a
         // window based on whether it was visible when the app last closed,
         // which made the widget pop open on every launch after it had been
@@ -50,6 +59,16 @@ pub fn run() {
       // from scratch (structural migrations only, no data), and a minimal,
       // clearly-fake dataset is seeded once right after so the UI has
       // something to render instead of every screen showing an empty state.
+      //
+      // app_data_dir() is resolved entirely from tauri.conf.json's
+      // "identifier" (com.sordi.finance) — a second, independent bundle
+      // identity from any real production Sordi install (com.sordi.app),
+      // so this workspace's own dev AND release databases live under
+      // ~/Library/Application Support/com.sordi.finance/, structurally
+      // incapable of colliding with a separately-installed production app's
+      // ~/Library/Application Support/com.sordi.app/ directory — not just a
+      // debug/release filename split within a shared folder, but a wholly
+      // separate folder for this app identity.
       let app_dir = app.path().app_data_dir().expect("failed to get app data dir");
       std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
       let db_path = if cfg!(debug_assertions) {
@@ -57,10 +76,86 @@ pub fn run() {
       } else {
         app_dir.join("database.db")
       };
+
+      // A restore staged by commands::restore_database() lands here, before
+      // the live database is opened — swapping the file out from under an
+      // already-open Connection isn't safe, so that command instead stages
+      // the chosen file and restarts the app to reach this point cleanly.
+      let pending_restore = app_dir.join("pending_restore.db");
+      if pending_restore.exists() {
+        let backups_dir = app_dir.join("backups");
+        let _ = std::fs::create_dir_all(&backups_dir);
+        if db_path.exists() {
+          // Pre-restore safety copy — so restoring the wrong backup, or
+          // restoring by mistake, is itself always recoverable.
+          let safety_copy = backups_dir.join(format!(
+            "pre_restore_backup_{}.db",
+            chrono::Local::now().format("%Y-%m-%d_%H%M%S")
+          ));
+          let _ = std::fs::copy(&db_path, &safety_copy);
+        }
+        match std::fs::copy(&pending_restore, &db_path) {
+          Ok(_) => {
+            let _ = std::fs::remove_file(&pending_restore);
+            // Drop the OLD database's WAL/SHM sidecar files — leaving them
+            // would replay stale frames on top of the just-restored file
+            // instead of reading it as-is.
+            let wal_path = std::path::PathBuf::from(format!("{}-wal", db_path.to_string_lossy()));
+            let shm_path = std::path::PathBuf::from(format!("{}-shm", db_path.to_string_lossy()));
+            let _ = std::fs::remove_file(&wal_path);
+            let _ = std::fs::remove_file(&shm_path);
+          }
+          Err(e) => log::error!("Failed to apply staged restore: {}", e),
+        }
+      }
+
       let is_fresh_dev_db = cfg!(debug_assertions) && !db_path.exists();
       let db = init_database(db_path.to_str().unwrap()).expect("failed to initialize database");
       if is_fresh_dev_db {
         database::seed_minimal_dev_mock_data(&db).expect("failed to seed minimal dev mock data");
+      }
+
+      // Rolling automatic backup — one snapshot on launch, one more on clean
+      // shutdown (see the CloseRequested handler below). Independent of the
+      // user-triggered manual backup/restore commands. Runs on its own
+      // background thread against a fresh, separate connection to the same
+      // file (WAL mode allows a second reader alongside the app's writer),
+      // so it can never contend with the app's own Mutex<Connection> or
+      // delay window startup.
+      {
+        let backup_db_path = db_path.clone();
+        let backup_app_dir = app_dir.clone();
+        std::thread::spawn(move || {
+          if let Ok(conn) = rusqlite::Connection::open(&backup_db_path) {
+            if let Err(e) = commands::create_rolling_backup(&conn, &backup_app_dir) {
+              log::warn!("Startup rolling backup failed: {}", e);
+            }
+          }
+        });
+      }
+
+      // Anonymous diagnostic heartbeat — see telemetry.rs's module doc for
+      // exactly what it sends (no PII), the once-per-24h throttle, and why
+      // every failure path in it is silent by design. Disclosed and
+      // toggleable in Settings > "Télémétrie & Diagnostics".
+      telemetry::maybe_send_heartbeat_in_background(db_path.clone(), env!("CARGO_PKG_VERSION"));
+
+      if let Some(window) = app.get_webview_window("main") {
+        let backup_db_path = db_path.clone();
+        let backup_app_dir = app_dir.clone();
+        window.on_window_event(move |event| {
+          if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            let backup_db_path = backup_db_path.clone();
+            let backup_app_dir = backup_app_dir.clone();
+            std::thread::spawn(move || {
+              if let Ok(conn) = rusqlite::Connection::open(&backup_db_path) {
+                if let Err(e) = commands::create_rolling_backup(&conn, &backup_app_dir) {
+                  log::warn!("Shutdown rolling backup failed: {}", e);
+                }
+              }
+            });
+          }
+        });
       }
 
       app.manage(Mutex::new(db));
@@ -143,6 +238,11 @@ pub fn run() {
       commands::create_expense,
       commands::update_expense,
       commands::delete_expense,
+      // Activités & Rappels
+      commands::list_activities,
+      commands::create_activity,
+      commands::complete_activity,
+      commands::delete_activity,
       // Letterhead
       commands::get_letterhead_image,
       // Client Products
@@ -162,6 +262,8 @@ pub fn run() {
       commands::get_settings,
       commands::update_setting,
       commands::update_settings,
+      commands::get_telemetry_status,
+      commands::set_telemetry_enabled,
       // Production Logs
       commands::get_production_logs,
       commands::create_production_log,
@@ -193,6 +295,8 @@ pub fn run() {
       commands::set_employee_advance_deducted,
       commands::save_pdf_backup,
       commands::backup_database,
+      commands::get_last_backup_info,
+      commands::restore_database,
       commands::run_payroll,
       commands::get_payroll_runs,
       commands::update_payroll_paid,
@@ -249,12 +353,17 @@ pub fn run() {
       commands::set_password,
       biometric::authenticate_biometric,
       widget::toggle_widget_window,
+      splashscreen::close_splashscreen,
       // Licensing
       commands::get_license_status,
       commands::activate_license,
       commands::verify_license_background,
+      commands::get_machine_id,
       // Global search
       commands::search_global,
+      // Demo data (safe, reversible — see demo_seed.rs)
+      demo_seed::seed_demo_data,
+      demo_seed::clear_demo_data,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

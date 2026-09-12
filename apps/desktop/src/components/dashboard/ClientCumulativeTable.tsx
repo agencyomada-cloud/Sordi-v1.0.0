@@ -4,18 +4,16 @@ import { useSettings } from "@/hooks/useSettings";
 import { useQuery } from "@tanstack/react-query";
 import { db, ClientCumulativeRecord } from "@/lib/database";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Card, CardContent, CardHeader, CardTitle, Button, SearchInput, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, SearchInput, Skeleton, EmptyState, TableLoading } from "@sordi/ui";
 import {
-    RiDownloadLine as Download,
-    RiDownloadLine as FileDown,
     RiTableLine as TableIcon,
-    RiLoader4Line as Loader2,
     RiArrowUpSLine,
     RiArrowDownSLine,
     RiExpandUpDownLine,
 } from "@remixicon/react";
 import { generateCumulativesPDF } from "@/lib/pdfGenerator";
 import { cn } from "@/lib/utils";
+import { ExportActionMenu } from "@/components/ui/export-action-menu";
 
 interface ClientCumulativeTableProps {
     year: number;
@@ -120,7 +118,7 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
         <TableHead
             numeric={align === "right"}
             className={cn(
-                "cursor-pointer select-none hover:text-foreground transition-colors",
+                "cursor-pointer select-none hover:text-foreground transition-colors text-[11px] font-semibold text-muted-foreground uppercase px-3",
                 align === "center" && "text-center"
             )}
             onClick={() => toggleSort(sortKey)}
@@ -142,80 +140,69 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
 
     if (isLoading) {
         return (
-            <Card>
-                <CardHeader className="flex flex-col gap-4">
+            <div className="border border-border/80 rounded-md bg-card overflow-hidden">
+                <div className="flex flex-col gap-3 p-4 border-b border-border/60">
                     <div className="flex flex-row items-center justify-between gap-4">
                         <div className="space-y-1.5">
-                            <Skeleton className="h-5 w-48" />
+                            <Skeleton className="h-4 w-48" />
                             <Skeleton className="h-3 w-40" />
                         </div>
                         <div className="flex gap-2">
-                            <Skeleton className="h-9 w-16 rounded-md" />
-                            <Skeleton className="h-9 w-16 rounded-md" />
+                            <Skeleton className="h-7 w-16 rounded-md" />
+                            <Skeleton className="h-7 w-16 rounded-md" />
                         </div>
                     </div>
-                    <Skeleton className="h-10 w-full sm:w-72 rounded-md" />
-                </CardHeader>
-                <CardContent className="p-0">
-                    <Table className="w-full text-sm">
-                        <TableHeader>
-                            <TableRow>
-                                {Array.from({ length: 7 }).map((_, i) => (
-                                    <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
-                                ))}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableLoading columns={7} rows={6} numericColumns={[1, 2, 3, 4, 5, 6]} />
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                    <Skeleton className="h-8 w-full sm:w-72 rounded-md" />
+                </div>
+                <Table className="w-full text-sm">
+                    <TableHeader>
+                        <TableRow>
+                            {Array.from({ length: 7 }).map((_, i) => (
+                                <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableLoading columns={7} rows={6} numericColumns={[1, 2, 3, 4, 5, 6]} />
+                    </TableBody>
+                </Table>
+            </div>
         );
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-col gap-4">
+        <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
+            <div className="flex flex-col gap-3 p-4 border-b border-border/60">
                 <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
                     <div>
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                            <TableIcon className="w-4 h-4 text-muted-foreground" />
-                            Rapport Détaillé par Client
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">Cumuls HT, TVA, Timbre et TTC</p>
+                        <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <TableIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                            Rapport Global Clients
+                        </h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Cumuls HT, TVA, Timbre et TTC</p>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={exportToCSV} className="h-9 text-xs gap-2">
-                            <FileDown className="w-4 h-4" />
-                            CSV
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={exportToPDF} disabled={isExportingPDF} className="h-9 text-xs gap-2">
-                            {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                            PDF
-                        </Button>
-                    </div>
+                    <ExportActionMenu onExportCSV={exportToCSV} onExportPDF={exportToPDF} isExportingPDF={isExportingPDF} />
                 </div>
                 <SearchInput
                     value={searchQuery}
                     onChange={setSearchQuery}
                     placeholder="Rechercher un client..."
+                    className="h-[30px] text-xs bg-background border-border/80 rounded-md"
                     containerClassName="w-full sm:w-72"
                 />
-            </CardHeader>
+            </div>
 
-            <CardContent className="p-0">
-                <div className="overflow-x-auto border-t border-border">
+            <div className="overflow-x-auto">
                     <Table className="w-full text-sm">
-                        <TableHeader>
-                            <TableRow>
+                        <TableHeader className="sticky top-0 z-10 bg-muted/40">
+                            <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
                                 <SortHeader label="Client" sortKey="client_name" />
                                 <SortHeader label="Factures" sortKey="invoice_count" align="center" />
                                 <SortHeader label="Qté Totale" sortKey="total_quantity" align="center" />
                                 <SortHeader label="Total HT" sortKey="total_ht" align="right" />
                                 <SortHeader label="Total TVA" sortKey="total_tva" align="right" />
                                 <SortHeader label="Timbre" sortKey="total_timbre" align="right" />
-                                <TableHead numeric className="text-primary">
+                                <TableHead numeric className="text-primary text-[11px] font-semibold uppercase px-3">
                                     <span
                                         className="inline-flex items-center gap-1 flex-row-reverse cursor-pointer select-none"
                                         onClick={() => toggleSort("total_ttc")}
@@ -244,36 +231,35 @@ export const ClientCumulativeTable: React.FC<ClientCumulativeTableProps> = ({
                                 </TableRow>
                             ) : (
                                 rows.map((record) => (
-                                    <TableRow key={record.client_name}>
-                                        <TableCell className="font-medium">{record.client_name}</TableCell>
-                                        <TableCell className="text-center text-muted-foreground font-mono tabular-nums tracking-tight">{record.invoice_count}</TableCell>
-                                        <TableCell className="text-center font-mono tabular-nums tracking-tight">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
-                                        <TableCell numeric>{formatCurrency(record.total_ht)}</TableCell>
-                                        <TableCell numeric>{formatCurrency(record.total_tva)}</TableCell>
-                                        <TableCell numeric className="text-muted-foreground">{formatCurrency(record.total_timbre)}</TableCell>
-                                        <TableCell numeric className="font-semibold text-primary">{formatCurrency(record.total_ttc)}</TableCell>
+                                    <TableRow key={record.client_name} className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors">
+                                        <TableCell className="font-medium px-3">{record.client_name}</TableCell>
+                                        <TableCell className="text-center text-muted-foreground font-mono tabular-nums font-medium px-3">{record.invoice_count}</TableCell>
+                                        <TableCell className="text-center font-mono tabular-nums font-medium px-3">{new Intl.NumberFormat("fr-DZ").format(record.total_quantity)}</TableCell>
+                                        <TableCell numeric className="font-medium px-3">{formatCurrency(record.total_ht)}</TableCell>
+                                        <TableCell numeric className="font-medium px-3">{formatCurrency(record.total_tva)}</TableCell>
+                                        <TableCell numeric className="font-medium text-muted-foreground px-3">{formatCurrency(record.total_timbre)}</TableCell>
+                                        <TableCell numeric className="font-semibold text-primary px-3">{formatCurrency(record.total_ttc)}</TableCell>
                                     </TableRow>
                                 ))
                             )}
                         </TableBody>
                         {rows.length > 0 && (
                             <tfoot>
-                                <TableRow className="bg-primary/5 hover:bg-primary/5 font-semibold border-t border-border">
-                                    <TableCell className="uppercase tracking-wide text-xs text-primary">
+                                <TableRow className="h-9 bg-muted/30 border-t border-border/60 font-semibold text-xs font-mono tabular-nums hover:bg-muted/30">
+                                    <TableCell className="uppercase tracking-wide text-xs text-primary font-sans px-3">
                                         Total {searchQuery ? "(filtré)" : "Général"}
                                     </TableCell>
-                                    <TableCell className="text-center text-primary font-mono tabular-nums tracking-tight">{totals.invoices}</TableCell>
-                                    <TableCell className="text-center text-primary font-mono tabular-nums tracking-tight">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatCurrency(totals.ht)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatCurrency(totals.tva)}</TableCell>
-                                    <TableCell numeric className="text-primary">{formatCurrency(totals.timbre)}</TableCell>
-                                    <TableCell numeric className="text-primary text-base">{formatCurrency(totals.ttc)}</TableCell>
+                                    <TableCell className="text-center text-primary font-mono tabular-nums px-3">{totals.invoices}</TableCell>
+                                    <TableCell className="text-center text-primary font-mono tabular-nums px-3">{new Intl.NumberFormat("fr-DZ").format(totals.quantity)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatCurrency(totals.ht)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatCurrency(totals.tva)}</TableCell>
+                                    <TableCell numeric className="text-primary px-3">{formatCurrency(totals.timbre)}</TableCell>
+                                    <TableCell numeric className="text-primary text-sm px-3">{formatCurrency(totals.ttc)}</TableCell>
                                 </TableRow>
                             </tfoot>
                         )}
                     </Table>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
     );
 };

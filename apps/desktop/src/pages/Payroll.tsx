@@ -256,7 +256,7 @@ function EmployeeAttendanceRow({ employee, month }: { employee: Employee; month:
   return (
     <div className="py-3 first:pt-0 last:pb-0 border-b last:border-b-0 border-border/40">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <span className="text-sm font-medium truncate">{employee.name}</span>
+        <span className="text-sm font-medium truncate" title={employee.name}>{employee.name}</span>
         {attendance && (
           <div className="flex items-center gap-1.5 shrink-0">
             <StatusBadge tone="success">Présent: {attendance.present_count}</StatusBadge>
@@ -649,15 +649,15 @@ export default function PayrollPage() {
                 ugly multi-line wrap at the app's minimum window width. */}
             <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Équipe & Salaires</h1>
-                <p className="text-xs text-slate-500 mt-1">Pointages, bulletins de paie et avances</p>
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">Équipe & Salaires</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Pointages, bulletins de paie et avances</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {activeTab === "salaries" && (
                   <>
                     <div className="flex items-center gap-1.5">
                       <Select value={selectedMonthNum} onValueChange={setMonthNum}>
-                        <SelectTrigger className="w-[150px] h-10">
+                        <SelectTrigger className="w-32 h-[30px] text-xs rounded-md">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -672,7 +672,7 @@ export default function PayrollPage() {
                         </SelectContent>
                       </Select>
                       <Select value={selectedYear} onValueChange={setYear}>
-                        <SelectTrigger className="w-[100px] h-10">
+                        <SelectTrigger className="w-20 h-[30px] text-xs rounded-md">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -685,12 +685,12 @@ export default function PayrollPage() {
                       </Select>
                     </div>
                     <input type="file" ref={fileInputRef} onChange={handleImport} accept=".txt,.tsv,.dat,.csv" className="hidden" />
-                    <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()} disabled={importPunches.isPending}>
-                      <Upload className="w-4 h-4" />
+                    <Button variant="outline" size="sm" className="h-[30px] text-xs rounded-md gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={importPunches.isPending}>
+                      <Upload className="w-3.5 h-3.5" />
                       {importPunches.isPending ? "Import…" : "Importer les pointages"}
                     </Button>
-                    <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleBulkGenerate} disabled={isBulkRunning}>
-                      <RunIcon className="w-4 h-4" />
+                    <Button variant="default" size="sm" className="h-[30px] text-xs rounded-md gap-1.5" onClick={handleBulkGenerate} disabled={isBulkRunning}>
+                      <RunIcon className="w-3.5 h-3.5" />
                       {isBulkRunning ? "Génération…" : `Générer tous les bulletins (${month})`}
                     </Button>
                   </>
@@ -801,10 +801,10 @@ export default function PayrollPage() {
                 header above still drives the table below (always one
                 month); "Période" here only widens how many trailing months
                 the two export buttons pull in. */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-card rounded-2xl border border-border/30 shadow-card mb-4">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="h-9 mb-3 flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Select value={periodType} onValueChange={(v) => setPeriodType(v as PeriodType)}>
-                  <SelectTrigger className="w-[190px] h-10">
+                  <SelectTrigger className="w-[170px] h-[30px] text-xs rounded-md">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -816,7 +816,7 @@ export default function PayrollPage() {
                   </SelectContent>
                 </Select>
                 <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-                  <SelectTrigger className="w-[220px] h-10">
+                  <SelectTrigger className="w-[190px] h-[30px] text-xs rounded-md">
                     <SelectValue placeholder="Tous les employés" />
                   </SelectTrigger>
                   <SelectContent>
@@ -829,7 +829,7 @@ export default function PayrollPage() {
                   </SelectContent>
                 </Select>
                 <Select value={paidFilter} onValueChange={setPaidFilter}>
-                  <SelectTrigger className="w-[160px] h-10">
+                  <SelectTrigger className="w-36 h-[30px] text-xs rounded-md">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -839,13 +839,13 @@ export default function PayrollPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" className="gap-2 border-border/50" onClick={handleExportPDF} disabled={isExportingPdf}>
-                  <PdfIcon className="w-4 h-4 text-red-600" />
+              <div className="flex items-center gap-1.5">
+                <Button variant="outline" size="sm" className="h-[30px] text-xs rounded-md gap-1.5" onClick={handleExportPDF} disabled={isExportingPdf}>
+                  <PdfIcon className="w-3.5 h-3.5 text-red-600" />
                   {isExportingPdf ? "Export…" : "Export PDF"}
                 </Button>
-                <Button variant="outline" className="gap-2 border-border/50" onClick={handleExportCSV}>
-                  <CsvIcon className="w-4 h-4 text-emerald-600" />
+                <Button variant="outline" size="sm" className="h-[30px] text-xs rounded-md gap-1.5" onClick={handleExportCSV}>
+                  <CsvIcon className="w-3.5 h-3.5 text-emerald-600" />
                   Export CSV
                 </Button>
               </div>
@@ -871,17 +871,17 @@ export default function PayrollPage() {
               </Card>
             )}
 
-            <div className="bg-card rounded-2xl border border-border/30 shadow-card overflow-hidden">
+            <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Employé</TableHead>
-                    <TableHead>Mois</TableHead>
-                    <TableHead>Absences</TableHead>
-                    <TableHead>Net à payer</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="w-32"></TableHead>
-                    <TableHead className="w-32 text-right">Actions</TableHead>
+                  <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Employé</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Mois</TableHead>
+                    <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Absences</TableHead>
+                    <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Net à payer</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Statut</TableHead>
+                    <TableHead className="w-32 text-[11px] font-semibold text-muted-foreground uppercase px-3"></TableHead>
+                    <TableHead className="w-32 text-right text-[11px] font-semibold text-muted-foreground uppercase px-3">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -899,23 +899,24 @@ export default function PayrollPage() {
                     </TableRow>
                   ) : (
                     runs.map((run) => (
-                      <TableRow key={run.id} className="cursor-pointer" onClick={() => setSelectedRun(run)}>
-                        <TableCell className="font-medium">{employeeNameById.get(run.employee_id) ?? "-"}</TableCell>
-                        <TableCell>{run.month}</TableCell>
-                        <TableCell className="text-muted-foreground">{run.absence_days}</TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(run.net_a_payer)}</TableCell>
-                        <TableCell>
+                      <TableRow key={run.id} className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setSelectedRun(run)}>
+                        <TableCell className="font-medium px-3">{employeeNameById.get(run.employee_id) ?? "-"}</TableCell>
+                        <TableCell className="px-3">{run.month}</TableCell>
+                        <TableCell numeric className="font-mono tabular-nums text-muted-foreground px-3">{run.absence_days}</TableCell>
+                        <TableCell numeric className="font-mono tabular-nums font-semibold px-3">{formatCurrency(run.net_a_payer)}</TableCell>
+                        <TableCell className="px-3">
                           {run.paid ? (
                             <StatusBadge tone="success">Payé</StatusBadge>
                           ) : (
                             <StatusBadge tone="warning">En attente</StatusBadge>
                           )}
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                           {!run.paid && (
                             <Button
                               size="sm"
                               variant="outline"
+                              className="h-7 text-xs rounded-md"
                               disabled={updatePaid.isPending}
                               onClick={() =>
                                 updatePaid.mutate({ id: run.id, paid: true, paidDate: new Date().toISOString().slice(0, 10) })
@@ -925,29 +926,29 @@ export default function PayrollPage() {
                             </Button>
                           )}
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-0.5">
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-8 w-8"
+                              className="h-7 w-7"
                               title="Télécharger le bulletin PDF"
                               onClick={() => handleDownloadPayslip(run)}
                               disabled={isDownloadingRunId === run.id}
                             >
-                              <PayslipIcon className="w-4 h-4" />
+                              <PayslipIcon className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-8 w-8" title="Modifier" onClick={() => openEditDialog(run)}>
-                              <EditIcon className="w-4 h-4" />
+                            <Button size="icon" variant="ghost" className="h-7 w-7" title="Modifier" onClick={() => openEditDialog(run)}>
+                              <EditIcon className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
                               title="Supprimer"
                               onClick={() => setDeletingRunId(run.id)}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         </TableCell>
@@ -974,35 +975,35 @@ export default function PayrollPage() {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Salaire de base</span>
-                  <span className="font-medium">{formatCurrency(selectedRun.base_salary)}</span>
+                  <span className="font-mono tabular-nums font-medium">{formatCurrency(selectedRun.base_salary)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Jours ouvrés du mois</span>
-                  <span className="font-medium">{selectedRun.working_days_in_month}</span>
+                  <span className="font-mono tabular-nums font-medium">{selectedRun.working_days_in_month}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Jours d'absence</span>
-                  <span className="font-medium">{selectedRun.absence_days}</span>
+                  <span className="font-mono tabular-nums font-medium">{selectedRun.absence_days}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Taux journalier</span>
-                  <span className="font-medium">{formatCurrency(selectedRun.daily_rate)}</span>
+                  <span className="font-mono tabular-nums font-medium">{formatCurrency(selectedRun.daily_rate)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Déduction absences</span>
-                  <span className="font-medium text-destructive">-{formatCurrency(selectedRun.absence_deduction)}</span>
+                  <span className="font-mono tabular-nums font-medium text-destructive">-{formatCurrency(selectedRun.absence_deduction)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Primes</span>
-                  <span className="font-medium text-emerald-600">+{formatCurrency(selectedRun.primes)}</span>
+                  <span className="font-mono tabular-nums font-medium text-emerald-600">+{formatCurrency(selectedRun.primes)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border/50">
                   <span className="text-muted-foreground">Déduction avance</span>
-                  <span className="font-medium text-destructive">-{formatCurrency(selectedRun.avance_deduction)}</span>
+                  <span className="font-mono tabular-nums font-medium text-destructive">-{formatCurrency(selectedRun.avance_deduction)}</span>
                 </div>
                 <div className="flex justify-between py-3">
                   <span className="font-semibold">Net à payer</span>
-                  <span className="text-lg font-bold">{formatCurrency(selectedRun.net_a_payer)}</span>
+                  <span className="font-mono tabular-nums text-lg font-bold">{formatCurrency(selectedRun.net_a_payer)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-t border-border/50 pt-3">
                   <span className="text-muted-foreground">Statut</span>
@@ -1263,15 +1264,15 @@ function FreelancesTab() {
         </Button>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border/30 shadow-card overflow-hidden">
+      <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Projet</TableHead>
-              <TableHead>Freelance</TableHead>
-              <TableHead>Montant convenu</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead className="w-32"></TableHead>
+            <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+              <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Projet</TableHead>
+              <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Freelance</TableHead>
+              <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Montant convenu</TableHead>
+              <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Statut</TableHead>
+              <TableHead className="w-32 text-[11px] font-semibold text-muted-foreground uppercase px-3"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1289,21 +1290,22 @@ function FreelancesTab() {
               </TableRow>
             ) : (
               payments.map((p) => (
-                <TableRow key={p.project_id}>
-                  <TableCell className="font-medium">{p.project_name}</TableCell>
-                  <TableCell>{p.freelancer_name}</TableCell>
-                  <TableCell>{p.montant_convenu != null ? formatCurrency(p.montant_convenu) : "-"}</TableCell>
-                  <TableCell>
+                <TableRow key={p.project_id} className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors">
+                  <TableCell className="font-medium px-3">{p.project_name}</TableCell>
+                  <TableCell className="px-3">{p.freelancer_name}</TableCell>
+                  <TableCell numeric className="font-mono tabular-nums font-medium px-3">{p.montant_convenu != null ? formatCurrency(p.montant_convenu) : "-"}</TableCell>
+                  <TableCell className="px-3">
                     {p.statut_paiement === "paye" ? (
                       <StatusBadge tone="success">Payé{p.date_paiement ? ` le ${formatDate(p.date_paiement)}` : ""}</StatusBadge>
                     ) : (
                       <StatusBadge tone="warning">Non payé</StatusBadge>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-3">
                     <Button
                       size="sm"
                       variant="outline"
+                      className="h-7 text-xs rounded-md"
                       disabled={setPaymentStatus.isPending}
                       onClick={() =>
                         setPaymentStatus.mutate({

@@ -4,7 +4,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 
 import { cn } from "./lib/utils";
-import { Dialog, DialogContent } from "./dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./dialog";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -26,15 +26,33 @@ interface CommandDialogProps extends DialogProps {
   // own (e.g. server-side) filtering, where cmdk's built-in fuzzy-match on
   // rendered item text would fight with results that are already filtered.
   shouldFilter?: boolean;
+  // Radix's Dialog requires an accessible title/description or it warns
+  // ("Missing Description... for {DialogContent}") on every open — every
+  // CommandDialog is a search/command surface with no visible title of its
+  // own, so these default to sane generic copy and render sr-only rather
+  // than making every consumer remember to supply them.
+  title?: string;
+  description?: string;
 }
 
-const CommandDialog = ({ children, shouldFilter, ...props }: CommandDialogProps) => {
+const CommandDialog = ({
+  children,
+  shouldFilter,
+  title = "Palette de commandes",
+  description = "Recherchez une page, une action ou un enregistrement, puis validez avec Entrée.",
+  ...props
+}: CommandDialogProps) => {
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0 shadow-lg">
+      {/* Raycast/Linear palette shell — a top-anchored, hairline-bordered
+          panel rather than the shared Dialog's default center-screen
+          rounded-2xl card, so it reads as a command surface, not a form. */}
+      <DialogContent className="top-[18%] translate-y-0 w-full max-w-xl bg-popover/95 backdrop-blur-md border border-border/80 rounded-xl shadow-2xl p-2 select-none overflow-hidden sm:rounded-xl">
+        <DialogTitle className="sr-only">{title}</DialogTitle>
+        <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
           shouldFilter={shouldFilter}
-          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2 [&_[cmdk-item]_svg]:h-3.5 [&_[cmdk-item]_svg]:w-3.5"
         >
           {children}
         </Command>
@@ -47,12 +65,12 @@ const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
 >(({ className, ...props }, ref) => (
-  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
-    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+  <div className="flex items-center px-2 border-b border-border/40" cmdk-input-wrapper="">
+    <Search className="mr-2 h-3.5 w-3.5 shrink-0 opacity-50" />
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-10 w-full bg-transparent px-1 text-xs outline-none focus:outline-none placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       {...props}
@@ -113,7 +131,16 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected='true']:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50",
+      // "group" so a row's own secondary/muted text (client name, amount,
+      // status — see Sidebar.tsx's command-palette rows) can opt into a
+      // brighter tone on selection via group-data-[selected=true]:. Selection
+      // itself is the same subdued bg-muted/text-foreground pair
+      // DropdownMenuItem already uses (focus:bg-secondary — same token as
+      // bg-muted in this theme) — NOT bg-accent/text-accent-foreground,
+      // which resolves to a saturated blue here (--accent is a strong blue,
+      // not a neutral tint) and made muted-foreground secondary text
+      // unreadable on selection.
+      "group relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled=true]:pointer-events-none data-[selected='true']:bg-muted/80 data-[selected=true]:text-foreground data-[disabled=true]:opacity-50",
       className,
     )}
     {...props}

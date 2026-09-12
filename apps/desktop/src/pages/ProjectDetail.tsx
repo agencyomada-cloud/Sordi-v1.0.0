@@ -193,7 +193,7 @@ function OverviewTab({
             <CardTitle className="text-sm font-medium">Budget prévu</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">{formatCurrency(project.planned_budget)}</div>
+            <div className="font-mono tabular-nums text-xl font-bold">{formatCurrency(project.planned_budget)}</div>
           </CardContent>
         </Card>
         <Card>
@@ -201,7 +201,7 @@ function OverviewTab({
             <CardTitle className="text-sm font-medium">Budget facturé</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-xl font-bold ${overBudget ? "text-destructive" : ""}`}>{formatCurrency(budgetFacture)}</div>
+            <div className={`font-mono tabular-nums text-xl font-bold ${overBudget ? "text-destructive" : ""}`}>{formatCurrency(budgetFacture)}</div>
             {project.planned_budget > 0 && (
               <div className="h-1.5 mt-2 rounded-full bg-muted overflow-hidden">
                 <div className={`h-full rounded-full ${overBudget ? "bg-destructive" : "bg-primary"}`} style={{ width: `${ratio * 100}%` }} />
@@ -214,7 +214,7 @@ function OverviewTab({
             <CardTitle className="text-sm font-medium">Budget payé</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold text-green-600">{formatCurrency(budgetPaye)}</div>
+            <div className="font-mono tabular-nums text-xl font-bold text-green-600">{formatCurrency(budgetPaye)}</div>
           </CardContent>
         </Card>
       </div>
@@ -230,20 +230,20 @@ function OverviewTab({
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Chiffre d'Affaires Réalisé (HT)</p>
-              <p className="text-xl font-bold mt-1">{formatCurrency(profitability?.revenue_ht ?? 0)}</p>
+              <p className="font-mono tabular-nums text-xl font-bold mt-1">{formatCurrency(profitability?.revenue_ht ?? 0)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Encaissé</p>
-              <p className="text-xl font-bold mt-1 text-green-600">{formatCurrency(profitability?.total_collected ?? 0)}</p>
+              <p className="font-mono tabular-nums text-xl font-bold mt-1 text-green-600">{formatCurrency(profitability?.total_collected ?? 0)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Dépenses &amp; Coûts Directs</p>
-              <p className="text-xl font-bold mt-1 text-destructive">{formatCurrency(profitability?.direct_expenses ?? 0)}</p>
+              <p className="font-mono tabular-nums text-xl font-bold mt-1 text-destructive">{formatCurrency(profitability?.direct_expenses ?? 0)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Marge Nette Réelle</p>
               <div className="flex items-center gap-2 mt-1">
-                <p className={`text-xl font-bold ${isProfitable ? "text-green-600" : "text-destructive"}`}>
+                <p className={`font-mono tabular-nums text-xl font-bold ${isProfitable ? "text-green-600" : "text-destructive"}`}>
                   {formatCurrency(netMargin)}
                 </p>
                 <StatusBadge tone={isProfitable ? "success" : "error"}>
@@ -286,7 +286,7 @@ function OverviewTab({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{freelancer?.name ?? "Freelance"}</p>
-                <p className="text-xl font-bold mt-1">
+                <p className="font-mono tabular-nums text-xl font-bold mt-1">
                   {project.montant_convenu != null ? formatCurrency(project.montant_convenu) : "Montant non défini"}
                 </p>
               </div>
@@ -389,11 +389,11 @@ function OverviewTab({
                   <TableRow key={inv.id}>
                     <TableCell className="font-medium">{inv.invoice_number}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(inv.invoice_date)}</TableCell>
-                    <TableCell>{formatCurrency(inv.total_ttc ?? 0)}</TableCell>
+                    <TableCell className="font-mono tabular-nums">{formatCurrency(inv.total_ttc ?? 0)}</TableCell>
                     <TableCell>
                       <button
                         onClick={() => assignInvoice.mutate({ invoiceId: inv.id, projectId: null })}
-                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground"
+                        className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground"
                         title="Délier du projet"
                       >
                         <CloseIcon className="w-4 h-4" />
@@ -646,7 +646,7 @@ function DeliverablesTab({ projectId }: { projectId: string }) {
                             Ouvrir
                           </a>
                         ) : (
-                          <span className="text-sm text-muted-foreground truncate max-w-[200px] inline-flex items-center gap-1">
+                          <span className="text-sm text-muted-foreground truncate max-w-[200px] inline-flex items-center gap-1" title={d.link_or_path}>
                             <FileText className="w-3.5 h-3.5 shrink-0" />
                             {d.link_or_path}
                           </span>
@@ -795,13 +795,13 @@ function ProjectExpensesTab({ projectId }: { projectId: string }) {
                       <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">{expense.category}</span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{expense.description || "-"}</TableCell>
-                    <TableCell className="text-right font-medium text-destructive tabular-nums">
+                    <TableCell className="text-right font-mono font-medium text-destructive tabular-nums">
                       -{formatCurrency(expense.amount)}
                     </TableCell>
                     <TableCell>
                       <button
                         onClick={() => deleteExpense.mutate(expense.id)}
-                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
+                        className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

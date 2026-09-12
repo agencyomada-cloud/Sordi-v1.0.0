@@ -372,16 +372,7 @@ export function OrderEditableStructure({ order, clients, products, settings, log
                   {settings?.company_address && <div className="mb-[2.8mm] font-bold">Adresse: {settings.company_address}</div>}
                   {settings?.company_rib && <div><strong>RIB:</strong> {settings.company_rib}{settings?.company_bank_agency && <><br />{settings.company_bank_agency}</>}</div>}
                 </section>
-                <section className="relative grid grid-cols-[20mm_1fr] gap-x-[2.5mm] pt-[6mm]">
-                  {(settings?.footer_logo_data || settings?.company_name) && (
-                    <div className="absolute top-0 left-0 h-[8mm] w-[43mm] flex items-center">
-                      {settings?.footer_logo_data ? (
-                        <img src={settings.footer_logo_data} alt="Footer Logo" className="h-full w-full object-contain object-left" />
-                      ) : (
-                        <span className="font-extrabold text-[9pt] text-black tracking-tight uppercase">{settings.company_name}</span>
-                      )}
-                    </div>
-                  )}
+                <section className="grid grid-cols-[20mm_1fr] gap-x-[2.5mm] pt-[6mm]">
                   {settings?.qr_code_data && (
                     <div className="w-[18mm] h-[18mm] bg-gray-50 flex items-center justify-center overflow-hidden">
                       <img src={settings.qr_code_data} alt="QR Code" className="w-full h-full object-contain" />

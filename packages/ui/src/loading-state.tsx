@@ -1,21 +1,5 @@
-import { RiLoader4Line as Loader2 } from "@remixicon/react";
-import { cn } from "./lib/utils";
 import { Skeleton } from "./skeleton";
 import { TableRow, TableCell } from "./table";
-
-interface LoadingStateProps {
-  message?: string;
-  className?: string;
-}
-
-export function LoadingState({ message = "Chargement...", className }: LoadingStateProps) {
-  return (
-    <div className={cn("flex flex-col items-center justify-center py-12", className)}>
-      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-      <p className="text-muted-foreground text-sm">{message}</p>
-    </div>
-  );
-}
 
 interface TableLoadingProps {
   columns?: number;

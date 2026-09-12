@@ -1,13 +1,5 @@
-import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer';
-
-// Register Space Grotesk
-Font.register({
-  family: 'Space Grotesk',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj7oUXskPMVBSSJLq2I.ttf' },
-    { src: 'https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj4PVnskPMVBSSJLq2I.ttf', fontWeight: 'bold' },
-  ]
-});
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import './pdfFonts';
 
 export interface PayrollPDFRow {
   employee_name: string;
@@ -37,7 +29,6 @@ export interface PayrollPDFProps {
     company_rib?: string;
     company_bank_agency?: string;
     logo_data?: string;
-    footer_logo_data?: string;
     qr_code_data?: string;
     primary_color?: string;
     body_pattern_data?: string;
@@ -287,12 +278,6 @@ export function PayrollPDFDocument({ rows, totalNetAPayer, periodLabel, settings
       height: '100%',
       position: 'relative',
     },
-    footerLogoBox: {
-      position: 'absolute',
-      top: 0, left: 0,
-      height: 22.7, width: 121.9,
-      justifyContent: 'center',
-    },
     qrBox: {
       width: 51, height: 51,
       alignItems: 'center', justifyContent: 'center',
@@ -407,13 +392,6 @@ export function PayrollPDFDocument({ rows, totalNetAPayer, periodLabel, settings
 
             <View style={styles.contactCol}>
               <View style={styles.contactLeftBox}>
-                <View style={styles.footerLogoBox}>
-                  {settings?.footer_logo_data ? (
-                    <Image src={settings.footer_logo_data} style={{ height: '100%', objectFit: 'contain' }} />
-                  ) : (
-                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, color: '#b91c1c' }}>SORDI</Text>
-                  )}
-                </View>
                 <View style={styles.qrBox}>
                   {settings?.qr_code_data ? (
                     <Image src={settings.qr_code_data} style={{ width: '100%', height: '100%' }} />

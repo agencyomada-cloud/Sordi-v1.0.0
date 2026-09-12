@@ -42,8 +42,16 @@ interface LicenseTokenClaims extends LicenseTokenPayload {
 /** Signs a license token with the Ed25519 private key. The desktop app only
  *  ever has the matching public key, so it can verify but never forge one. */
 export function signLicenseToken(payload: LicenseTokenPayload): string {
+  return signLicenseTokenWithTtl(payload, TOKEN_TTL_SECONDS);
+}
+
+/** Same signing as signLicenseToken, but with an explicit expiry instead of
+ *  the fixed 35-day online-reverification window — used by the admin
+ *  license-issuing endpoint, where `exp` must reflect the actual purchased
+ *  term (e.g. a 1-year or lifetime license), not a re-check interval. */
+export function signLicenseTokenWithTtl(payload: LicenseTokenPayload, ttlSeconds: number): string {
   const now = Math.floor(Date.now() / 1000);
-  const claims: LicenseTokenClaims = { ...payload, iat: now, exp: now + TOKEN_TTL_SECONDS };
+  const claims: LicenseTokenClaims = { ...payload, iat: now, exp: now + ttlSeconds };
   const headerB64 = base64url(JSON.stringify({ alg: "EdDSA", typ: "JWT" }));
   const payloadB64 = base64url(JSON.stringify(claims));
   const signingInput = `${headerB64}.${payloadB64}`;

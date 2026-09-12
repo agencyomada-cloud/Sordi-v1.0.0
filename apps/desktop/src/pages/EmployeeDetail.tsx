@@ -337,7 +337,7 @@ export default function EmployeeDetailPage() {
                   <CardTitle className="text-sm font-medium">Salaire de base</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{employee.base_salary ? formatCurrency(employee.base_salary) : "Non défini"}</div>
+                  <div className="font-mono tabular-nums text-xl font-bold">{employee.base_salary ? formatCurrency(employee.base_salary) : "Non défini"}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -345,7 +345,7 @@ export default function EmployeeDetailPage() {
                   <CardTitle className="text-sm font-medium">Avances en attente</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold text-orange-600">{formatCurrency(advanceTotals?.total_pending ?? 0)}</div>
+                  <div className="font-mono tabular-nums text-xl font-bold text-orange-600">{formatCurrency(advanceTotals?.total_pending ?? 0)}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -353,7 +353,7 @@ export default function EmployeeDetailPage() {
                   <CardTitle className="text-sm font-medium">Total avances à ce jour</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{formatCurrency(advanceTotals?.total_taken ?? 0)}</div>
+                  <div className="font-mono tabular-nums text-xl font-bold">{formatCurrency(advanceTotals?.total_taken ?? 0)}</div>
                 </CardContent>
               </Card>
             </div>
@@ -468,7 +468,7 @@ export default function EmployeeDetailPage() {
                       {advances.map((a) => (
                         <TableRow key={a.id}>
                           <TableCell>{formatDate(a.date_taken)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(a.amount)}</TableCell>
+                          <TableCell className="font-mono tabular-nums font-medium">{formatCurrency(a.amount)}</TableCell>
                           <TableCell className="text-muted-foreground">{a.month_to_deduct}</TableCell>
                           <TableCell>
                             <button
@@ -517,11 +517,11 @@ export default function EmployeeDetailPage() {
                       {payrollRuns.map((run) => (
                         <TableRow key={run.id} className="cursor-pointer" onClick={() => navigate(`/payroll?month=${run.month}&employee=${run.employee_id}`)}>
                           <TableCell className="font-medium">{run.month}</TableCell>
-                          <TableCell className="text-muted-foreground">{run.absence_days}</TableCell>
-                          <TableCell className="text-muted-foreground">{formatCurrency(run.absence_deduction)}</TableCell>
-                          <TableCell className="text-muted-foreground">{formatCurrency(run.primes)}</TableCell>
-                          <TableCell className="text-muted-foreground">{formatCurrency(run.avance_deduction)}</TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(run.net_a_payer)}</TableCell>
+                          <TableCell className="font-mono tabular-nums text-muted-foreground">{run.absence_days}</TableCell>
+                          <TableCell className="font-mono tabular-nums text-muted-foreground">{formatCurrency(run.absence_deduction)}</TableCell>
+                          <TableCell className="font-mono tabular-nums text-muted-foreground">{formatCurrency(run.primes)}</TableCell>
+                          <TableCell className="font-mono tabular-nums text-muted-foreground">{formatCurrency(run.avance_deduction)}</TableCell>
+                          <TableCell className="font-mono tabular-nums font-semibold">{formatCurrency(run.net_a_payer)}</TableCell>
                           <TableCell>
                             {run.paid ? (
                               <StatusBadge tone="success">Payé</StatusBadge>
@@ -716,7 +716,7 @@ export default function EmployeeDetailPage() {
       </Dialog>
 
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-3xl">
+        <AlertDialogContent className="rounded-xl border border-border/80 shadow-2xl p-5">
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer cet employé ?</AlertDialogTitle>
             <AlertDialogDescription>

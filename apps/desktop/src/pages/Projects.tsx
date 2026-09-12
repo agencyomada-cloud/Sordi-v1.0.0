@@ -126,12 +126,12 @@ export default function ProjectsPage() {
           <div className="max-w-[1600px] mx-auto w-full">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Projets & Opérations</h1>
-                <p className="text-xs text-slate-500 mt-1">Suivez vos projets clients, tâches et livrables</p>
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">Projets & Opérations</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Suivez vos projets clients, tâches et livrables</p>
               </div>
 
-              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => navigate("/projects/new")}>
-                <Plus className="w-4 h-4" />
+              <Button variant="default" size="sm" className="h-[30px] px-3 text-xs rounded-md gap-1.5" onClick={() => navigate("/projects/new")}>
+                <Plus className="w-3.5 h-3.5" />
                 Nouveau projet
               </Button>
             </div>
@@ -174,16 +174,16 @@ export default function ProjectsPage() {
               />
             </div>
 
-            <div className="animate-fade-in-up animation-delay-200">
+            <div className="animate-fade-in-up animation-delay-200 border border-border/80 rounded-md bg-card overflow-hidden w-full">
               <Table>
                 <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Projet</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead className="hidden md:table-cell">Responsable</TableHead>
-                    <TableHead numeric className="hidden lg:table-cell">Montant encaissé / Total facturé</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="w-14"></TableHead>
+                  <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Projet</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Client</TableHead>
+                    <TableHead className="hidden md:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Responsable</TableHead>
+                    <TableHead numeric className="hidden lg:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Montant encaissé / Total facturé</TableHead>
+                    <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Statut</TableHead>
+                    <TableHead className="w-14 text-[11px] font-semibold text-muted-foreground uppercase px-3"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -208,11 +208,11 @@ export default function ProjectsPage() {
                     rows.map(({ project, stats, status }) => (
                       <TableRow
                         key={project.id}
-                        className="cursor-pointer"
+                        className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer"
                         dimmed={status.key === "termine"}
                         onClick={() => navigate(`/projects/${project.id}`)}
                       >
-                        <TableCell className="font-medium max-w-[220px]">
+                        <TableCell className="font-medium max-w-[220px] px-3">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="block truncate">{project.name}</span>
@@ -220,14 +220,14 @@ export default function ProjectsPage() {
                             <TooltipContent side="top">{project.name}</TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{clientNameById.get(project.client_id) ?? "-"}</TableCell>
-                        <TableCell className="text-muted-foreground hidden md:table-cell">{project.responsible_person || "-"}</TableCell>
-                        <TableCell numeric className="hidden lg:table-cell">
+                        <TableCell className="text-muted-foreground px-3">{clientNameById.get(project.client_id) ?? "-"}</TableCell>
+                        <TableCell className="text-muted-foreground hidden md:table-cell px-3">{project.responsible_person || "-"}</TableCell>
+                        <TableCell numeric className="hidden lg:table-cell px-3">
                           {/* Purely informational — real cash collected vs. real
                               invoiced total, independent of operational status. */}
                           <BudgetCell stats={stats} />
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                           {/* Explicit, manually-set operational status — the
                               dropdown itself IS the quick-toggle; matching
                               items also live in the "..." action menu. */}
@@ -235,7 +235,7 @@ export default function ProjectsPage() {
                             value={status.key}
                             onValueChange={(value) => updateProjectStatus.mutate({ id: project.id, status: value as ProjectLifecycleStatus })}
                           >
-                            <SelectTrigger className={cn(statusBadgeVariants(), "h-9 w-fit gap-1.5 border-border")}>
+                            <SelectTrigger className={cn(statusBadgeVariants(), "h-7 w-fit gap-1.5 border-border")}>
                               <StatusDot tone={status.tone} />
                               <span>{status.label}</span>
                             </SelectTrigger>
@@ -246,11 +246,11 @@ export default function ProjectsPage() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
-                                <MoreHorizontal className="w-4 h-4" />
+                              <button className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all">
+                                <MoreHorizontal className="w-3.5 h-3.5" />
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">

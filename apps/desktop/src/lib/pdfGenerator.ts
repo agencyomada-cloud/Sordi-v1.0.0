@@ -10,6 +10,7 @@ import { InvoicePDFDocument } from "@/components/pdf/InvoicePDFDocument";
 import { InvoiceTemplateEpure } from "@/components/pdf/InvoiceTemplateEpure";
 import { InvoiceTemplateModerne } from "@/components/pdf/InvoiceTemplateModerne";
 import { PDFInvoice, PDFSettings, PDFInvoiceItem, InvoicePdfTheme } from "@/components/pdf/invoicePdfShared";
+import { resolveInvoiceAppearance } from "@/components/pdf/invoiceAppearance";
 import { CumulativesPDFDocument, ClientCumulativeRecord } from "@/components/pdf/CumulativesPDFDocument";
 import { PayrollPDFDocument, PayrollPDFRow } from "@/components/pdf/PayrollPDFDocument";
 import { BulletinPaiePDFDocument, BulletinPaieRun, BulletinPaieEmployee } from "@/components/pdf/BulletinPaiePDFDocument";
@@ -200,7 +201,14 @@ export const generateInvoicePDFBlob = async (
         : (settings?.stamp_size ? Number(settings.stamp_size) : 180),
     };
 
-    const effectiveStampSize = formattedInvoice.stamp_size || 180;
+    // Single source of truth for logo/stamp sizing and theme — computed once
+    // here from the same (doc, settings) pair the templates themselves would
+    // otherwise re-derive fallbacks from independently. Replaces the local
+    // `effectiveStampSize` fallback chain that used to live only in this
+    // function, so pdfSettings/formattedInvoice below and the resolver can
+    // never drift apart.
+    const resolvedAppearance = resolveInvoiceAppearance(doc, { ...(settings as any), invoice_pdf_theme: (settings as any)?.invoice_pdf_theme });
+    const effectiveStampSize = resolvedAppearance.stampSize;
 
     const pdfSettings: PDFSettings = settings ? {
       company_name: settings.company_name,
@@ -219,18 +227,21 @@ export const generateInvoicePDFBlob = async (
       company_rib: settings.company_rib,
       company_bank_agency: settings.company_bank_agency,
       logo_data: settings.logo_data,
-      footer_logo_data: settings.footer_logo_data,
+      logo_size: resolvedAppearance.logoHeight,
       body_pattern_data: settings.body_pattern_data,
       stamp_data: settings.stamp_data,
       stamp_size: effectiveStampSize,
       signature_data: settings.signature_data,
       signature_size: settings.signature_size ? Number(settings.signature_size) : undefined,
       primary_color: settings.primary_color,
+      invoice_pdf_font: settings.invoice_pdf_font,
       license_active: licenseActive,
     } : { license_active: licenseActive, stamp_size: effectiveStampSize, legal_name: "EURL OMADA AGENCY" };
 
-    const theme = (settings?.invoice_pdf_theme as InvoicePdfTheme) || 'structure';
+    const theme = resolvedAppearance.theme;
     const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
+
+    console.log('🚀 [PDF_EXPORT_PAYLOAD]', { invoiceId: formattedInvoice.id, resolvedAppearance });
 
     const instance = pdf(React.createElement(Template, { invoice: formattedInvoice, settings: pdfSettings }) as React.ReactElement<DocumentProps>);
     const blob = await instance.toBlob();
@@ -270,7 +281,6 @@ export const generateCumulativesPDFBlob = async (
         company_rib: settings.company_rib,
         company_bank_agency: settings.company_bank_agency,
         logo_data: settings.logo_data,
-        footer_logo_data: settings.footer_logo_data,
         qr_code_data: settings.qr_code_data,
         primary_color: settings.primary_color,
         body_pattern_data: settings.body_pattern_data,
@@ -340,7 +350,6 @@ export const generatePayrollPDFBlob = async (
         company_rib: settings.company_rib,
         company_bank_agency: settings.company_bank_agency,
         logo_data: settings.logo_data,
-        footer_logo_data: settings.footer_logo_data,
         qr_code_data: settings.qr_code_data,
         primary_color: settings.primary_color,
         body_pattern_data: settings.body_pattern_data,
@@ -384,7 +393,7 @@ export const generatePayrollPDF = async (
 
 // Only used if getVersion() can't run (e.g. previewing outside Tauri) — the
 // real value always comes from the running app via getVersion() below.
-export const FALLBACK_APP_VERSION = "1.0.4";
+export const FALLBACK_APP_VERSION = "1.0.0";
 
 /**
  * Generates one employee's individual "Bulletin de Paie" (Algerian payslip

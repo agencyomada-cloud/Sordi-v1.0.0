@@ -228,17 +228,17 @@ export default function DeliveriesPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
             <div>
-              <h1 className="text-3xl text-foreground tracking-tight">Bons de livraison</h1>
-              <p className="text-muted-foreground mt-1">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground">Bons de livraison</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Gérez vos livraisons et générez des factures · {deliveryNotes?.length || 0} bon{(deliveryNotes?.length || 0) > 1 ? "s" : ""}
               </p>
             </div>
 
-            <div className="flex gap-3 flex-wrap">
-              <Button onClick={() => navigate("/deliveries/new")}>
-                <Plus className="w-4 h-4 mr-2" />
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="default" size="sm" className="h-[30px] px-3 text-xs rounded-md gap-1.5" onClick={() => navigate("/deliveries/new")}>
+                <Plus className="w-3.5 h-3.5" />
                 Nouveau bon
               </Button>
             </div>
@@ -315,21 +315,22 @@ export default function DeliveriesPage() {
           </BulkActionBar>
 
           {/* Table */}
+          <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="[&:has([role=checkbox])]:pl-5">
+              <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                <TableHead className="[&:has([role=checkbox])]:pl-5 px-3">
                   <Checkbox
                     checked={selectedDeliveries.length === filteredNotes?.length && filteredNotes?.length > 0}
                     onCheckedChange={toggleAll}
                   />
                 </TableHead>
-                <TableHead>N° BL</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead className="hidden md:table-cell">Date</TableHead>
-                <TableHead numeric>Montant</TableHead>
-                <TableHead className="hidden sm:table-cell">Statut</TableHead>
-                <TableHead className="w-14"></TableHead>
+                <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">N° BL</TableHead>
+                <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Client</TableHead>
+                <TableHead className="hidden md:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Date</TableHead>
+                <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Montant</TableHead>
+                <TableHead className="hidden sm:table-cell text-[11px] font-semibold text-muted-foreground uppercase px-3">Statut</TableHead>
+                <TableHead className="w-14 text-[11px] font-semibold text-muted-foreground uppercase px-3"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -358,19 +359,19 @@ export default function DeliveriesPage() {
                   return (
                   <TableRow
                     key={note.id}
-                    className="cursor-pointer"
+                    className="h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer"
                     onClick={() => navigate(`/deliveries/${note.id}`)}
                   >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selectedDeliveries.includes(note.id)}
                         onCheckedChange={() => toggleDelivery(note.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium font-mono tabular-nums tracking-tight">
+                    <TableCell className="font-medium font-mono tabular-nums px-3">
                       {note.delivery_number}
                     </TableCell>
-                    <TableCell className="text-muted-foreground max-w-[220px]">
+                    <TableCell className="text-muted-foreground max-w-[220px] px-3">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="block truncate">{note.clients?.name}</span>
@@ -378,24 +379,24 @@ export default function DeliveriesPage() {
                         <TooltipContent side="top">{note.clients?.name}</TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="text-muted-foreground hidden md:table-cell">
+                    <TableCell className="text-muted-foreground hidden md:table-cell px-3">
                       {formatDate(note.delivery_date)}
                     </TableCell>
-                    <TableCell numeric className="font-medium">
+                    <TableCell numeric className="font-medium px-3">
                       {formatCurrency(calculateTotal(note.delivery_note_items || []))}
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell">
+                    <TableCell className="hidden sm:table-cell px-3">
                       <StatusBadge tone={statusConfig.variant}>{statusConfig.label}</StatusBadge>
                     </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                    <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
+                              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground"
                               onClick={(e) => { e.stopPropagation(); handleCopyId(note.id); }}
                             >
-                              <Copy className="w-4 h-4" />
+                              <Copy className="w-3.5 h-3.5" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="top">Copier l'ID</TooltipContent>
@@ -403,19 +404,19 @@ export default function DeliveriesPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground disabled:opacity-50"
+                              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all text-muted-foreground hover:text-foreground disabled:opacity-50"
                               onClick={(e) => { e.stopPropagation(); handleDownloadPDF(note.id); }}
                               disabled={downloadingId === note.id}
                             >
-                              {downloadingId === note.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                              {downloadingId === note.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="top">Télécharger PDF</TooltipContent>
                         </Tooltip>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-secondary transition-all">
-                              <MoreHorizontal className="w-4 h-4" />
+                            <button className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all">
+                              <MoreHorizontal className="w-3.5 h-3.5" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -451,6 +452,7 @@ export default function DeliveriesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
           </div>
       </main>
 

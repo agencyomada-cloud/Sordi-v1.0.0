@@ -13,11 +13,12 @@ import {
 } from "@remixicon/react";
 import {
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   StatusBadge,
   Dialog,
   DialogContent,
@@ -99,18 +100,17 @@ const Partners = () => {
   const recordWithdrawal = useRecordPartnerWithdrawal();
   const deleteWithdrawal = useDeletePartnerWithdrawal();
 
-  // Rapport Mensuel d'Activité & Clôture — deliberately its own
-  // month/year pair, independent of the page's yearly selectedYear filter
-  // above (a monthly closing report and the yearly capital-distribution
-  // view answer different questions and shouldn't share one selector).
+  // Rapport Mensuel d'Activité & Clôture — the month is its own selector
+  // (independent of the page's yearly capital-distribution filter below),
+  // but the year now follows selectedYear so the top header doesn't need
+  // a second year dropdown for the same concept.
   const [reportMonth, setReportMonth] = useState((new Date().getMonth() + 1).toString());
-  const [reportYear, setReportYear] = useState(currentYear.toString());
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const handleGenerateMonthlyReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const report = await db.partners.getMonthlyReport(activeCompanyId, parseInt(reportYear), parseInt(reportMonth));
+      const report = await db.partners.getMonthlyReport(activeCompanyId, parseInt(selectedYear), parseInt(reportMonth));
       // generateMonthlyReportPDF shows its own success toast (with the saved
       // path) once the native save dialog resolves. A null result means the
       // user cancelled that dialog — a clean abort, not an error.
@@ -211,19 +211,19 @@ const Partners = () => {
   };
 
   return (
-    <main className="flex-1 p-8 pt-4">
-      <div className="max-w-[1600px] mx-auto w-full">
-        {/* xl, not md — this title is long and the controls (year select +
-            2 buttons) need real room; sharing a row at md's 768px squeezed
-            the title into a 3-line wrap at the app's minimum window width. */}
-        <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
+    <main className="flex-1 p-6">
+      <div className="max-w-[1600px] mx-auto w-full space-y-5">
+        {/* xl, not md — this title is long and the controls need real room;
+            sharing a row at md's 768px squeezed the title into a 3-line
+            wrap at the app's minimum window width. */}
+        <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">Associés &amp; Répartition des Bénéfices</h1>
-            <p className="text-muted-foreground mt-1">Gérez la structure du capital et les prélèvements des associés</p>
+            <h1 className="text-lg font-semibold text-foreground tracking-tight">Associés &amp; Répartition des Bénéfices</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Gérez la structure du capital et les prélèvements des associés</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-28">
+              <SelectTrigger className="w-24 h-[30px] text-xs rounded-md">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -234,34 +234,12 @@ const Partners = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={() => openWithdrawalDialog()} variant="outline" disabled={!partners?.length}>
-              <WalletIcon className="w-4 h-4 mr-2" />
-              Enregistrer un prélèvement
-            </Button>
-            <Button onClick={openCreateDialog}>
-              <Plus className="w-4 h-4 mr-2" />
-              Ajouter un associé
-            </Button>
-          </div>
-        </div>
 
-        {/* Rapport Mensuel d'Activité & Clôture — independent month/year
-            pair from the yearly selectedYear filter above (see state
-            comment). Both selects reflow to full width on small screens so
-            the generate button never gets crowded off-row. */}
-        <div className="mb-6 rounded-2xl border border-border/50 bg-card/60 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
-              <ReportIcon className="w-4 h-4 text-primary" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">Rapport Mensuel d'Activité &amp; Clôture</p>
-              <p className="text-xs text-muted-foreground truncate">Synthèse financière, répartition des associés, RH et projets pour un mois donné</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:ml-auto shrink-0">
+            {/* Rapport Mensuel d'Activité & Clôture — folded into the top
+                action header as a compact month select + generate button,
+                replacing the previously detached full-width report card. */}
             <Select value={reportMonth} onValueChange={setReportMonth}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-28 h-[30px] text-xs rounded-md">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -272,21 +250,20 @@ const Partners = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={reportYear} onValueChange={setReportYear}>
-              <SelectTrigger className="w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={year}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleGenerateMonthlyReport} disabled={isGeneratingReport}>
-              <ReportIcon className="w-4 h-4 mr-2" />
+            <Button onClick={handleGenerateMonthlyReport} disabled={isGeneratingReport} variant="outline" size="sm" className="h-[30px] text-xs rounded-md gap-1.5">
+              <ReportIcon className="w-3.5 h-3.5" />
               {isGeneratingReport ? "Génération..." : "Générer Rapport Mensuel (PDF)"}
+            </Button>
+
+            <div className="w-px h-5 bg-border mx-0.5" />
+
+            <Button onClick={() => openWithdrawalDialog()} variant="outline" size="sm" disabled={!partners?.length} className="h-[30px] text-xs rounded-md gap-1.5">
+              <WalletIcon className="w-3.5 h-3.5" />
+              Enregistrer un prélèvement
+            </Button>
+            <Button onClick={openCreateDialog} size="sm" className="h-[30px] text-xs rounded-md gap-1.5">
+              <Plus className="w-3.5 h-3.5" />
+              Ajouter un associé
             </Button>
           </div>
         </div>
@@ -296,7 +273,7 @@ const Partners = () => {
             partners) since equity_percentage is the only capital-shaped
             field the data model has — there's no separate invested-capital
             amount to report. */}
-        <div className="mb-6">
+        <div>
           <MetricStrip
             cells={[
               { key: "capital", label: "Capital Total (Exercice)", value: formatCurrency(netProfitPeriod), numericValue: netProfitPeriod, format: formatCurrency, icon: ProfitIcon, sublabel: `Exercice ${selectedYear}` },
@@ -315,67 +292,65 @@ const Partners = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 mb-6">
-          <Card className="rounded-2xl border border-border/50 p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
-                <PieChartIcon className="w-5 h-5 text-primary" />
+        {/* Capital Distribution Panel */}
+        <div className="border border-border/80 rounded-md bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/10 shrink-0">
+              <PieChartIcon className="w-4 h-4 text-primary" />
+            </span>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Répartition du Capital</p>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+            {(partners || []).map((p, idx) => (
+              <div
+                key={p.id}
+                className={`h-full ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]} ${p.is_active ? "" : "opacity-30"}`}
+                style={{ width: `${p.equity_percentage}%` }}
+                title={`${p.name} — ${p.equity_percentage}%`}
+              />
+            ))}
+            {totalEquity < 100 && <div className="h-full bg-transparent" style={{ width: `${100 - totalEquity}%` }} />}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3">
+            {(partners || []).map((p, idx) => (
+              <span key={p.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}`} />
+                {p.name} <span className="font-mono tabular-nums text-foreground font-medium">{p.equity_percentage}%</span>
               </span>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Répartition du Capital</p>
-            </div>
-            <div className="h-3 rounded-full bg-muted overflow-hidden flex">
-              {(partners || []).map((p, idx) => (
-                <div
-                  key={p.id}
-                  className={`h-full ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]} ${p.is_active ? "" : "opacity-30"}`}
-                  style={{ width: `${p.equity_percentage}%` }}
-                  title={`${p.name} — ${p.equity_percentage}%`}
-                />
-              ))}
-              {totalEquity < 100 && <div className="h-full bg-transparent" style={{ width: `${100 - totalEquity}%` }} />}
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
-              {(partners || []).map((p, idx) => (
-                <span key={p.id} className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span className={`w-2 h-2 rounded-full ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}`} />
-                  {p.name.split(" ")[0]} {p.equity_percentage}%
-                </span>
-              ))}
-              {totalEquity < 100 && <span className="text-xs text-muted-foreground">Non attribué {(100 - totalEquity).toFixed(1)}%</span>}
-            </div>
-          </Card>
+            ))}
+            {totalEquity < 100 && (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto">
+                <span className="w-2 h-2 rounded-full shrink-0 bg-border" />
+                Réserve non distribuée <span className="font-mono tabular-nums text-foreground font-medium">{(100 - totalEquity).toFixed(1)}%</span>
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Partners overview */}
+        {/* Partners Ledger */}
         {isLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[1, 2].map((i) => (
-              <Card key={i} className="rounded-2xl border border-border/50 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
-                      <div className="space-y-1.5">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-20" />
-                      </div>
-                    </div>
-                    <Skeleton className="h-5 w-20 rounded-full shrink-0" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[1, 2, 3].map((j) => (
-                      <div key={j} className="space-y-1.5">
-                        <Skeleton className="h-3 w-16" />
-                        <Skeleton className="h-4 w-20" />
-                      </div>
+          <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <TableHead key={i}><Skeleton className="h-3 w-16" /></TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[1, 2, 3].map((i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : !partners?.length ? (
-          <div className="bg-card rounded-3xl border border-border/30 shadow-card">
+          <div className="bg-card rounded-md border border-border/80">
             <EmptyState
               title="Aucun associé"
               description="Ajoutez les associés de l'entreprise pour suivre la répartition des bénéfices"
@@ -384,155 +359,141 @@ const Partners = () => {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {partners.map((partner) => {
-              const balancePositive = partner.remaining_balance >= 0;
-              const settled = Math.abs(partner.remaining_balance) < 1;
-              return (
-                <Card
-                  key={partner.id}
-                  className={`rounded-2xl border border-border/50 shadow-sm ${!partner.is_active ? "opacity-60 saturate-50" : ""}`}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shrink-0 shadow">
-                          <span className="text-primary-foreground text-lg font-black select-none">
-                            {partner.name.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-foreground truncate">{partner.name}</p>
-                            {!partner.is_active && <StatusBadge tone="neutral">Inactif</StatusBadge>}
-                          </div>
-                          <p className="text-sm text-muted-foreground truncate">{partner.role || "Associé"}</p>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="shrink-0 font-mono tabular-nums">
-                        {partner.equity_percentage}% des parts
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 mb-4">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Part théorique</p>
-                        <p className="font-mono font-semibold tabular-nums tracking-tight mt-0.5">{formatCurrency(partner.allocated_profit)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total prélevé</p>
-                        <p className="font-mono font-semibold tabular-nums tracking-tight mt-0.5 text-destructive">{formatCurrency(partner.total_withdrawn)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Solde actuel</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <p className="font-mono font-semibold tabular-nums tracking-tight">{formatCurrency(partner.remaining_balance)}</p>
-                          <StatusBadge tone={settled ? "neutral" : balancePositive ? "success" : "error"} className="text-[10px] px-1.5 py-0">
+          <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Nom</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Parts %</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Part Théorique</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Prélèvements Réalisés</TableHead>
+                  <TableHead numeric className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Dividendes Disponibles</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3">Statut</TableHead>
+                  <TableHead className="text-[11px] font-semibold text-muted-foreground uppercase px-3 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partners.map((partner) => {
+                  const balancePositive = partner.remaining_balance >= 0;
+                  const settled = Math.abs(partner.remaining_balance) < 1;
+                  return (
+                    <TableRow
+                      key={partner.id}
+                      className={`h-8 text-xs border-b border-border/30 hover:bg-muted/20 transition-colors ${!partner.is_active ? "opacity-50" : ""}`}
+                    >
+                      <TableCell className="font-medium px-3">{partner.name}</TableCell>
+                      <TableCell numeric className="font-mono tabular-nums font-medium px-3">{partner.equity_percentage}%</TableCell>
+                      <TableCell numeric className="font-mono tabular-nums font-medium px-3">{formatCurrency(partner.allocated_profit)}</TableCell>
+                      <TableCell numeric className="font-mono tabular-nums font-medium text-destructive px-3">{formatCurrency(partner.total_withdrawn)}</TableCell>
+                      <TableCell numeric className="font-mono tabular-nums font-semibold text-primary px-3">{formatCurrency(partner.remaining_balance)}</TableCell>
+                      <TableCell className="px-3">
+                        {!partner.is_active ? (
+                          <StatusBadge tone="neutral">Inactif</StatusBadge>
+                        ) : (
+                          <StatusBadge tone={settled ? "neutral" : balancePositive ? "success" : "error"}>
                             {settled ? "Soldé" : balancePositive ? "Créditeur" : "Débiteur"}
                           </StatusBadge>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-3">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Enregistrer un prélèvement" onClick={() => openWithdrawalDialog(partner.id)}>
+                            <WalletIcon className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Historique" onClick={() => setHistoryPartner(partner)}>
+                            <HistoryIcon className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Modifier" onClick={() => openEditDialog(partner)}>
+                            <EditIcon className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" title="Supprimer" onClick={() => setDeleteTarget(partner)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-3 border-t border-border/50">
-                      <Button size="sm" variant="outline" onClick={() => openWithdrawalDialog(partner.id)}>
-                        <WalletIcon className="w-3.5 h-3.5 mr-1.5" />
-                        Enregistrer un prélèvement
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setHistoryPartner(partner)}>
-                        <HistoryIcon className="w-3.5 h-3.5 mr-1.5" />
-                        Historique
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(partner)}>
-                        <EditIcon className="w-3.5 h-3.5 mr-1.5" />
-                        Modifier
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(partner)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         )}
 
         {/* Add / Edit partner dialog */}
         <Dialog open={partnerDialogOpen} onOpenChange={setPartnerDialogOpen}>
-          <DialogContent className="max-w-md rounded-3xl">
+          <DialogContent className="max-w-md rounded-xl">
             <DialogHeader>
               <DialogTitle>{editingPartner ? "Modifier l'associé" : "Ajouter un associé"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmitPartner} className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">Nom complet *</Label>
-                <Input
-                  value={partnerForm.name}
-                  onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })}
-                  required
-                  className="mt-1.5"
-                />
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Rôle</Label>
-                <Input
-                  placeholder="Ex: Gérant associé, Associé non gérant..."
-                  value={partnerForm.role}
-                  onChange={(e) => setPartnerForm({ ...partnerForm, role: e.target.value })}
-                  className="mt-1.5"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSubmitPartner} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label className="text-xs text-muted-foreground">Nom complet *</Label>
+                  <Input
+                    value={partnerForm.name}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })}
+                    required
+                    className="mt-1.5 h-8 text-xs"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs text-muted-foreground">Rôle</Label>
+                  <Input
+                    placeholder="Ex: Gérant associé, Associé non gérant..."
+                    value={partnerForm.role}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, role: e.target.value })}
+                    className="mt-1.5 h-8 text-xs"
+                  />
+                </div>
                 <div>
-                  <Label className="text-sm text-muted-foreground">Email</Label>
+                  <Label className="text-xs text-muted-foreground">Email</Label>
                   <Input
                     type="email"
                     value={partnerForm.email}
                     onChange={(e) => setPartnerForm({ ...partnerForm, email: e.target.value })}
-                    className="mt-1.5"
+                    className="mt-1.5 h-8 text-xs"
                   />
                 </div>
                 <div>
-                  <Label className="text-sm text-muted-foreground">Téléphone</Label>
+                  <Label className="text-xs text-muted-foreground">Téléphone</Label>
                   <Input
                     value={partnerForm.phone}
                     onChange={(e) => setPartnerForm({ ...partnerForm, phone: e.target.value })}
-                    className="mt-1.5"
+                    className="mt-1.5 h-8 text-xs"
                   />
                 </div>
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Part de capital (%) *</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  placeholder="0"
-                  value={partnerForm.equity_percentage}
-                  onChange={(e) => setPartnerForm({ ...partnerForm, equity_percentage: e.target.value })}
-                  required
-                  className="mt-1.5"
-                />
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {availableEquity.toFixed(1)}% disponible parmi les associés actifs
-                </p>
+                <div className="col-span-2">
+                  <Label className="text-xs text-muted-foreground">Part de capital (%) *</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    value={partnerForm.equity_percentage}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, equity_percentage: e.target.value })}
+                    required
+                    className="mt-1.5 h-8 text-xs"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {availableEquity.toFixed(1)}% disponible parmi les associés actifs
+                  </p>
+                </div>
               </div>
               {editingPartner && (
-                <div className="flex items-center justify-between rounded-xl border border-border/50 px-4 py-3">
-                  <Label className="text-sm">Associé actif</Label>
+                <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                  <Label className="text-xs">Associé actif</Label>
                   <Switch
                     checked={partnerForm.is_active}
                     onCheckedChange={(checked) => setPartnerForm({ ...partnerForm, is_active: checked })}
                   />
                 </div>
               )}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="ghost" onClick={() => setPartnerDialogOpen(false)}>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="ghost" size="sm" className="h-8 px-3 text-xs rounded-md" onClick={() => setPartnerDialogOpen(false)}>
                   Annuler
                 </Button>
-                <Button type="submit" disabled={createPartner.isPending || updatePartner.isPending}>
+                <Button type="submit" size="sm" className="h-8 px-3 text-xs rounded-md" disabled={createPartner.isPending || updatePartner.isPending}>
                   {createPartner.isPending || updatePartner.isPending ? "Enregistrement..." : "Enregistrer"}
                 </Button>
               </div>
@@ -542,7 +503,7 @@ const Partners = () => {
 
         {/* Record withdrawal dialog */}
         <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
-          <DialogContent className="max-w-md rounded-3xl">
+          <DialogContent className="max-w-md rounded-xl border border-border/80 shadow-2xl p-5">
             <DialogHeader>
               <DialogTitle>Enregistrer un prélèvement</DialogTitle>
             </DialogHeader>
@@ -625,7 +586,7 @@ const Partners = () => {
 
         {/* Withdrawal history dialog */}
         <Dialog open={!!historyPartner} onOpenChange={(open) => !open && setHistoryPartner(null)}>
-          <DialogContent className="max-w-lg rounded-3xl">
+          <DialogContent className="max-w-lg rounded-xl border border-border/80 shadow-2xl p-5">
             <DialogHeader>
               <DialogTitle>Historique des retraits — {historyPartner?.name}</DialogTitle>
             </DialogHeader>
@@ -637,7 +598,7 @@ const Partners = () => {
                       <Skeleton className="h-4 w-28" />
                       <Skeleton className="h-3 w-40" />
                     </div>
-                    <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                    <Skeleton className="w-7 h-7 rounded-md shrink-0" />
                   </div>
                 ))
               ) : !withdrawalHistory?.length ? (
@@ -647,7 +608,14 @@ const Partners = () => {
                   <div key={w.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 px-4 py-3">
                     <div className="min-w-0">
                       <p className="font-mono font-medium tabular-nums tracking-tight">{formatCurrency(w.amount)}</p>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p
+                        className="text-xs text-muted-foreground truncate"
+                        title={[
+                          new Date(w.withdrawal_date).toLocaleDateString("fr-FR"),
+                          w.payment_method ?? "",
+                          w.notes ?? "",
+                        ].filter(Boolean).join(" · ")}
+                      >
                         {new Date(w.withdrawal_date).toLocaleDateString("fr-FR")}
                         {w.payment_method ? ` · ${w.payment_method}` : ""}
                         {w.notes ? ` · ${w.notes}` : ""}
@@ -655,7 +623,7 @@ const Partners = () => {
                     </div>
                     <button
                       onClick={() => deleteWithdrawal.mutate(w.id)}
-                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all shrink-0"
+                      className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </button>

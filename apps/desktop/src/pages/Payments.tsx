@@ -30,6 +30,7 @@ import { usePayments, useCreatePayment, useUpdatePayment, useDeletePayment, useR
 import { useInvoices, useUpdateInvoiceStatus } from "@/hooks/useInvoices";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useAppDataDir, resolveAppDataAbsolutePath, resolveAppDataFileUrl } from "@/hooks/useAppDataDir";
+import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import type { Payment } from "@/lib/database";
 import { toast } from "sonner";
 
@@ -292,6 +293,15 @@ export default function PaymentsPage() {
     setIsDialogOpen(true);
   };
 
+  // Desktop keyboard ergonomics — N opens the new-payment dialog, Escape
+  // clears the search box, ArrowUp/ArrowDown + Enter select and open a row.
+  const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
+    rows: filteredInvoices,
+    onOpen: (invoice: any) => navigate(`/invoices/${invoice.id}`),
+    onCreate: () => openPaymentDialog(),
+    onEscape: () => setSearchQuery(""),
+  });
+
   const handlePickAttachment = async () => {
     const picked = await openFileDialog({
       filters: [{ name: "Pièce justificative", extensions: ["png", "jpg", "jpeg", "pdf"] }],
@@ -449,20 +459,18 @@ export default function PaymentsPage() {
       <main className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-[1600px] mx-auto w-full">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Suivi des Règlements</h1>
-              <p className="text-muted-foreground">État des factures et paiements</p>
-            </div>
-            <Button onClick={() => openPaymentDialog()}>
-              <Plus className="w-4 h-4 mr-2" />
+          <div className="h-9 mb-3 flex items-center justify-between gap-4">
+            <h1 className="text-sm font-semibold text-foreground truncate">Suivi des Règlements</h1>
+            <Button className="h-[30px] px-3 text-xs font-medium rounded-md shadow-xs gap-1.5" onClick={() => openPaymentDialog()}>
+              <Plus className="w-3.5 h-3.5" />
               Nouveau paiement
+              <kbd className="ml-1 text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
             </Button>
           </div>
 
           {/* Metric strip — shared KPI ribbon component (same shape as the
               Dashboard's Tier 2), replacing the old StatsCard grid. */}
-          <div className="mb-6">
+          <div className="mb-4">
             <MetricStrip
               cells={[
                 { key: "total", label: "Total Encaissé", value: formatCurrency(stats.total), numericValue: stats.total, format: formatCurrency, icon: Receipt, sublabel: `${stats.count} paiements` },
@@ -534,17 +542,18 @@ export default function PaymentsPage() {
             </div>
           </div>
 
-          {/* Table - Invoice Centric */}
+          {/* Edge-to-edge desktop data grid — Invoice Centric */}
+          <div className="border border-border/80 rounded-md bg-card overflow-hidden w-full">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="whitespace-nowrap">Client / Projet</TableHead>
-                <TableHead className="whitespace-nowrap">Date</TableHead>
-                <TableHead className="hidden md:table-cell whitespace-nowrap">Échéance</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Montant TTC</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Payé</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Solde</TableHead>
-                <TableHead className="w-40">Statut</TableHead>
+              <TableRow className="h-8 bg-muted/40 hover:bg-muted/40">
+                <TableHead className="whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client / Projet</TableHead>
+                <TableHead className="whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</TableHead>
+                <TableHead className="hidden md:table-cell whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Échéance</TableHead>
+                <TableHead className="text-right whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Montant TTC</TableHead>
+                <TableHead className="text-right whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Payé</TableHead>
+                <TableHead className="text-right whitespace-nowrap text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Solde</TableHead>
+                <TableHead className="w-40 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Statut</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
@@ -565,7 +574,7 @@ export default function PaymentsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredInvoices.map((invoice: any) => {
+                filteredInvoices.map((invoice: any, index: number) => {
                   const paid = invoice.calculated_paid || 0;
                   const total = invoice.total_ttc || 0;
                   const balance = invoice.calculated_balance || 0;
@@ -609,15 +618,23 @@ export default function PaymentsPage() {
                   return (
                     <ContextMenu key={invoice.id}>
                       <ContextMenuTrigger asChild>
-                        <TableRow className="group cursor-pointer" dimmed={isCancelled} onDoubleClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                        <TableRow
+                          className={cn(
+                            "h-8 text-xs border-b border-border/40 hover:bg-muted/20 transition-colors group cursor-pointer",
+                            focusedIndex === index && "bg-muted/40 ring-1 ring-inset ring-ring/40"
+                          )}
+                          dimmed={isCancelled}
+                          onDoubleClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                          onMouseEnter={() => setFocusedIndex(index)}
+                        >
                           <TableCell className="whitespace-nowrap">
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="min-w-0">
-                                <div className="font-semibold text-sm text-foreground truncate">
+                                <div className="font-semibold text-sm text-foreground truncate" title={invoice.clients?.name || "Client inconnu"}>
                                   {invoice.clients?.name || "Client inconnu"}
                                 </div>
                                 {invoice.projects?.name && (
-                                  <div className="text-xs text-slate-500 font-normal truncate">
+                                  <div className="text-xs text-slate-500 font-normal truncate" title={invoice.projects.name}>
                                     {invoice.projects.name}
                                   </div>
                                 )}
@@ -629,10 +646,10 @@ export default function PaymentsPage() {
                           </TableCell>
                           <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(invoice.invoice_date)}</TableCell>
                           <TableCell className="text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatDate(invoice.due_date)}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
+                          <TableCell numeric className="font-semibold">
                             {formatCurrency(total)}
                           </TableCell>
-                          <TableCell className={cn("text-right font-medium tabular-nums whitespace-nowrap", isCancelled ? "text-muted-foreground" : "text-stat-positive")}>
+                          <TableCell numeric className={cn("font-medium", isCancelled ? "text-muted-foreground" : "text-stat-positive")}>
                             {formatCurrency(paid)}
                             {/* This column is one cumulative total per invoice, not one row
                                 per payment — a second (or later) tranche changes this number
@@ -647,7 +664,7 @@ export default function PaymentsPage() {
                               </button>
                             )}
                           </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums whitespace-nowrap">
+                          <TableCell numeric className="font-medium">
                             <span className={isCancelled ? "text-muted-foreground" : balance > 0 ? "text-destructive" : "text-muted-foreground"}>
                               {formatCurrency(balance)}
                             </span>
@@ -731,13 +748,14 @@ export default function PaymentsPage() {
             </TableBody>
           </Table>
           </div>
+          </div>
       </main>
 
       {/* Payment history dialog — the main table is invoice-centric (one row
           per invoice, all its payments summed into "Payé"), so this is where
           an individual payment actually gets deleted from. */}
       <Dialog open={!!historyInvoiceId} onOpenChange={(open) => !open && setHistoryInvoiceId(null)}>
-        <DialogContent className="max-w-lg rounded-3xl">
+        <DialogContent className="max-w-lg rounded-xl border border-border/80 shadow-2xl p-5">
           <DialogHeader>
             <DialogTitle>Historique des paiements — {historyInvoice?.invoice_number}</DialogTitle>
           </DialogHeader>
@@ -752,7 +770,16 @@ export default function PaymentsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-mono font-semibold tabular-nums tracking-tight">{formatCurrency(p.amount)}</p>
-                        <p className="text-xs text-muted-foreground truncate">
+                        <p
+                          className="text-xs text-muted-foreground truncate"
+                          title={[
+                            formatDate(p.payment_date),
+                            p.payment_method ? (p.payment_method === "cash" ? "Espèces" : p.payment_method === "cheque" ? "Chèque" : "Virement") : "",
+                            p.cheque_number ? `N° ${p.cheque_number}` : "",
+                            operator ? `Encaissé par ${operator.name}` : "",
+                            p.notes ?? "",
+                          ].filter(Boolean).join(" · ")}
+                        >
                           {formatDate(p.payment_date)}
                           {p.payment_method ? ` · ${p.payment_method === "cash" ? "Espèces" : p.payment_method === "cheque" ? "Chèque" : "Virement"}` : ""}
                           {p.cheque_number ? ` · N° ${p.cheque_number}` : ""}
@@ -763,13 +790,13 @@ export default function PaymentsPage() {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => openEditPaymentDialog(p)}
-                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                          className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all"
                         >
                           <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
                         <button
                           onClick={() => handleDeletePayment(p)}
-                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-secondary transition-all"
+                          className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-secondary transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-destructive" />
                         </button>
@@ -794,7 +821,7 @@ export default function PaymentsPage() {
           balance_due/status server-side (update_payment calls the same
           update_invoice_payment_status create/delete already use). */}
       <Dialog open={!!editingPayment} onOpenChange={(open) => !open && setEditingPayment(null)}>
-        <DialogContent className="sm:max-w-[440px] rounded-3xl">
+        <DialogContent className="sm:max-w-[440px] rounded-xl border border-border/80 shadow-2xl p-5">
           <DialogHeader>
             <DialogTitle>Modifier le paiement</DialogTitle>
           </DialogHeader>
@@ -879,7 +906,7 @@ export default function PaymentsPage() {
 
       {/* Create Payment Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
-          <DialogContent className="sm:max-w-[500px] rounded-3xl">
+          <DialogContent className="sm:max-w-[500px] rounded-xl border border-border/80 shadow-2xl p-5">
             <DialogHeader>
               <DialogTitle>Enregistrer un paiement</DialogTitle>
             </DialogHeader>

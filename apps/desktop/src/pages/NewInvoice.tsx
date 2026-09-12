@@ -9,9 +9,6 @@ import {
 } from "@remixicon/react";
 import {
   Button,
-  ToggleGroup,
-  ToggleGroupItem,
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -29,14 +26,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@sordi/ui";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useClients } from "@/hooks/useClients";
 import { useProducts } from "@/hooks/useProducts";
 import { useProjects } from "@/hooks/useProjects";
 import { useCreateInvoice, useUpdateInvoice, useInvoice } from "@/hooks/useInvoices";
 import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
+import { InvoiceCustomizeDrawer } from "@/components/invoice/InvoiceCustomizeDrawer";
 import { generateInvoicePDF, openSavedFile } from "@/lib/pdfGenerator";
+import { resolveInvoiceAppearance } from "@/components/pdf/invoiceAppearance";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
 import { useSettings } from "@/hooks/useSettings";
@@ -69,6 +68,11 @@ interface NewInvoicePageProps {
 
 export default function NewInvoicePage({ documentType: documentTypeProp = "invoice" }: NewInvoicePageProps = {}) {
   const navigate = useNavigate();
+
+  // Sidebar focus-mode collapse for this route is handled in AppLayout.tsx
+  // (keyed off the URL pathname) rather than here — see its comment for why
+  // a mount-time event from this page can't reliably reach it.
+
   const { data: clients } = useClients();
   const { data: products } = useProducts();
   const { data: projects } = useProjects();
@@ -137,6 +141,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   const [taxMode, setTaxMode] = useState<'standard' | 'exempt' | 'ttc_direct'>(draftData?.taxMode || 'standard');
   const [customTitle, setCustomTitle] = useState(draftData?.customTitle || (documentTypeProp === "proforma" ? "Facture Proforma" : ""));
   const [isDownloading, setIsDownloading] = useState(false);
+  const [customizeDrawerOpen, setCustomizeDrawerOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(() => {
     if (draftData?.savedAt) {
       const d = new Date(draftData.savedAt);
@@ -237,6 +242,24 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
     }
   }, [id, draftStorageKey, clientId, projectId, invoiceDate, dueDate, notes, headerNote, items, paymentMode, discountRate, discountAmount, discountType, taxMode, customTitle, isFromDraftProducts, advancePaymentConsumed]);
 
+  // Immutability guard, frontend side — mirrors the Rust `update_invoice`
+  // guard (commands.rs) exactly: paid/partial/converted/cancelled invoices
+  // can never be edited, only corrected via an Avoir. Reaching this route
+  // directly (typed URL, stale bookmark, back-button into a since-locked
+  // invoice) must redirect back to the read-only detail page instead of
+  // rendering an editor that would just fail on save with INVOICE_LOCKED.
+  useEffect(() => {
+    if (id && existingInvoice) {
+      const status = (existingInvoice as any).status;
+      if (["paid", "partial", "converted", "cancelled"].includes(status)) {
+        toast.warning("Document validé — modification impossible", {
+          description: "Utilisez un Avoir pour corriger cette facture.",
+        });
+        navigate(`/invoices/${id}`, { replace: true });
+      }
+    }
+  }, [id, existingInvoice, navigate]);
+
   // Load existing invoice data if editing
   useEffect(() => {
     if (existingInvoice && products) {
@@ -281,9 +304,18 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
         setItems(mappedItems);
       }
 
-      // Restore secondary register fields from saved invoice
+      // Restore secondary register fields from saved invoice — and, just as
+      // important, the invoice's real lifecycle status. The initial
+      // draftInvoice state (used for brand-new invoices) has no `status`
+      // field at all, so without copying it here a PAID invoice being
+      // reopened for editing silently showed as a draft everywhere that
+      // reads invoice.status — the canvas badge, the watermark logic, all
+      // of it — not because any of them hardcode "draft", but because this
+      // was the one spot that never carried the real value over in the
+      // first place.
       setDraftInvoice(prev => ({
         ...prev,
+        status: inv.status,
         use_secondary_register: inv.use_secondary_register || false,
         selected_secondary_rc: inv.selected_secondary_rc || null,
         selected_secondary_address: inv.selected_secondary_address || null,
@@ -379,13 +411,26 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
 
     const calcTotal = (calcSubtotal - finalDiscountAmount) + totalTva + calcTimbre;
 
+    // Every monetary figure above is built from chained floating-point
+    // multiplication/division (rate percentages, discount ratios, the
+    // timbre bracket math) and can carry residue past 2 decimals (e.g.
+    // 894.6955000000001) that a naive display format would round to 3
+    // decimals instead of 2 (Intl.NumberFormat's maximumFractionDigits
+    // defaults to max(minimumFractionDigits, 3) when only
+    // minimumFractionDigits is set — that's what produced the "894,696 DA"
+    // glitch). Rounding here, once, at the source, means every consumer of
+    // these totals (this page, the invoice actually saved to the database,
+    // the PDF) works from the same clean 2-decimal values instead of each
+    // needing its own display-layer rounding to hide the same underlying
+    // imprecision.
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
     return {
-      calcSubtotal,
-      calcTva: totalTva,
-      calcTimbre,
-      calcTotal,
-      finalDiscountAmount,
+      calcSubtotal: round2(calcSubtotal),
+      calcTva: round2(totalTva),
+      calcTimbre: round2(calcTimbre),
+      calcTotal: round2(calcTotal),
+      finalDiscountAmount: round2(finalDiscountAmount),
       finalDiscountRate
     };
   };
@@ -593,11 +638,15 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("fr-DZ", {
-      style: "decimal",
-      minimumFractionDigits: 2,
-    }).format(amount) + " DA";
+  // Local, deliberately not Intl.NumberFormat with only minimumFractionDigits
+  // set — that combination defaults maximumFractionDigits to 3, which is
+  // exactly the "894,696 DA" 3-decimal glitch fixed elsewhere in this page.
+  // draftInvoice.total_ttc is already rounded to 2 decimals at the source
+  // (calculateTotals' round2), so this is just safe display formatting.
+  const formatDockTotal = (amount: number) => {
+    const formatted = (amount || 0).toFixed(2).replace('.', ',');
+    const [intPart, decPart] = formatted.split(',');
+    return `${intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')},${decPart} DA`;
   };
 
   const submitInvoice = () => {
@@ -692,64 +741,218 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
     }
   };
 
+  // Status-aware toolbar message for an EXISTING invoice being reopened
+  // (id set) — distinct from the localStorage-draft autosave indicator
+  // below, which only ever applies to a brand-new, not-yet-saved invoice.
+  // Without this, the toolbar simply showed nothing for a saved invoice
+  // (that autosave block is gated on `!id`), which read as "this must
+  // still be a draft" by omission — not a hardcoded string anywhere, just
+  // a state this toolbar never accounted for.
+  const existingInvoiceStatusDisplay = (() => {
+    const status = draftInvoice.status;
+    if (status === "paid") {
+      return { dot: "bg-emerald-500", text: "text-emerald-600 font-medium", label: "Facture payée" };
+    }
+    if (status === "partial") {
+      return { dot: "bg-blue-500", text: "text-blue-600 font-medium", label: "Paiement partiel" };
+    }
+    if (status === "issued" || status === "overdue") {
+      return { dot: "bg-blue-500", text: "text-blue-600 font-medium", label: "Validée · En attente de paiement" };
+    }
+    if (status === "cancelled") {
+      return { dot: "bg-rose-500", text: "text-rose-600 font-medium", label: "Facture annulée" };
+    }
+    // draft, converted, or no status yet loaded
+    return { dot: "bg-amber-500", text: "text-muted-foreground", label: "Brouillon" };
+  })();
+
   return (
-        <main className="flex-1 p-8">
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <Button variant="ghost" onClick={() => navigate("/invoices")} className="gap-2 mb-2 p-0 h-auto hover:bg-transparent hover:text-primary">
-                <ArrowLeft className="w-4 h-4" />
-                {isProforma ? "Retour aux factures/proformas" : "Retour aux factures"}
-              </Button>
-              <h1 className="text-2xl font-semibold text-foreground">
+        <main className="flex-1 flex flex-col min-h-0 w-full max-w-full overflow-x-hidden">
+          {/* Single unified toolbar — replaces the old stacked title row +
+              actions row + settings/totals card (~250px of vertical space
+              before any of the actual document was visible). Sticky so it
+              stays reachable while a long multi-page invoice scrolls
+              underneath it. */}
+          <header className="sticky top-0 h-10 w-full max-w-full border-b border-border/80 bg-background/95 backdrop-blur-sm px-4 flex items-center justify-between gap-4 shrink-0 z-30 overflow-hidden select-none">
+            {/* Left Section — Navigation & Document Identity. The one
+                section allowed to compress (title truncates, the
+                autosave/reset block hides first) — `gap-4` on the header
+                itself guarantees real space between sections regardless of
+                how much (or little) `justify-between` has left to
+                distribute, and every element here is a normal in-flow flex
+                child (no absolute/relative positioning anywhere in this
+                bar), so nothing can render on top of anything else. */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/invoices")}
+                    className="h-7 w-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0 transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Retour</TooltipContent>
+              </Tooltip>
+              <div className="h-4 w-px bg-border shrink-0" aria-hidden="true" />
+              {/* Never truncates — `truncate` needs a shrinkable ancestor
+                  (`min-w-0`) to ever kick in, and that's exactly what made
+                  this collapse to "No…" under any pressure. `shrink-0` here
+                  and on the parent above means the autosave block (already
+                  hidden below `xl`) is the only thing that ever gives way. */}
+              <span className="text-xs font-semibold font-mono text-foreground shrink-0 whitespace-nowrap">
                 {id
                   ? (isProforma ? "Modifier le proforma" : "Modifier la facture")
-                  : (isProforma ? "Nouvelle Facture Proforma" : "Nouvelle facture")}
-              </h1>
-              <p className="text-muted-foreground">
-                {id
-                  ? `Modification ${isProforma ? "du proforma" : "de la facture"} ${draftInvoice.invoice_number}`
-                  : (isProforma ? "Créer une facture proforma / devis" : "Créer une facture en mode interactif")}
-              </p>
+                  : (isProforma ? "Nouvelle facture" : "Nouvelle facture")}
+                {(draftInvoice.invoice_number || nextInvoiceNumber) && (
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    N° {draftInvoice.invoice_number || nextInvoiceNumber}
+                  </span>
+                )}
+              </span>
               {!id && (lastSavedAt || resetFeedback) && (
-                <div className="flex items-center gap-2 mt-1.5 select-none">
-                  {/* Ambient Auto-Save Indicator */}
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground whitespace-nowrap">
                     <span
                       className={cn(
-                        "w-1.5 h-1.5 rounded-full ring-2",
-                        resetFeedback ? "bg-amber-500 ring-amber-500/20" : "bg-emerald-500 ring-emerald-500/20"
+                        "w-1.5 h-1.5 rounded-full shrink-0",
+                        resetFeedback ? "bg-amber-500" : "bg-emerald-500"
                       )}
                     />
-                    <span>
-                      {resetFeedback || `Brouillon enregistré à ${lastSavedAt?.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
+                    {/* Below `lg` only the dot survives — the timestamp text
+                        is the first thing to go once the window is tight,
+                        well before anything load-bearing has to move. */}
+                    <span className="hidden lg:inline">
+                      {resetFeedback || `Enregistré à ${lastSavedAt?.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
                     </span>
                   </span>
-
                   {!resetFeedback && (
-                    <>
-                      <span className="text-slate-200 select-none">•</span>
-
-                      {/* Discrete Reset Action */}
-                      <button
-                        type="button"
-                        onClick={() => setShowResetConfirm(true)}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-400 hover:text-rose-600 hover:bg-rose-50/60 transition-all group"
-                        title="Effacer ce brouillon et recommencer à zéro"
-                      >
-                        <RotateCcw className="w-3 h-3 stroke-[2] text-slate-400 group-hover:text-rose-600 transition-colors" />
-                        <span>Réinitialiser</span>
-                      </button>
-                    </>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setShowResetConfirm(true)}
+                          className="h-6 w-6 rounded-md hover:bg-muted text-muted-foreground/70 hover:text-foreground flex items-center justify-center transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">Réinitialiser le brouillon</TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
               )}
+              {/* Reopening a saved invoice (id set) — its real lifecycle
+                  status, not the new-draft autosave indicator above. */}
+              {id && (
+                <span className={cn("inline-flex items-center gap-1.5 text-[10px] whitespace-nowrap shrink-0", existingInvoiceStatusDisplay.text)}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", existingInvoiceStatusDisplay.dot)} />
+                  <span className="hidden lg:inline">{existingInvoiceStatusDisplay.label}</span>
+                </span>
+              )}
             </div>
 
-            {/* Actions Buttons */}
-            <div className="flex gap-3">
+            {/* Center Section — Scoped Document Settings. Hidden below lg
+                rather than wrapped, a 56px bar has no room to wrap into. */}
+            <div className="hidden lg:flex items-center gap-3 shrink-0">
+              <Select
+                value={projectId || "none"}
+                onValueChange={(value) => setProjectId(value === "none" ? "" : value)}
+                disabled={!!lockedProjectId}
+              >
+                <SelectTrigger id="project_associe" className="w-[160px] h-7 text-xs font-medium rounded-md">
+                  <SelectValue placeholder="Aucun projet" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun projet</SelectItem>
+                  {projects
+                    ?.filter((p) => !clientId || p.client_id === clientId)
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* RemixIcon components aren't forwardRef-wrapped — asChild
+                      needs a real DOM-ref-capable element (Radix's Slot
+                      clones its child and attaches a ref), so the icon is
+                      wrapped in a span rather than passed directly. */}
+                  <span className="inline-flex shrink-0">
+                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  Affecte cette facture à un projet pour suivre le chiffre d'affaires et la rentabilité dans les rapports analytiques.
+                </TooltipContent>
+              </Tooltip>
+
+              <div className="h-4 w-px bg-border" aria-hidden="true" />
+
+              <div className="inline-flex items-center h-[26px] p-0.5 bg-muted rounded-md text-[11px] font-medium gap-0.5">
+                {([
+                  ["standard", "Standard"],
+                  ["exempt", "HT"],
+                  ["ttc_direct", "TTC"],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setTaxMode(mode)}
+                    className={cn(
+                      "px-2 h-full rounded-sm transition-colors",
+                      taxMode === mode
+                        ? "bg-card shadow-sm text-foreground font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* RemixIcon components aren't forwardRef-wrapped — asChild
+                      needs a real DOM-ref-capable element (Radix's Slot
+                      clones its child and attaches a ref), so the icon is
+                      wrapped in a span rather than passed directly. */}
+                  <span className="inline-flex shrink-0">
+                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  {taxMode === "exempt"
+                    ? "HT (Exonération) — Ventes exonérées de TVA (franchise de taxe, ANADE/NESDA, export). Mention légale d'exonération insérée en pied de page."
+                    : taxMode === "ttc_direct"
+                      ? "TTC Direct (Détaxation) — Prix saisis Toutes Taxes Comprises. Montant HT et TVA déduits automatiquement sans écarts."
+                      : "Standard (Régime Réel) — Prix saisis en Hors Taxe. Calcul automatique de la TVA (19% ou 9%) et du timbre fiscal (1%) si paiement en espèces."}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            {/* Right Section — secondary document actions only; the primary
+                "Créer la facture" CTA lives in the floating dock below the
+                header, not here (see its own comment for why). */}
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
+                className={cn(
+                  "gap-1.5 h-[30px] px-2.5 text-xs rounded-md font-medium",
+                  customizeDrawerOpen && "bg-primary/10 text-primary border-primary/30"
+                )}
+                onClick={() => setCustomizeDrawerOpen((prev) => !prev)}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                Personnaliser
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-[30px] px-2.5 text-xs rounded-md font-medium"
                 onClick={async () => {
                   if (!draftInvoice.clients || !draftInvoice.invoice_items || draftInvoice.invoice_items.length === 0) {
                     toast.error("Veuillez remplir les informations client et ajouter au moins un produit", {
@@ -758,6 +961,8 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
                     return;
                   }
                   const toastId = "download-invoice-pdf";
+                  const resolvedAppearance = resolveInvoiceAppearance(draftInvoice, settings);
+                  console.log('🚀 [PDF_EXPORT_PAYLOAD]', { invoiceId: draftInvoice?.id, resolvedAppearance });
                   try {
                     setIsDownloading(true);
                     toast.loading("Génération du PDF...", { id: toastId });
@@ -787,134 +992,75 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
                   }
                 }}
                 disabled={isDownloading || !draftInvoice.clients || !draftInvoice.invoice_items || draftInvoice.invoice_items.length === 0}
-                className="gap-2"
               >
-                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {isDownloading ? "Téléchargement..." : "Télécharger PDF"}
-              </Button>
-              <Button
-                type="button"
-                onClick={submitInvoice}
-                disabled={!clientId || items.every(i => i.quantity === 0) || createInvoice.isPending}
-                className="gap-2"
-              >
-                {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                {createInvoice.isPending || updateInvoice.isPending
-                  ? "Traitement..."
-                  : (id ? "Mettre à jour" : (isProforma ? "Créer le proforma" : "Créer la facture"))}
+                {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {/* Collapses to "PDF" before the header ever has to
+                    truncate or overflow anything load-bearing. */}
+                <span className="hidden lg:inline">{isDownloading ? "Téléchargement..." : "Télécharger PDF"}</span>
+                <span className="lg:hidden">{isDownloading ? "..." : "PDF"}</span>
               </Button>
             </div>
+          </header>
+
+          {/* Floating Action Dock — the primary "Créer la facture" CTA lives
+              here instead of the header now: with navigation, document
+              identity, autosave, project/TVA settings, and two secondary
+              buttons already in that 56px bar, adding a third full-width
+              button there is what clipped it at the viewport edge
+              ("Créer la factur…"). A fixed dock in the workspace margin has
+              no such budget — it never competes with the header's own
+              content for space, so it can't overflow regardless of window
+              width. */}
+          <div
+            className={cn(
+              "fixed bottom-6 z-30 pointer-events-auto flex items-center gap-4 p-2 pl-5 bg-card/95 backdrop-blur-md border border-border/80 shadow-xl shadow-zinc-900/10 rounded-2xl transition-[right] duration-300 ease-out",
+              customizeDrawerOpen ? "right-[calc(18rem+2rem)]" : "right-8"
+            )}
+          >
+            <div className="text-right leading-tight">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Total TTC</div>
+              <span className="font-mono font-bold text-sm text-foreground">{formatDockTotal(draftInvoice.total_ttc)}</span>
+            </div>
+            <div className="h-6 w-px bg-border" aria-hidden="true" />
+            <Button
+              type="button"
+              size="default"
+              className="h-10 px-5 font-medium rounded-xl gap-2"
+              onClick={submitInvoice}
+              disabled={!clientId || items.every(i => i.quantity === 0) || createInvoice.isPending}
+            >
+              {(createInvoice.isPending || updateInvoice.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              {createInvoice.isPending || updateInvoice.isPending
+                ? "Traitement..."
+                : (id ? "Mettre à jour" : (isProforma ? "Créer le proforma" : "Créer la facture"))}
+            </Button>
           </div>
 
-          <div className="space-y-6">
-
-            {/* Settings + live totals — a single compact bar instead of three
-                stacked full-width sections. Those took ~250px of vertical
-                space before reaching the actual invoice document below,
-                which is the one thing this page is actually for editing;
-                on a laptop screen that left barely any room for it. The
-                "why" text for each control moved into a tooltip instead of
-                always-visible caption text. */}
-            <div className="bg-card rounded-xl border border-border px-4 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="project_associe" className="text-xs font-medium text-muted-foreground shrink-0">Projet</Label>
-                <Select
-                  value={projectId || "none"}
-                  onValueChange={(value) => setProjectId(value === "none" ? "" : value)}
-                  disabled={!!lockedProjectId}
-                >
-                  <SelectTrigger id="project_associe" className="w-40 h-8 text-xs">
-                    <SelectValue placeholder="Aucun projet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun projet</SelectItem>
-                    {projects
-                      ?.filter((p) => !clientId || p.client_id === clientId)
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    {lockedProjectId
-                      ? "Verrouillé — cette facture a été créée depuis la fiche du projet."
-                      : "Optionnel — la facture compte dans le chiffre d'affaires et la rentabilité du projet choisi."}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-
-              <div className="h-6 w-px bg-border shrink-0" aria-hidden="true" />
-
-              <div className="flex items-center gap-1.5">
-                <Label className="text-xs font-medium text-muted-foreground shrink-0">TVA</Label>
-                <ToggleGroup
-                  type="single"
-                  value={taxMode}
-                  onValueChange={(value) => {
-                    if (value) setTaxMode(value as "standard" | "exempt" | "ttc_direct");
-                  }}
-                >
-                  <ToggleGroupItem value="standard" className="text-xs px-2.5 h-8">
-                    Standard
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="exempt" className="text-xs px-2.5 h-8">
-                    Hors Taxe
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="ttc_direct" className="text-xs px-2.5 h-8">
-                    TTC Direct
-                  </ToggleGroupItem>
-                </ToggleGroup>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <InfoIcon className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    {taxMode === "exempt"
-                      ? "Hors Taxe / Sans TVA — toutes les lignes passent à 0%."
-                      : taxMode === "ttc_direct"
-                        ? "TTC Direct — le prix saisi par ligne est un prix TTC ; le HT est recalculé automatiquement."
-                        : "Standard — chaque ligne applique sa TVA catalogue (généralement 19%)."}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-
-              {/* Live totals — pushed to the far end, inline instead of a
-                  4-cell grid of their own. */}
-              <div className="ml-auto flex items-center gap-5">
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Sous-total H.T</p>
-                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.subtotal_ht || 0)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total TVA</p>
-                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.tva_amount || 0)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Timbre</p>
-                  <p className="text-sm font-mono tabular-nums tracking-tight font-semibold">{formatCurrency(draftInvoice.timbre || 0)}</p>
-                </div>
-                <div className="text-right border-l border-border pl-5">
-                  <p className="text-[10px] uppercase tracking-wide text-primary">Total TTC</p>
-                  <p className="text-base font-mono tabular-nums tracking-tight font-bold text-primary">{formatCurrency(draftInvoice.total_ttc || 0)}</p>
-                </div>
-              </div>
+          {/* Canvas + Inspector share one flex row now, instead of the
+              inspector being a `fixed` overlay with a guessed top offset —
+              that offset only ever accounted for this page's own 56px
+              toolbar, not the app's global Header sitting above it too, so
+              the inspector's own header rendered hidden behind both bars
+              stacked together. As a normal flex sibling it starts exactly
+              where the canvas starts, whatever stacks above; the canvas's
+              flex-1 also means it reflows on its own the moment the
+              inspector mounts/unmounts, no manual margin needed. */}
+          <div className="flex flex-1 w-full overflow-hidden relative min-h-0">
+            {/* A plain, non-scrolling flex host. ScaleToFit itself (inside
+                EditableInvoicePreview.tsx) owns the actual scroll region,
+                the neutral backdrop, and the horizontal centering — kept
+                there rather than duplicated here so there's exactly one
+                place responsible for fitting the document to the viewport. */}
+            <div className="flex-1 min-h-0 min-w-0 bg-zinc-100/60 dark:bg-zinc-950">
+              <EditableInvoicePreview
+                invoice={draftInvoice}
+                onInvoiceChange={handleDraftInvoiceChange}
+                clients={clients}
+                products={products}
+              />
             </div>
 
-            {/* Editable Preview */}
-            <div className="bg-muted rounded-xl p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 170px)', minHeight: '500px' }}>
-              <div className="flex justify-center">
-                <EditableInvoicePreview
-                  invoice={draftInvoice}
-                  onInvoiceChange={handleDraftInvoiceChange}
-                  clients={clients}
-                  products={products}
-                />
-              </div>
-            </div>
+            <InvoiceCustomizeDrawer open={customizeDrawerOpen} onOpenChange={setCustomizeDrawerOpen} />
           </div>
 
           {/* Safety Confirmation Dialog for Resetting Draft */}

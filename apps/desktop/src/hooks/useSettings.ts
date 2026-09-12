@@ -17,6 +17,7 @@ export interface Settings {
     company_nis?: string;
     company_ai?: string;
     company_activity?: string;
+    company_legal_form?: string; // EURL, SARL, SPA, SNC, Auto-entrepreneur, ...
     company_cnas_adherent?: string; // N° Adhérent CNAS — payroll/bulletin de paie only (omada-agency branch only)
     payroll_prime_panier_taux?: string; // daily rate (DA) — indemnité de panier, bulletin de paie only
     payroll_prime_transport?: string; // flat monthly amount (DA) — indemnité de transport, bulletin de paie only
@@ -39,7 +40,6 @@ export interface Settings {
     stamp_size?: string; // stored as string "96", "120" etc
     signature_data?: string;
     signature_size?: string; // stored as string "96", "120" etc
-    footer_logo_data?: string;
     body_pattern_data?: string;
     qr_code_data?: string;
     invoice_pdf_theme?: string; // 'structure' | 'epure' | 'moderne'
@@ -62,6 +62,7 @@ function companyToSettingsFields(company: Company | null): Partial<Settings> {
         company_nis: company.nis ?? undefined,
         company_ai: company.article_imposition ?? undefined,
         company_activity: company.activity ?? undefined,
+        company_legal_form: company.legal_form ?? undefined,
         company_cnas_adherent: company.cnas_adherent ?? undefined,
         company_rib: company.rib ?? undefined,
         company_phone: company.phone ?? undefined,

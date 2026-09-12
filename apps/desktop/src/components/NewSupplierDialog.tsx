@@ -32,6 +32,9 @@ interface NewSupplierDialogProps {
   supplier?: Supplier | null;
 }
 
+const sectionChipClass = "flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider";
+const inputClass = "mt-1.5 h-8 text-xs";
+
 export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierDialogProps) {
   const isEditing = !!supplier;
   const createSupplier = useCreateSupplier();
@@ -82,27 +85,27 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-lg rounded-xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{isEditing ? `Modifier ${supplier?.name}` : "Nouveau fournisseur"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="overflow-y-auto pr-2 space-y-6 py-4">
+          <div className="overflow-y-auto pr-2 space-y-5 py-3">
             {/* Informations Générales */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-primary font-semibold">
-                <Building2 className="w-4 h-4" />
-                <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Informations Générales</p>
+            <div className="space-y-3">
+              <div className={sectionChipClass}>
+                <Building2 className="w-3.5 h-3.5" />
+                Informations Générales
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
                   <Label className="text-xs text-muted-foreground">Raison sociale <span className="text-destructive">*</span></Label>
                   <Input
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     placeholder="SARL EXEMPLE"
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
                 <div>
@@ -111,7 +114,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     placeholder="Imprimerie, Matières premières..."
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
                 <div>
@@ -121,26 +124,26 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.solde_du ?? ""}
                     onChange={(e) => setFormData({ ...formData, solde_du: e.target.value ? Number(e.target.value) : undefined })}
                     placeholder="0"
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
               </div>
             </div>
 
             {/* Coordonnées */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-primary font-semibold">
-                <MapPin className="w-4 h-4" />
-                <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Coordonnées</p>
+            <div className="space-y-3">
+              <div className={sectionChipClass}>
+                <MapPin className="w-3.5 h-3.5" />
+                Coordonnées
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">Téléphone</Label>
                   <Input
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder="0555 00 00 00"
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
                 <div>
@@ -150,7 +153,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="contact@fournisseur.dz"
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
                 <div>
@@ -159,35 +162,35 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     placeholder="Sétif"
-                    className="mt-1.5"
+                    className={inputClass}
                   />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="col-span-2">
                   <Label className="text-xs text-muted-foreground">Adresse</Label>
                   <Textarea
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="Numéro, Rue, Zone Industrielle..."
-                    className="mt-1.5 resize-none min-h-[70px]"
+                    className="mt-1.5 resize-none min-h-[60px] text-xs"
                   />
                 </div>
               </div>
             </div>
 
             {/* Identifiants Fiscaux */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-primary font-semibold">
-                <FileText className="w-4 h-4" />
-                <p className="text-xs font-bold uppercase tracking-widest text-primary/70">Identifiants Fiscaux</p>
+            <div className="space-y-3">
+              <div className={sectionChipClass}>
+                <FileText className="w-3.5 h-3.5" />
+                Identifiants Fiscaux
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs text-muted-foreground">RC</Label>
                   <Input
                     value={formData.rc}
                     onChange={(e) => setFormData({ ...formData, rc: e.target.value })}
                     placeholder="00 B 0000000"
-                    className="mt-1.5 font-mono text-sm"
+                    className={`${inputClass} font-mono`}
                   />
                 </div>
                 <div>
@@ -196,7 +199,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.nif}
                     onChange={(e) => setFormData({ ...formData, nif: e.target.value })}
                     placeholder="00000000000"
-                    className="mt-1.5 font-mono text-sm"
+                    className={`${inputClass} font-mono`}
                   />
                 </div>
                 <div>
@@ -205,7 +208,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                     value={formData.nis}
                     onChange={(e) => setFormData({ ...formData, nis: e.target.value })}
                     placeholder="00000000000"
-                    className="mt-1.5 font-mono text-sm"
+                    className={`${inputClass} font-mono`}
                   />
                 </div>
               </div>
@@ -215,20 +218,21 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Notes internes sur ce fournisseur..."
-                  className="mt-1.5 resize-none min-h-[70px]"
+                  className="mt-1.5 resize-none min-h-[60px] text-xs"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t mt-4">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="rounded-full">
+          <div className="flex justify-end gap-2 pt-3 border-t mt-3">
+            <Button type="button" variant="ghost" size="sm" className="h-8 px-3 text-xs rounded-md" onClick={() => onOpenChange(false)}>
               Annuler
             </Button>
             <Button
               type="submit"
+              size="sm"
               disabled={isSaving}
-              className="rounded-full px-8 bg-primary hover:bg-primary-hover text-primary-foreground font-medium shadow-sm transition-colors"
+              className="h-8 px-3 text-xs rounded-md font-medium"
             >
               {isSaving ? "Enregistrement..." : isEditing ? "Enregistrer" : "Créer le fournisseur"}
             </Button>
