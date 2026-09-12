@@ -17,10 +17,17 @@ RUN pnpm install --frozen-lockfile --filter @sordi/web...
 
 FROM deps AS build
 ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
 COPY packages/schema packages/schema
 COPY packages/ui packages/ui
 COPY apps/web apps/web
+# Only written into the build env when actually non-empty — a blank
+# --build-arg VITE_API_URL="" (some hosts, Dokploy included, pass unset
+# build args through as "" rather than omitting them) must never override
+# apps/web/.env.production's own default: Docker's `ENV VITE_API_URL=$ARG`
+# would set the var to "" regardless, since ENV always applies once
+# declared. Writing to .env.production.local (Vite's highest-priority env
+# file, git-ignored) only when the arg is genuinely set avoids that.
+RUN if [ -n "$VITE_API_URL" ]; then echo "VITE_API_URL=$VITE_API_URL" > apps/web/.env.production.local; fi
 RUN pnpm --filter @sordi/web build
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+// `?? fallback` alone isn't enough: some hosts (Dokploy included) pass an
+// unset build arg through as an empty string rather than omitting it
+// entirely, and "" ?? fallback still evaluates to "" since "" is not
+// null/undefined. That silently turned every API call into a same-origin
+// relative request (fetch("/licenses") against sordi.app itself, not
+// api.sordi.app) instead of failing loudly — treat blank the same as unset.
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 export class WebApiError extends Error {
   status: number;
