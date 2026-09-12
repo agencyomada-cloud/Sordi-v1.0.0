@@ -41,14 +41,18 @@
 use app_lib::license::{compute_device_fingerprint, LicenseClaims};
 use jsonwebtoken::{encode, EncodingKey, Header};
 
-// Same dev/test Ed25519 keypair whose PUBLIC half is embedded in
-// license.rs's LICENSE_PUBLIC_KEY_PEM (confirmed to match byte-for-byte —
-// this private key is `apps/api/.env`'s LICENSE_PRIVATE_KEY_PEM, already
-// checked into this repo and already labeled dev/test-only there). Never
-// reuse this exact key for a real deployment — generate a fresh keypair,
-// keep the private half server-side only (or here, for this tool, only on
-// whichever machine actually runs it), and update LICENSE_PUBLIC_KEY_PEM
-// in license.rs to match.
+// STALE — this is the OLD dev/test Ed25519 private key. license.rs's
+// LICENSE_PUBLIC_KEY_PEM has since been swapped to the real production
+// public key (matching the production API at https://api.sordi.app), so
+// this key's public half no longer matches it. Any token this binary signs
+// today will FAIL to activate the real app — verify_signature_and_expiry()
+// will reject it. This binary is not usable for producing real,
+// activatable license tokens until DEV_PRIVATE_KEY_PEM below is replaced
+// with the actual production private key (apps/api's real
+// LICENSE_PRIVATE_KEY_PEM, deployed server-side only) — never commit that
+// real key to this repo; if this tool needs to keep working locally,
+// inject it via an environment variable read at build/run time instead of
+// a compiled-in constant.
 const DEV_PRIVATE_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKNhRYsZAot08PVuxuSgcwJRKJ4FNwMadQSY/PJE1B0w\n-----END PRIVATE KEY-----\n";
 
 const SECONDS_PER_DAY: u64 = 86_400;
