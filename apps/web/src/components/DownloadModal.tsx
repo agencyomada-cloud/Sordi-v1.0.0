@@ -11,7 +11,7 @@ import {
   Label,
 } from "@sordi/ui";
 import { RiAppleFill as AppleIcon, RiWindowsFill as WindowsIcon, RiLockLine as LockIcon } from "@remixicon/react";
-import { webApi, WebApiError } from "@/lib/webApi";
+import { webApi } from "@/lib/webApi";
 
 interface DownloadModalProps {
   open: boolean;
@@ -40,6 +40,15 @@ function triggerDownload(url: string) {
   link.remove();
 }
 
+// Static fallback so the actual file download never depends on the lead
+// API being reachable — the API is a nice-to-have for lead capture, but a
+// visitor clicking "Télécharger" must always get their file even if the
+// API call fails, times out, or the backend is down.
+const FALLBACK_DOWNLOAD_URL: Record<"macos" | "windows", string> = {
+  macos: "/downloads/sordi-finance-mac.dmg",
+  windows: "/downloads/sordi-finance-win.exe",
+};
+
 export function DownloadModal({ open, onOpenChange, osType }: DownloadModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -53,24 +62,30 @@ export function DownloadModal({ open, onOpenChange, osType }: DownloadModalProps
     if (!name.trim() || !phone.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+
+    // The lead-capture call is best-effort analytics, not a gate on the
+    // download itself: a visitor must get their file even if the API is
+    // unreachable, slow, or returns an error.
+    let downloadUrl: string = FALLBACK_DOWNLOAD_URL[osType];
     try {
-      const { downloadUrl } = await webApi.submitDownloadLead({
+      const result = await webApi.submitDownloadLead({
         name: name.trim(),
         phone: phone.trim(),
         company: company.trim() || undefined,
         osType,
       });
-      triggerDownload(downloadUrl);
-      toast.success("Téléchargement lancé !");
-      onOpenChange(false);
-      setName("");
-      setPhone("");
-      setCompany("");
+      downloadUrl = result.downloadUrl;
     } catch (error) {
-      toast.error(error instanceof WebApiError ? error.message : "Une erreur est survenue. Réessayez.");
-    } finally {
-      setIsSubmitting(false);
+      console.error("Lead capture failed, proceeding with fallback download", error);
     }
+
+    triggerDownload(downloadUrl);
+    toast.success("Téléchargement lancé !");
+    onOpenChange(false);
+    setName("");
+    setPhone("");
+    setCompany("");
+    setIsSubmitting(false);
   };
 
   return (
