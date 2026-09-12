@@ -1,64 +1,52 @@
-import { Button } from "@sordi/ui";
-import { RiAppleFill as AppleIcon, RiWindowsFill as WindowsIcon, RiArrowRightLine as ArrowIcon } from "@remixicon/react";
-import { InvoiceSandbox } from "./InvoiceSandbox";
-import { DesktopShowcase } from "./DesktopShowcase";
+import { useMemo } from "react";
+import { Apple, PlayCircle } from "lucide-react";
+import { detectOS } from "@/lib/detectOS";
+import { FloatingCards } from "./FloatingCards";
 
 interface HeroProps {
   onDownload: (os: "macos" | "windows") => void;
 }
 
 export function Hero({ onDownload }: HeroProps) {
+  const os = useMemo(detectOS, []);
+
   return (
-    <section className="relative bg-white">
-      <div className="max-w-5xl mx-auto px-6 pt-24 pb-20 text-center">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 text-xs font-medium px-3.5 py-1.5 mb-6 text-slate-600">
-          Conçu pour les entreprises et freelances algériens
+    <section id="top" className="relative bg-white overflow-hidden">
+      <div className="max-w-5xl mx-auto px-6 pt-20 pb-4 text-center relative z-10">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold px-3.5 py-1.5 mb-7">
+          ⚡ Version Desktop macOS disponible — 14 jours d'essai gratuit
         </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-[-0.03em] text-balance max-w-3xl mx-auto text-slate-900">
-          La gestion financière des entreprises modernes, repensée.
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-[-0.03em] text-balance max-w-3xl mx-auto text-neutral-900">
+          La clarté financière, enfin simple pour votre entreprise.
         </h1>
 
-        <p className="mt-5 text-base sm:text-lg text-slate-500 max-w-xl mx-auto text-balance">
-          Facturation, devis, trésorerie et créances — 100% hors-ligne, 100% local, sans abonnement cloud imposé.
+        <p className="mt-5 text-base sm:text-lg text-neutral-500 max-w-xl mx-auto text-balance">
+          Facturation, devis et trésorerie pour entreprises et indépendants — 100% hors-ligne, vos données ne quittent jamais votre machine.
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button
-            size="lg"
+          <button
+            type="button"
             onClick={() => onDownload("macos")}
-            className="h-11 px-6 flex items-center gap-2 transition-colors duration-200"
+            className="h-12 px-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground text-sm font-semibold shadow-lg shadow-primary/25 hover:bg-primary-hover transition-colors"
           >
-            <AppleIcon className="w-4 h-4" />
-            Télécharger gratuitement
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={() => onDownload("windows")}
-            className="h-11 px-6 flex items-center gap-2 border-slate-200 hover:bg-slate-50 transition-colors duration-200"
+            <Apple className="w-4 h-4" />
+            {os === "macos" ? "Télécharger pour macOS (.dmg)" : "Télécharger l'application"}
+          </button>
+          <a
+            href="#demo"
+            className="h-12 px-6 inline-flex items-center gap-2 rounded-full border border-neutral-200/80 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
           >
-            <WindowsIcon className="w-4 h-4" />
-            Version Windows
-          </Button>
+            <PlayCircle className="w-4 h-4" />
+            Voir la démo vidéo
+          </a>
         </div>
 
-        <a
-          href="#fonctionnalites"
-          className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors"
-        >
-          Voir les fonctionnalités
-          <ArrowIcon className="w-3.5 h-3.5" />
-        </a>
-
-        {/* Interactive sandbox — a live, editable invoice calculator. */}
-        <InvoiceSandbox />
-
-        {/* Real desktop app screenshot in an authentic macOS window frame
-            (falls back to a stylized dashboard mockup until a real
-            screenshot is dropped in — see DesktopShowcase.tsx). */}
-        <DesktopShowcase />
+        <p className="mt-4 text-xs text-neutral-400">Aucune carte bancaire requise · Installation en moins de 2 minutes</p>
       </div>
+
+      <FloatingCards />
     </section>
   );
 }
