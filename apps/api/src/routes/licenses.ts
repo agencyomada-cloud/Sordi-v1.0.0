@@ -265,3 +265,20 @@ licensesRouter.patch(
     res.json({ license: updated });
   })
 );
+
+// Hard delete — lets the same test machine restart onboarding from zero
+// (a fresh POST /licenses/request-trial), unlike /revoke which only marks
+// the row inactive but leaves it (and its device activation) on record.
+licensesRouter.delete(
+  "/:id",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    await licensesRepo.remove(req.params.id);
+    res.status(204).send();
+  })
+);

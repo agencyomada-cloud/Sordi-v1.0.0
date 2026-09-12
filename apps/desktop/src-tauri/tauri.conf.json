@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Sordi Finance",
+  "productName": "Sordi Invoicing",
   "version": "1.0.0",
-  "identifier": "com.sordi.finance",
+  "identifier": "com.sordi.invoicing",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5180",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Sordi Finance",
+        "title": "Sordi Invoicing",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -79,7 +79,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "bundleName": "Sordi Finance"
+      "bundleName": "Sordi Invoicing"
     }
   }
 }

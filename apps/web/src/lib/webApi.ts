@@ -94,6 +94,19 @@ export const webApi = {
     return res.json();
   },
 
+  // Hard delete — for resetting a test machine's device fingerprint so it
+  // can restart onboarding from zero, distinct from revoke (which only
+  // marks the license inactive but leaves the row and its activation on
+  // record).
+  deleteLicense: async (id: string, adminSecret: string): Promise<void> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}`, {
+      method: "DELETE",
+      headers: { "x-admin-secret": adminSecret },
+    });
+
+    if (!res.ok) return parseJsonError(res);
+  },
+
   extendLicense: async (id: string, days: number, adminSecret: string): Promise<{ license: License }> => {
     const res = await fetch(`${API_BASE_URL}/licenses/${id}/extend`, {
       method: "PATCH",

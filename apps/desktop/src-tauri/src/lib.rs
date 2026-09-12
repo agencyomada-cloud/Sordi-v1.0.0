@@ -61,14 +61,17 @@ pub fn run() {
       // something to render instead of every screen showing an empty state.
       //
       // app_data_dir() is resolved entirely from tauri.conf.json's
-      // "identifier" (com.sordi.finance) — a second, independent bundle
-      // identity from any real production Sordi install (com.sordi.app),
-      // so this workspace's own dev AND release databases live under
-      // ~/Library/Application Support/com.sordi.finance/, structurally
-      // incapable of colliding with a separately-installed production app's
-      // ~/Library/Application Support/com.sordi.app/ directory — not just a
-      // debug/release filename split within a shared folder, but a wholly
-      // separate folder for this app identity.
+      // "identifier" (com.sordi.invoicing, renamed from com.sordi.finance
+      // — the identifier change is deliberate and one-way: it also resets
+      // every machine's local database/license storage to a clean slate,
+      // since macOS scopes app data by bundle identifier) — a second,
+      // independent bundle identity from any real production Sordi install
+      // (com.sordi.app), so this workspace's own dev AND release databases
+      // live under ~/Library/Application Support/com.sordi.invoicing/,
+      // structurally incapable of colliding with a separately-installed
+      // production app's ~/Library/Application Support/com.sordi.app/
+      // directory — not just a debug/release filename split within a
+      // shared folder, but a wholly separate folder for this app identity.
       let app_dir = app.path().app_data_dir().expect("failed to get app data dir");
       std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
       let db_path = if cfg!(debug_assertions) {

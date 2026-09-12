@@ -26,27 +26,33 @@ export function useMachineId() {
 // (require_active_license() in license.rs); this is purely a UI countdown.
 //
 // LicenseStatus has no field distinguishing a self-service 14-day trial
-// (POST /licenses/request-trial) from a paid annual/lifetime license —
-// both come back as state: "active" with a real expires_at claim from the
-// signed token, since a trial is just a license row with a short term.
-// Rather than invent a client-side "trial" concept the server doesn't
-// actually track, the banner shows for ANY active license approaching its
-// real expiry (⩽30 days), which is useful for a paying customer's annual
-// renewal too, not just a trial — and shows unconditionally whenever the
-// license isn't active at all (read_only/not_activated), same as before.
-const EXPIRY_WARNING_WINDOW_DAYS = 30;
-
+// (POST /licenses/request-trial) from a paid annual license — both come
+// back as state: "active" with a real expires_at claim from the signed
+// token, since a trial is just a license row with a short term. The one
+// real signal available is expires_at itself: a genuinely perpetual/
+// lifetime license has none (activate_offline's manually-issued tokens
+// can omit it, or a future lifetime plan may sign one with no exp claim),
+// while every trial AND every term-limited paid plan (annual, etc.) has
+// one. So: show the countdown for ANY active license that has an expiry
+// at all — a paying annual customer sees "334 jours restants" same as a
+// trial user sees "14 jours restants", both true and both useful — and
+// hide it ONLY for state !== "active" (show a different call-to-activate
+// in that case, handled by TrialBanner directly) or for an active license
+// with genuinely no expires_at (perpetual).
 export interface TrialStatus {
   /** True whenever the banner should show: not fully "active" at all, or
-   *  active but within EXPIRY_WARNING_WINDOW_DAYS of expiring. */
+   *  active with a real expires_at (any term length) to count down. */
   isTrial: boolean;
   /** Days until expires_at, clamped to 0. Only meaningful/precise when the
    *  license is "active" with a real expires_at; a flat fallback otherwise
-   *  (not_activated/read_only have no expiry claim to count down from). */
+   *  (not_activated/read_only/perpetual have no expiry claim to count
+   *  down from). */
   trialDaysRemaining: number;
   machineId: string | undefined;
   isLoading: boolean;
 }
+
+const FALLBACK_DAYS_REMAINING = 14;
 
 export function useTrialStatus(): TrialStatus {
   const { data: status, isLoading: statusLoading } = useLicenseStatus();
@@ -54,14 +60,18 @@ export function useTrialStatus(): TrialStatus {
   const { data: machineId, isLoading: machineIdLoading } = useMachineId();
 
   const isActive = status?.state === "active";
+  const hasExpiry = isActive && !!status?.expires_at;
 
-  let daysRemaining = EXPIRY_WARNING_WINDOW_DAYS;
-  if (isActive && status?.expires_at) {
-    const msRemaining = new Date(status.expires_at).getTime() - Date.now();
+  let daysRemaining = FALLBACK_DAYS_REMAINING;
+  if (hasExpiry) {
+    const msRemaining = new Date(status!.expires_at!).getTime() - Date.now();
     daysRemaining = Math.max(0, Math.ceil(msRemaining / 86_400_000));
   }
 
-  const isTrial = !isActive || daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS;
+  // Perpetual (active, no expiry at all) is the only case that hides the
+  // banner outright — every other case either isn't active yet or is on
+  // a real countdown.
+  const isTrial = !isActive || hasExpiry;
 
   return {
     isTrial,
@@ -99,6 +109,6 @@ export const SUPPORT_WHATSAPP_NUMBER = "213000000000";
  *  name and machine id are interpolated so support can match the payment
  *  to the right workspace/machine without back-and-forth. */
 export function buildWhatsAppActivationUrl(companyName: string, machineId: string): string {
-  const message = `Bonjour, je souhaite activer ma licence Sordi Finance pour mon entreprise ${companyName}. Mon identifiant machine est : ${machineId}`;
+  const message = `Bonjour, je souhaite activer ma licence Sordi Invoicing pour mon entreprise ${companyName}. Mon identifiant machine est : ${machineId}`;
   return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }

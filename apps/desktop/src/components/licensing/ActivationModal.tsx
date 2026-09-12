@@ -120,7 +120,7 @@ export function ActivationModal({ open, onOpenChange }: ActivationModalProps) {
       >
         {/* Visually-hidden title/description for screen readers — the
             columns below carry the real visual heading. */}
-        <DialogTitle className="sr-only">Activer Sordi Finance</DialogTitle>
+        <DialogTitle className="sr-only">Activer Sordi Invoicing</DialogTitle>
         <DialogDescription className="sr-only">
           Envoyez votre identifiant machine et le reçu de paiement pour recevoir votre clé de licence, puis activez-la ici.
         </DialogDescription>
@@ -171,7 +171,7 @@ export function ActivationModal({ open, onOpenChange }: ActivationModalProps) {
               >
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Vous avez déjà reçu votre clé de licence par WhatsApp ou email ? Collez-la ci-dessous pour activer Sordi Finance.
+                    Vous avez déjà reçu votre clé de licence par WhatsApp ou email ? Collez-la ci-dessous pour activer Sordi Invoicing.
                   </p>
 
                   <div className="space-y-1.5">

@@ -118,4 +118,11 @@ export const licensesRepo = {
 
   updateContactStatus: (id: string, contactStatus: (typeof licenses.$inferSelect)["contactStatus"]) =>
     db.update(licenses).set({ contactStatus }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+
+  // Hard delete, not a status change — lets the same machine (device
+  // fingerprint) start onboarding over from zero, e.g. after a test run.
+  // license_activations.license_id has ON DELETE CASCADE (see schema.ts),
+  // so this also clears every device fingerprint recorded against the
+  // license in one statement — no separate cleanup step needed.
+  remove: (id: string) => db.delete(licenses).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 };

@@ -12,6 +12,7 @@ import {
   RiRefreshLine as RefreshIcon,
   RiPhoneLine as PhoneIcon,
   RiWhatsappLine as WhatsappIcon,
+  RiDeleteBinLine as DeleteIcon,
 } from "@remixicon/react";
 import { webApi, WebApiError, type ContactStatus, type License } from "@/lib/webApi";
 
@@ -424,6 +425,25 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
     }
   };
 
+  const handleDelete = async (license: License) => {
+    if (
+      !window.confirm(
+        `Supprimer définitivement la licence de "${license.organizationName}" ? Ceci efface aussi l'empreinte de l'appareil associé, permettant à cette machine de recommencer l'essai depuis le début. Cette action est irréversible.`
+      )
+    )
+      return;
+    setBusyId(license.id);
+    try {
+      await webApi.deleteLicense(license.id, adminSecret);
+      toast.success("Licence supprimée.");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof WebApiError ? error.message : "Impossible de supprimer la licence.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleExtend = async (license: License, days: number) => {
     setBusyId(license.id);
     try {
@@ -621,6 +641,18 @@ function LicenseTable({ adminSecret, onInvalidSecret }: { adminSecret: string; o
                           Révoquer
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isBusy}
+                        onClick={() => handleDelete(license)}
+                        title="Supprimer la licence et l'empreinte de l'appareil, pour permettre un nouvel essai sur cette machine"
+                        className="gap-1.5 border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                      >
+                        <DeleteIcon className="h-3.5 w-3.5" />
+                        Supprimer
+                      </Button>
                     </div>
                   </td>
                 </tr>

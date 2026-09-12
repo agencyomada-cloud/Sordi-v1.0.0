@@ -18,7 +18,7 @@
 //! file open, and there's no need to fight a concurrent writer.
 //!
 //! DB path: defaults to the real app's app_data_dir (macOS:
-//! ~/Library/Application Support/com.sordi.finance/database.db). Override with
+//! ~/Library/Application Support/com.sordi.invoicing/database.db). Override with
 //! the SORDI_DB_PATH env var if that's wrong. The seed test refuses to run
 //! against a path that doesn't already exist — run the real app at least
 //! once first, or point SORDI_DB_PATH at an existing db.
@@ -59,17 +59,17 @@ fn resolve_db_path() -> std::path::PathBuf {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var("HOME").expect("HOME not set");
-        std::path::PathBuf::from(home).join("Library/Application Support/com.sordi.finance/database.db")
+        std::path::PathBuf::from(home).join("Library/Application Support/com.sordi.invoicing/database.db")
     }
     #[cfg(target_os = "windows")]
     {
         let appdata = std::env::var("APPDATA").expect("APPDATA not set");
-        std::path::PathBuf::from(appdata).join("com.sordi.finance/database.db")
+        std::path::PathBuf::from(appdata).join("com.sordi.invoicing/database.db")
     }
     #[cfg(target_os = "linux")]
     {
         let home = std::env::var("HOME").expect("HOME not set");
-        std::path::PathBuf::from(home).join(".local/share/com.sordi.finance/database.db")
+        std::path::PathBuf::from(home).join(".local/share/com.sordi.invoicing/database.db")
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

@@ -109,7 +109,7 @@ fn parse_args() -> Result<Args, String> {
 
 fn print_help() {
     println!(
-        "Sordi Finance offline license keygen (dev-only — see the module doc comment in src/bin/keygen.rs)\n\n\
+        "Sordi Invoicing offline license keygen (dev-only — see the module doc comment in src/bin/keygen.rs)\n\n\
          USAGE:\n  \
          cargo run --bin keygen -- [OPTIONS]\n\n\
          OPTIONS:\n  \
