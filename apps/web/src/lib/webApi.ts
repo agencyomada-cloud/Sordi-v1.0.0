@@ -27,6 +27,19 @@ export interface GeneratedLicenseResult {
   expiresAt: string;
 }
 
+export interface License {
+  id: string;
+  clientReferenceId: string;
+  licenseKey: string;
+  organizationName: string;
+  activatedAt: string | null;
+  expiresAt: string;
+  maxDevices: number;
+  status: "active" | "expired" | "revoked";
+  createdAt: string;
+  deviceCount: number;
+}
+
 async function parseJsonError(res: Response): Promise<never> {
   const body = await res.json().catch(() => null);
   const message =
@@ -56,6 +69,45 @@ export const webApi = {
         "x-admin-secret": adminSecret,
       },
       body: JSON.stringify(input),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  listLicenses: async (adminSecret: string, search?: string): Promise<{ licenses: License[] }> => {
+    const url = new URL(`${API_BASE_URL}/licenses`);
+    if (search) url.searchParams.set("search", search);
+
+    const res = await fetch(url, {
+      headers: { "x-admin-secret": adminSecret },
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  revokeLicense: async (id: string, adminSecret: string): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/revoke`, {
+      method: "PATCH",
+      headers: { "x-admin-secret": adminSecret },
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
+  extendLicense: async (id: string, days: number, adminSecret: string): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/extend`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ days }),
     });
 
     if (!res.ok) return parseJsonError(res);

@@ -1,6 +1,12 @@
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
-import { licenseActivateSchema, licenseCreateSchema, licenseVerifySchema } from "@sordi/schema";
+import {
+  licenseActivateSchema,
+  licenseCreateSchema,
+  licenseExtendSchema,
+  licenseListQuerySchema,
+  licenseVerifySchema,
+} from "@sordi/schema";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { licensesRepo } from "../repositories/licenses.js";
 import { env } from "../env.js";
@@ -132,5 +138,56 @@ licensesRouter.post(
     // The only time the raw license_key is ever shown — comes straight
     // back in this response so you can hand it to the customer.
     res.status(201).json(created);
+  })
+);
+
+// Admin dashboard's license table. Same requireAdminSecret gate as /create —
+// this whole router shares one trust model (a shared secret pasted in by
+// hand), unlike adminLicenses.ts's separate x-admin-key header for the
+// unrelated devices/issue flow.
+licensesRouter.get(
+  "/",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const rows = await licensesRepo.list(parsed.data);
+    res.json({ licenses: rows });
+  })
+);
+
+licensesRouter.patch(
+  "/:id/revoke",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const updated = await licensesRepo.revoke(req.params.id);
+    res.json({ license: updated });
+  })
+);
+
+licensesRouter.patch(
+  "/:id/extend",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseExtendSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const updated = await licensesRepo.extend(req.params.id, parsed.data.days);
+    res.json({ license: updated });
   })
 );

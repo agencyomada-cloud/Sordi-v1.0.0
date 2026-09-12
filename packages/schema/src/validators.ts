@@ -102,6 +102,27 @@ export const licenseCreateSchema = z.object({
   maxDevices: z.number().int().positive().optional(),
 });
 
+// GET /licenses (admin dashboard's license table) — optional free-text
+// search over organizationName, same limit cap as adminDeviceListQuerySchema
+// below for consistency across the two admin list views.
+export const licenseListQuerySchema = z.object({
+  search: z.string().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+});
+
+// PATCH /licenses/:id/revoke — no body; the id in the path is the only
+// input. Kept as a named export anyway (rather than inlining a no-op check)
+// so every admin route consistently validates via a schema, even a trivial
+// empty one.
+export const licenseRevokeSchema = z.object({});
+
+// PATCH /licenses/:id/extend — adds `days` on top of the license's current
+// expiresAt (not "set to N days from now"), so calling it twice compounds
+// correctly instead of clobbering an earlier extension.
+export const licenseExtendSchema = z.object({
+  days: z.number().int().positive(),
+});
+
 // ---------------------------------------------------------------------------
 // Device telemetry & admin license issuing (apps/api/src/routes/telemetry.ts,
 // apps/api/src/routes/adminLicenses.ts)

@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { licenseActivations, licenses } from "@sordi/schema";
 
@@ -59,4 +59,57 @@ export const licensesRepo = {
 
   touchLastVerified: (id: string) =>
     db.update(licenseActivations).set({ lastVerifiedAt: new Date() }).where(eq(licenseActivations.id, id)),
+
+  // Admin dashboard's license table. Joins in the live activation count per
+  // license (not a stored column — recomputed from license_activations, the
+  // same source countDevices() reads) so "2 / 2 appareils" reflects reality
+  // even though no route ever writes an activation count onto the row
+  // itself. Newest first, since that's the order a salesperson wants to
+  // find "the license I just created."
+  list: (opts: { search?: string; limit?: number } = {}) => {
+    const conditions = opts.search ? [ilike(licenses.organizationName, `%${opts.search}%`)] : [];
+    return db
+      .select({
+        id: licenses.id,
+        clientReferenceId: licenses.clientReferenceId,
+        licenseKey: licenses.licenseKey,
+        organizationName: licenses.organizationName,
+        activatedAt: licenses.activatedAt,
+        expiresAt: licenses.expiresAt,
+        maxDevices: licenses.maxDevices,
+        status: licenses.status,
+        createdAt: licenses.createdAt,
+        deviceCount: sql<number>`coalesce(${db
+          .select({ value: count() })
+          .from(licenseActivations)
+          .where(eq(licenseActivations.licenseId, licenses.id))}, 0)`,
+      })
+      .from(licenses)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(licenses.createdAt))
+      .limit(opts.limit ?? 100);
+  },
+
+  findById: (id: string) =>
+    db.select().from(licenses).where(eq(licenses.id, id)).then((rows) => rows[0] ?? null),
+
+  // Manual, admin-triggered — the `revoked` enum value has existed in the
+  // schema since the first migration but nothing wrote it until now (see
+  // licenses.ts route comment history). Once revoked, /licenses/activate
+  // and /verify's `status !== "active"` check already rejects it — no
+  // change needed on that side.
+  revoke: (id: string) => db.update(licenses).set({ status: "revoked" }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+
+  // Adds `days` on top of the CURRENT expiresAt (read-modify-write in one
+  // round trip via SQL interval arithmetic), not "now + days" — a license
+  // extended before it expires should keep its remaining time, and one
+  // extended after expiring should extend from its original expiry, not
+  // from the moment of the call.
+  extend: (id: string, days: number) =>
+    db
+      .update(licenses)
+      .set({ expiresAt: sql`${licenses.expiresAt} + (${days} * interval '1 day')` })
+      .where(eq(licenses.id, id))
+      .returning()
+      .then((rows) => rows[0] ?? null),
 };
