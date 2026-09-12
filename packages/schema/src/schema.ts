@@ -21,7 +21,9 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -454,6 +456,17 @@ export const licenses = pgTable("licenses", {
 }, (t) => ({
   clientReferenceIdUnique: uniqueIndex("licenses_client_reference_id_idx").on(t.clientReferenceId),
   licenseKeyUnique: uniqueIndex("licenses_license_key_idx").on(t.licenseKey),
+  // Structural guard against the exact regression that motivated plan_type
+  // in the first place: a license the sales pipeline has marked "converti"
+  // (paid) can never be left at planType "trial" — previously nothing
+  // enforced this beyond application code discipline (the admin
+  // dashboard's old two-call "extend + contact-status" composition did
+  // exactly this for months). The database now refuses the write outright
+  // regardless of which code path attempts it.
+  planContactConsistency: check(
+    "plan_contact_consistency",
+    sql`NOT (${t.contactStatus} = 'converti' AND ${t.planType} = 'trial')`
+  ),
 }));
 
 export const licenseActivations = pgTable("license_activations", {

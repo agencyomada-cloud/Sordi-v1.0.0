@@ -121,6 +121,21 @@ export interface ClientOverviewStats {
 // "active" = full access. "read_only"/"not_activated" both mean
 // business-data writes are gated server (Rust) side — same UI treatment
 // for both, no need to distinguish "expired" from "never activated" here.
+// Mirrors packages/schema/src/licenseState.ts's LicenseState exactly (Rust
+// can't import that file, so license.rs hand-maintains the same enum —
+// see its own doc comment). This is the field new code should read for
+// banner/write-gating decisions; `state` above is kept only for the
+// pre-existing PDF-watermark call sites (Invoices.tsx and friends), which
+// never needed the trial/paid distinction in the first place.
+export type LicenseState =
+  | "UNREGISTERED"
+  | "TRIAL_ACTIVE"
+  | "TRIAL_EXPIRED"
+  | "PAID_ACTIVE"
+  | "PAID_EXPIRED"
+  | "REVOKED"
+  | "OFFLINE_GRACE";
+
 export interface LicenseStatus {
   state: "active" | "read_only" | "not_activated";
   client_reference_id: string | null;
@@ -128,6 +143,8 @@ export interface LicenseStatus {
   // "trial" | "annual" | "lifetime", or null for a token issued before
   // this field existed — see useTrialStatus's fallback for that case.
   plan_type: "trial" | "annual" | "lifetime" | null;
+  license_state: LicenseState;
+  last_successful_verify_at: string | null;
 }
 
 export interface TelemetryStatus {
@@ -1277,7 +1294,14 @@ export const db = {
   // Licensing
   license: {
     getStatus: (): Promise<LicenseStatus> =>
-      safeInvoke("get_license_status", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null, plan_type: "lifetime" })),
+      safeInvoke("get_license_status", undefined, () => ({
+        state: "active",
+        client_reference_id: null,
+        expires_at: null,
+        plan_type: "lifetime",
+        license_state: "PAID_ACTIVE",
+        last_successful_verify_at: null,
+      })),
     // No fallback on purpose: safeInvoke's catch block calls the fallback
     // on ANY invoke failure in Tauri mode too, not just web-mode — for
     // every other command here that's a harmless degrade, but activate
@@ -1294,7 +1318,14 @@ export const db = {
         email: input.email,
       }),
     verifyBackground: (): Promise<LicenseStatus> =>
-      safeInvoke("verify_license_background", undefined, () => ({ state: "active", client_reference_id: null, expires_at: null, plan_type: "lifetime" })),
+      safeInvoke("verify_license_background", undefined, () => ({
+        state: "active",
+        client_reference_id: null,
+        expires_at: null,
+        plan_type: "lifetime",
+        license_state: "PAID_ACTIVE",
+        last_successful_verify_at: null,
+      })),
     // Human-readable "SRD-XXXX-XXXX-XXXX" code for manual activation (see
     // license.rs's compute_machine_id) — distinct from the opaque device
     // fingerprint embedded in the license token itself, which is never

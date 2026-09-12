@@ -1,6 +1,8 @@
 import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import {
+  computeLicenseState,
+  getLicenseUiDecision,
   licenseActivateSchema,
   licenseContactStatusSchema,
   licenseConvertToPaidSchema,
@@ -10,6 +12,7 @@ import {
   licensePlanTypeSchema,
   licenseRequestTrialSchema,
   licenseVerifySchema,
+  type LicenseState,
 } from "@sordi/schema";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { licensesRepo } from "../repositories/licenses.js";
@@ -22,6 +25,39 @@ import {
 } from "../services/licenseService.js";
 
 export const licensesRouter = Router();
+
+// The unified response contract every activation/verification endpoint
+// returns (see the licensing audit: "un payload unifié pour que le client
+// sache instantanément s'il affiche le bandeau, bloque l'écriture ou
+// masque tout"). `signedToken` remains the actual security artifact — the
+// desktop app verifies it locally and re-derives this same information
+// offline via its own compute_license_state() (Rust can't import this
+// file, so the two are kept in sync by hand — see that function's doc
+// comment). This response exists primarily so the server-side logic is
+// itself testable/self-describing, and so any future client (a customer
+// portal, a Windows build sharing less Rust code) never has to
+// reimplement the state machine to interpret a token.
+interface LicenseDecision {
+  state: LicenseState;
+  planType: "trial" | "annual" | "lifetime";
+  expiresAt: string;
+  daysRemaining: number;
+  ui: { showBanner: boolean; bannerMessage: string; blockWrites: boolean };
+  signedToken: string;
+}
+
+function buildLicenseDecision(license: { status: "active" | "expired" | "revoked"; planType: "trial" | "annual" | "lifetime"; expiresAt: Date }, signedToken: string): LicenseDecision {
+  const state = computeLicenseState({ status: license.status, planType: license.planType, expiresAt: license.expiresAt.toISOString() });
+  const daysRemaining = Math.max(0, Math.ceil((license.expiresAt.getTime() - Date.now()) / 86_400_000));
+  return {
+    state,
+    planType: license.planType,
+    expiresAt: license.expiresAt.toISOString(),
+    daysRemaining,
+    ui: getLicenseUiDecision(state, daysRemaining),
+    signedToken,
+  };
+}
 
 // Same generic message for "key doesn't exist", "expired", and "revoked" —
 // on purpose (see the module's own requirement: don't give a caller
@@ -71,7 +107,7 @@ licensesRouter.post(
       planType: license.planType,
     });
     res.json({
-      signedToken,
+      ...buildLicenseDecision(license, signedToken),
       clientReferenceId: license.clientReferenceId,
       organizationName: license.organizationName,
     });
@@ -111,7 +147,7 @@ licensesRouter.post(
       realExpiresAt: Math.floor(license.expiresAt.getTime() / 1000),
       planType: license.planType,
     });
-    res.json({ signedToken });
+    res.json(buildLicenseDecision(license, signedToken));
   })
 );
 
@@ -153,20 +189,30 @@ licensesRouter.post(
       await licensesRepo.setActivatedAt(created.id);
     }
 
-    const signedToken = deviceFingerprint
-      ? signLicenseToken({
-          clientReferenceId: created.clientReferenceId,
-          deviceFingerprint,
-          realExpiresAt: Math.floor(created.expiresAt.getTime() / 1000),
-          planType: "trial",
-        })
-      : null;
+    if (!deviceFingerprint) {
+      // No fingerprint to bind a token to (an unusual/older client) — the
+      // row is still created for the sales pipeline, but there's no
+      // signedToken to build a full LicenseDecision around.
+      res.status(201).json({
+        signedToken: null,
+        clientReferenceId: created.clientReferenceId,
+        organizationName: created.organizationName,
+        expiresAt: created.expiresAt,
+      });
+      return;
+    }
+
+    const signedToken = signLicenseToken({
+      clientReferenceId: created.clientReferenceId,
+      deviceFingerprint,
+      realExpiresAt: Math.floor(created.expiresAt.getTime() / 1000),
+      planType: "trial",
+    });
 
     res.status(201).json({
-      signedToken,
+      ...buildLicenseDecision(created, signedToken),
       clientReferenceId: created.clientReferenceId,
       organizationName: created.organizationName,
-      expiresAt: created.expiresAt,
     });
   })
 );

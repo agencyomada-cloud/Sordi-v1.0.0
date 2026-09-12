@@ -1,0 +1,1 @@
+ALTER TABLE "licenses" ADD CONSTRAINT "plan_contact_consistency" CHECK (NOT ("licenses"."contact_status" = 'converti' AND "licenses"."plan_type" = 'trial'));

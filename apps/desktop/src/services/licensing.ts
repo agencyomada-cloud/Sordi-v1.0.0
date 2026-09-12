@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { db } from "@/lib/database";
+import { db, type LicenseState } from "@/lib/database";
 import { useLicenseStatus } from "@/hooks/useLicense";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
@@ -21,74 +21,122 @@ export function useMachineId() {
   });
 }
 
-// Soft, informational banner — NOT the real enforcement boundary. Actual
-// write-access gating happens server/Rust-side via LicenseStatus.state
-// (require_active_license() in license.rs); this is purely a UI countdown.
+// ---------------------------------------------------------------------------
+// License state machine (client-side presentation layer)
 //
-// LicenseStatus.plan_type ("trial" | "annual" | "lifetime") is the
-// authoritative signal for whether this banner should show at all — NOT a
-// days-remaining guess. A trial and a freshly-activated year-long paid
-// license both look identical at the token-expiry level (an active,
-// unexpired token with a real, possibly-far-future expires_at), so no
-// amount of day-counting can reliably tell them apart; a customer who
-// activates a license valid until 2028 must never see a trial countdown,
-// no matter how many days that number is. plan_type is set once at
-// creation (POST /licenses/request-trial always "trial"; the admin
-// dashboard's Générer une licence and Convertir en Annuel set it
-// explicitly) and carried through the signed token, so the desktop app
-// never has to infer it.
-//
-// plan_type can be missing on a token issued before this field existed
-// (already written to a local license.token file on some machine) — in
-// that one legacy case only, fall back to the old days-based heuristic
-// (show if expiring within EXPIRY_WARNING_WINDOW_DAYS) so an existing
-// install doesn't regress until its next activate/verify round-trip
-// refreshes the token with the real plan_type.
-const EXPIRY_WARNING_WINDOW_DAYS = 30;
+// The actual STATE is computed exactly once, in Rust (license.rs's
+// compute_status logic — see LicenseState there for the full state
+// machine and why it mirrors packages/schema/src/licenseState.ts by hand).
+// This file's only job is turning that state into what the UI shows: a
+// banner message and whether writes should be blocked. Before this
+// refactor, useTrialStatus tried to INFER the state itself from raw
+// expires_at/plan_type fields, in the same file that also decided what to
+// show — which is exactly how the original "35 jours restants on a paid
+// license" bug happened (the inference logic and the presentation logic
+// were tangled together, so a subtle bug in one silently corrupted the
+// other). Centralizing state computation in Rust and keeping this file
+// purely presentational is the actual fix, not just a relocation.
+// ---------------------------------------------------------------------------
 
+// Mirrors packages/schema/src/licenseState.ts's LICENSE_WRITABLE_STATES —
+// exported for useLicenseGate.ts, the actual write-gating consumer.
+export const LICENSE_WRITABLE_STATES: ReadonlySet<LicenseState> = new Set(["TRIAL_ACTIVE", "PAID_ACTIVE", "OFFLINE_GRACE"]);
+
+export interface LicenseUiDecision {
+  showBanner: boolean;
+  bannerMessage: string;
+  blockWrites: boolean;
+}
+
+/** Pure function — the ONE place that decides what a given state means for
+ *  the UI. Mirrors packages/schema/src/licenseState.ts's
+ *  getLicenseUiDecision() by hand (apps/desktop has no dependency on
+ *  @sordi/schema — this is a Tauri app talking to Rust, not the Node API
+ *  — so the two copies must be kept in sync manually, same constraint as
+ *  license.rs's own LicenseState mirror). */
+export function getLicenseUiDecision(state: LicenseState, daysRemaining: number | null): LicenseUiDecision {
+  switch (state) {
+    case "UNREGISTERED":
+      return { showBanner: true, bannerMessage: "Licence non activée", blockWrites: true };
+    case "TRIAL_ACTIVE": {
+      const days = daysRemaining ?? 0;
+      return {
+        showBanner: true,
+        bannerMessage: `Période d'essai : il vous reste ${days} jour${days > 1 ? "s" : ""}`,
+        blockWrites: false,
+      };
+    }
+    case "TRIAL_EXPIRED":
+      return { showBanner: true, bannerMessage: "Votre période d'essai est terminée", blockWrites: true };
+    case "PAID_ACTIVE": {
+      const days = daysRemaining ?? Infinity;
+      if (days > 30) return { showBanner: false, bannerMessage: "", blockWrites: false };
+      return {
+        showBanner: true,
+        bannerMessage: `Votre licence expire dans ${days} jour${days > 1 ? "s" : ""}`,
+        blockWrites: false,
+      };
+    }
+    case "PAID_EXPIRED":
+      return {
+        showBanner: true,
+        bannerMessage: "Votre licence a expiré. Renouvelez pour continuer à créer et modifier.",
+        blockWrites: true,
+      };
+    case "REVOKED":
+      return { showBanner: true, bannerMessage: "Cette licence a été révoquée. Contactez le support.", blockWrites: true };
+    case "OFFLINE_GRACE":
+      return { showBanner: true, bannerMessage: "Reconnectez-vous pour valider votre licence", blockWrites: false };
+  }
+}
+
+export interface LicenseDecision {
+  state: LicenseState;
+  daysRemaining: number | null;
+  ui: LicenseUiDecision;
+  lastSuccessfulVerifyAt: string | null;
+  machineId: string | undefined;
+  isLoading: boolean;
+}
+
+export function useLicenseDecision(): LicenseDecision {
+  const { data: status, isLoading: statusLoading } = useLicenseStatus();
+  const { isReady } = useWorkspace();
+  const { data: machineId, isLoading: machineIdLoading } = useMachineId();
+
+  const state: LicenseState = status?.license_state ?? "UNREGISTERED";
+  const daysRemaining = status?.expires_at
+    ? Math.max(0, Math.ceil((new Date(status.expires_at).getTime() - Date.now()) / 86_400_000))
+    : null;
+
+  return {
+    state,
+    daysRemaining,
+    ui: getLicenseUiDecision(state, daysRemaining),
+    lastSuccessfulVerifyAt: status?.last_successful_verify_at ?? null,
+    machineId,
+    isLoading: statusLoading || machineIdLoading || !isReady,
+  };
+}
+
+/** @deprecated Use useLicenseDecision() directly — kept only so any
+ *  not-yet-migrated call site keeps compiling. `isTrial` now means
+ *  "the banner should show" (any non-writable state OR an active plan
+ *  approaching renewal), matching the new ui.showBanner exactly. */
 export interface TrialStatus {
-  /** True whenever the banner should show: not fully "active" at all, a
-   *  genuine trial plan, or (legacy fallback only) an active license with
-   *  no plan_type whose expiry happens to be within the warning window. */
   isTrial: boolean;
-  /** Days until expires_at, clamped to 0. Only meaningful/precise when the
-   *  license is "active" with a real expires_at; a flat fallback otherwise
-   *  (not_activated/read_only/perpetual have no expiry claim to count
-   *  down from). */
   trialDaysRemaining: number;
   machineId: string | undefined;
   isLoading: boolean;
 }
 
-const FALLBACK_DAYS_REMAINING = 14;
-
 export function useTrialStatus(): TrialStatus {
-  const { data: status, isLoading: statusLoading } = useLicenseStatus();
-  const { isReady } = useWorkspace();
-  const { data: machineId, isLoading: machineIdLoading } = useMachineId();
-
-  const isActive = status?.state === "active";
-  const hasExpiry = isActive && !!status?.expires_at;
-
-  let daysRemaining = FALLBACK_DAYS_REMAINING;
-  if (hasExpiry) {
-    const msRemaining = new Date(status!.expires_at!).getTime() - Date.now();
-    daysRemaining = Math.max(0, Math.ceil(msRemaining / 86_400_000));
-  }
-
-  const isExplicitTrial = status?.plan_type === "trial";
-  const isExplicitPaid = status?.plan_type === "annual" || status?.plan_type === "lifetime";
-  // Only reached when plan_type is genuinely absent (a pre-existing token
-  // that predates this field) — never overrides an explicit paid plan.
-  const legacyHeuristic = !status?.plan_type && hasExpiry && daysRemaining <= EXPIRY_WARNING_WINDOW_DAYS;
-
-  const isTrial = !isActive || isExplicitTrial || (!isExplicitPaid && legacyHeuristic);
-
+  const decision = useLicenseDecision();
   return {
-    isTrial,
-    trialDaysRemaining: daysRemaining,
-    machineId,
-    isLoading: statusLoading || machineIdLoading || !isReady,
+    isTrial: decision.ui.showBanner,
+    trialDaysRemaining: decision.daysRemaining ?? 14,
+    machineId: decision.machineId,
+    isLoading: decision.isLoading,
   };
 }
 

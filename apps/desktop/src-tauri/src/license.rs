@@ -254,8 +254,43 @@ impl LicenseClaims {
     }
 }
 
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+// SCREAMING_SNAKE_CASE on the wire — must stay byte-for-byte identical to
+// packages/schema/src/licenseState.ts's LICENSE_STATES. Rust can't import
+// that file directly (different language/runtime entirely), so this is a
+// hand-maintained mirror of the exact same state machine, used for the
+// fully-offline path (current_status(), require_active_license()) where no
+// server round trip is possible. Keep the two in sync by hand whenever
+// either changes — there is no automated check enforcing this today.
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum LicenseState {
+    Unregistered,
+    TrialActive,
+    TrialExpired,
+    PaidActive,
+    PaidExpired,
+    Revoked,
+    OfflineGrace,
+}
+
+impl LicenseState {
+    /// Mirrors packages/schema/src/licenseState.ts's LICENSE_WRITABLE_STATES
+    /// — the actual enforcement boundary require_active_license() checks.
+    pub fn allows_writes(self) -> bool {
+        matches!(self, LicenseState::TrialActive | LicenseState::PaidActive | LicenseState::OfflineGrace)
+    }
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct LicenseStatus {
+    /// LEGACY field, kept exactly as before for the ~90 Rust
+    /// require_active_license() call sites (unaffected — see
+    /// license_state below for what actually drives that function now)
+    /// and the ~11 frontend PDF-watermark call sites that check
+    /// `state === "active"` directly (Invoices.tsx, InvoiceDetail.tsx,
+    /// etc.) — "fully licensed, hide the watermark" is still exactly what
+    /// "active" means regardless of trial/paid, so those call sites were
+    /// deliberately left untouched rather than migrated to license_state.
     /// "active" (full access), "read_only" (expired/invalid/missing —
     /// business-data writes are gated), or "not_activated" (never
     /// activated on this machine, same UI treatment as read_only).
@@ -266,6 +301,29 @@ pub struct LicenseStatus {
     /// this field existed (the frontend falls back to its old days-based
     /// heuristic in that case — see useTrialStatus).
     pub plan_type: Option<String>,
+    /// The authoritative state for UI decisions (banner, write-blocking
+    /// modal) — see LicenseState's own doc comment. NEW consumers should
+    /// use this, not `state` above.
+    pub license_state: LicenseState,
+    /// ISO timestamp of the last time this machine successfully wrote a
+    /// fresh token to disk (i.e. the last successful activate/verify round
+    /// trip) — derived from license.token's own mtime, no separate file.
+    /// Lets the UI show "reconnect to validate your license" once this
+    /// gets stale, distinct from a hard local failure.
+    pub last_successful_verify_at: Option<String>,
+}
+
+impl LicenseStatus {
+    fn unregistered() -> Self {
+        LicenseStatus {
+            state: "not_activated".to_string(),
+            client_reference_id: None,
+            expires_at: None,
+            plan_type: None,
+            license_state: LicenseState::Unregistered,
+            last_successful_verify_at: None,
+        }
+    }
 }
 
 fn read_local_token() -> Option<String> {
@@ -283,12 +341,29 @@ fn delete_local_token() {
     let _ = std::fs::remove_file(license_file_path());
 }
 
+/// Last time license.token was (re)written — a successful activate/verify
+/// is the only thing that ever writes this file, so its mtime IS "last
+/// successful verify", with no separate file/state to keep in sync.
+fn local_token_mtime_iso() -> Option<String> {
+    let metadata = std::fs::metadata(license_file_path()).ok()?;
+    let modified = metadata.modified().ok()?;
+    let unix = modified.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    Some(unix_to_iso(unix))
+}
+
 fn unix_to_iso(ts: u64) -> String {
     // Deliberately not pulling chrono's timezone machinery in for one
     // formatting call — this is a UTC unix timestamp, displayed as-is.
     chrono::DateTime::<chrono::Utc>::from_timestamp(ts as i64, 0)
         .map(|dt| dt.to_rfc3339())
         .unwrap_or_default()
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 /// Ed25519 signature + expiry only, no fingerprint check — separated out
@@ -304,6 +379,20 @@ fn verify_signature_and_expiry(token: &str) -> Result<LicenseClaims, String> {
     decode::<LicenseClaims>(token, &decoding_key, &validation)
         .map(|data| data.claims)
         .map_err(|e| format!("token signature/expiry invalid: {e}"))
+}
+
+/// Signature-only, expiry NOT checked — used exclusively to label an
+/// otherwise-expired/invalid token for display (TRIAL_EXPIRED vs
+/// PAID_EXPIRED) when verify_local() has already rejected it. Never used
+/// to grant access: current_status() only reaches for this after
+/// verify_local() has already failed, and even then still re-checks the
+/// device fingerprint before trusting anything it returns (a token for a
+/// different machine must never label this machine's state).
+fn decode_claims_ignoring_expiry(token: &str) -> Option<LicenseClaims> {
+    let decoding_key = DecodingKey::from_ed_pem(LICENSE_PUBLIC_KEY_PEM.as_bytes()).ok()?;
+    let mut validation = Validation::new(Algorithm::EdDSA);
+    validation.validate_exp = false;
+    decode::<LicenseClaims>(token, &decoding_key, &validation).ok().map(|data| data.claims)
 }
 
 /// Verifies signature (Ed25519, embedded public key), expiry, AND that the
@@ -326,18 +415,78 @@ fn verify_local(token: &str) -> Result<LicenseClaims, String> {
 
 /// Local-only, no network — the fast path used on every app startup and by
 /// the write-command gate. Never blocks on I/O beyond one small file read.
+///
+/// See LicenseState's doc comment for why this mirrors
+/// packages/schema/src/licenseState.ts's computeLicenseState() by hand:
+/// TRIAL_ACTIVE/PAID_ACTIVE when the token verifies AND its real term
+/// hasn't lapsed; OFFLINE_GRACE when the token still cryptographically
+/// verifies (its own 35-day security window hasn't lapsed) but the real
+/// term has — exactly the case that window exists to tolerate, a machine
+/// that hasn't reached the server in a while; TRIAL_EXPIRED/PAID_EXPIRED
+/// once even that security window is gone, labeled via a signature-only
+/// (expiry-ignoring) decode purely for display. REVOKED is never reached
+/// from here — see verify_background()'s own doc comment for why that one
+/// state can only ever be observed transiently, right after a server
+/// response confirms it.
 pub fn current_status() -> LicenseStatus {
     let Some(token) = read_local_token() else {
-        return LicenseStatus { state: "not_activated".to_string(), client_reference_id: None, expires_at: None, plan_type: None };
+        return LicenseStatus::unregistered();
     };
-    match verify_local(&token) {
-        Ok(claims) => LicenseStatus {
+
+    if let Ok(claims) = verify_local(&token) {
+        let is_trial = claims.plan_type.as_deref() == Some("trial");
+        let real_expiry = claims.display_expires_at();
+        let license_state = if real_expiry > now_unix() {
+            if is_trial { LicenseState::TrialActive } else { LicenseState::PaidActive }
+        } else {
+            LicenseState::OfflineGrace
+        };
+        return LicenseStatus {
             state: "active".to_string(),
             client_reference_id: Some(claims.client_reference_id.clone()),
-            expires_at: Some(unix_to_iso(claims.display_expires_at())),
+            expires_at: Some(unix_to_iso(real_expiry)),
             plan_type: claims.plan_type.clone(),
+            license_state,
+            last_successful_verify_at: local_token_mtime_iso(),
+        };
+    }
+
+    // verify_local() failed — either the token's own security window (exp)
+    // has genuinely lapsed, the signature/fingerprint is wrong, or the file
+    // is corrupted. Attempt a label-only decode (ignoring expiry) purely to
+    // report WHICH kind of expiry this was, re-checking the fingerprint
+    // explicitly since decode_claims_ignoring_expiry skips that too.
+    let current_fingerprint = compute_device_fingerprint().ok();
+    let labeled = decode_claims_ignoring_expiry(&token)
+        .filter(|c| current_fingerprint.as_deref() == Some(c.device_fingerprint.as_str()));
+
+    match labeled {
+        Some(claims) => {
+            let is_trial = claims.plan_type.as_deref() == Some("trial");
+            LicenseStatus {
+                state: "read_only".to_string(),
+                client_reference_id: None,
+                expires_at: Some(unix_to_iso(claims.display_expires_at())),
+                plan_type: claims.plan_type.clone(),
+                license_state: if is_trial { LicenseState::TrialExpired } else { LicenseState::PaidExpired },
+                last_successful_verify_at: local_token_mtime_iso(),
+            }
+        }
+        // Wrong device, corrupted file, or bad signature — nothing
+        // trustworthy to label. Legacy `state` stays "read_only" here,
+        // exactly matching this function's pre-existing behavior for any
+        // verify_local() failure (never "not_activated", which is
+        // reserved for the genuinely-no-token-on-disk case above) — only
+        // license_state, a new field, treats it as equivalent to
+        // Unregistered for write-gating purposes.
+        None => LicenseStatus {
+            state: "read_only".to_string(),
+            client_reference_id: None,
+            expires_at: None,
+            plan_type: None,
+            license_state: LicenseState::Unregistered,
+            last_successful_verify_at: local_token_mtime_iso(),
         },
-        Err(_) => LicenseStatus { state: "read_only".to_string(), client_reference_id: None, expires_at: None, plan_type: None },
     }
 }
 
@@ -367,14 +516,21 @@ pub fn require_active_license() -> Result<(), String> {
     {
         return Ok(());
     }
-    match current_status().state.as_str() {
-        "active" => Ok(()),
-        _ => Err(
+    // license_state (TRIAL_ACTIVE/PAID_ACTIVE/OFFLINE_GRACE all allow
+    // writes) is the actual enforcement decision now — a strict superset
+    // of the old `state == "active"` check for every token issued from
+    // this point forward, and behaviorally identical for one already-
+    // active before this change (OFFLINE_GRACE only ever applies once a
+    // real term has lapsed, which "active" already excluded).
+    if current_status().license_state.allows_writes() {
+        Ok(())
+    } else {
+        Err(
             "Your Sordi license has expired or is not activated on this device. \
              Renew or activate your license to make changes — viewing and exporting \
              existing data is still available."
                 .to_string(),
-        ),
+        )
     }
 }
 
@@ -563,10 +719,43 @@ pub async fn verify_background() -> LicenseStatus {
 
     if !response.status().is_success() {
         // A real response (not a network failure) saying the token/license
-        // is no longer good — this is the one place revocation actually
-        // takes effect for a previously-activated machine.
+        // is no longer good. /licenses/verify deliberately returns the same
+        // generic rejection whether the license expired, was revoked, or
+        // no longer exists (see that route's own comment on why it never
+        // gives a caller enumerating tokens a distinguishing signal) — so
+        // this server response alone can't tell EXPIRED from REVOKED.
+        // Label from the OLD token's own claims (still in `token`, read
+        // before we delete it) when possible: a decodable plan_type means
+        // "your term really is over" (TRIAL_EXPIRED/PAID_EXPIRED, the
+        // common, unremarkable case); a token that won't even decode gets
+        // the more alarming REVOKED as a conservative "something is wrong,
+        // contact support" catch-all — never the reverse, since incorrectly
+        // telling an ordinary lapsed trial user "your license was revoked"
+        // would be actively misleading.
+        let stale_claims = decode_claims_ignoring_expiry(&token);
         delete_local_token();
-        return current_status();
+
+        return match stale_claims {
+            Some(claims) => {
+                let is_trial = claims.plan_type.as_deref() == Some("trial");
+                LicenseStatus {
+                    state: "read_only".to_string(),
+                    client_reference_id: None,
+                    expires_at: Some(unix_to_iso(claims.display_expires_at())),
+                    plan_type: claims.plan_type.clone(),
+                    license_state: if is_trial { LicenseState::TrialExpired } else { LicenseState::PaidExpired },
+                    last_successful_verify_at: local_token_mtime_iso(),
+                }
+            }
+            None => LicenseStatus {
+                state: "read_only".to_string(),
+                client_reference_id: None,
+                expires_at: None,
+                plan_type: None,
+                license_state: LicenseState::Revoked,
+                last_successful_verify_at: local_token_mtime_iso(),
+            },
+        };
     }
 
     if let Ok(body) = response.json::<VerifyResponse>().await {
