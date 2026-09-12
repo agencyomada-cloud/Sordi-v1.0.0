@@ -8,13 +8,6 @@ export class WebApiError extends Error {
   }
 }
 
-export interface DownloadLeadInput {
-  name: string;
-  phone: string;
-  company?: string;
-  osType: "macos" | "windows";
-}
-
 export type ContactStatus = "a_contacter" | "en_cours" | "converti" | "non_interesse";
 
 export interface GenerateLicenseInput {
@@ -56,18 +49,6 @@ async function parseJsonError(res: Response): Promise<never> {
 }
 
 export const webApi = {
-  submitDownloadLead: async (input: DownloadLeadInput): Promise<{ downloadUrl: string }> => {
-    const res = await fetch(`${API_BASE_URL}/leads/download`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-
-    if (!res.ok) return parseJsonError(res);
-
-    return res.json();
-  },
-
   generateLicense: async (input: GenerateLicenseInput, adminSecret: string): Promise<GeneratedLicenseResult> => {
     const res = await fetch(`${API_BASE_URL}/licenses/create`, {
       method: "POST",
