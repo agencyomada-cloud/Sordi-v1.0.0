@@ -30,7 +30,8 @@ import {
   RiFolderChartLine,
   RiRadarLine as RadarIcon,
 } from "@remixicon/react";
-import { Building2, Paintbrush, Bell, Boxes } from "lucide-react";
+import { Building2, Paintbrush, Bell, Boxes, Sparkles, CheckCircle2 } from "lucide-react";
+import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { useTelemetryStatus, useSetTelemetryEnabled } from "@/hooks/useTelemetry";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDirDialog } from "@tauri-apps/plugin-dialog";
@@ -162,6 +163,7 @@ export default function SettingsPage() {
     const setTelemetryEnabled = useSetTelemetryEnabled();
     const moduleFlags = useModuleFlags();
     const [activeCategory, setActiveCategory] = useState<Category>("identity");
+    const { data: updateInfo } = useUpdateCheck();
 
     const [formData, setFormData] = useState({
         payroll_prime_panier_taux: "",
@@ -1293,6 +1295,22 @@ export default function SettingsPage() {
                                 Supprimer les données de démonstration
                             </Button>
                         </div>
+                    </SettingsGroup>
+
+                    <SettingsGroup title="À propos" description="Version installée de Sordi Invoicing.">
+                        {updateInfo?.update_available ? (
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+                                <div className="flex items-center gap-2 text-sm text-foreground">
+                                    <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                                    Version {updateInfo.current_version} — une mise à jour ({updateInfo.latest_version}) est disponible
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                Version {updateInfo?.current_version ?? "—"} (à jour)
+                            </div>
+                        )}
                     </SettingsGroup>
                 </>
             )}

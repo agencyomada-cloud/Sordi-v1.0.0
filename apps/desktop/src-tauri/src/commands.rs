@@ -66,6 +66,13 @@ pub async fn verify_license_background() -> crate::license::LicenseStatus {
     crate::license::verify_background().await
 }
 
+// ============= UPDATE CHECK =============
+
+#[tauri::command]
+pub async fn check_for_updates() -> Result<crate::updates::UpdateInfo, String> {
+    crate::updates::check_for_updates().await
+}
+
 /// SetupWizard's Step 4 ("no license yet" screen) — a self-service trial
 /// request, not an existing key. Same immediate-heartbeat pattern as
 /// activate_license above: the trial unlocks right away, so the admin

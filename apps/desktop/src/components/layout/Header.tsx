@@ -4,6 +4,7 @@ import { RiArrowRightSLine, RiQuestionLine, RiAddLine, RiSearchLine, RiPictureIn
 import { invoke } from "@tauri-apps/api/core";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@sordi/ui";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { UpdateBadge } from "@/components/layout/UpdateBadge";
 import { WorkspaceAccountMenu } from "@/components/layout/WorkspaceAccountMenu";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useNavigate } from "react-router-dom";
@@ -123,6 +124,7 @@ export const Header = forwardRef<HTMLDivElement, HeaderProps>(
             </TooltipTrigger>
             <TooltipContent side="bottom" align="center" sideOffset={8}>Nouvelle facture</TooltipContent>
           </Tooltip>
+          <UpdateBadge />
           <NotificationBell />
           <Tooltip>
             <TooltipTrigger asChild>

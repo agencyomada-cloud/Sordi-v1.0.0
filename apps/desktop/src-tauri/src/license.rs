@@ -40,7 +40,10 @@ const LICENSE_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAy
 // (see apps/desktop/src-tauri/tauri.conf.json / CI build config). Left as
 // localhost here so a plain local dev build still targets the local API.
 const DEFAULT_API_BASE_URL: &str = "http://localhost:4000";
-fn api_base_url() -> &'static str {
+// pub(crate), not private: updates.rs's check_for_updates() hits the same
+// server for GET /releases/latest and must resolve to the exact same base
+// URL this module's own activate/verify calls use.
+pub(crate) fn api_base_url() -> &'static str {
     option_env!("SORDI_LICENSE_API_URL").unwrap_or(DEFAULT_API_BASE_URL)
 }
 

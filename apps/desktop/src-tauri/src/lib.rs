@@ -10,6 +10,7 @@ pub mod license;
 mod pdf_service;
 mod splashscreen;
 mod telemetry;
+mod updates;
 mod widget;
 #[cfg(test)]
 mod seed_test_data;
@@ -362,6 +363,7 @@ pub fn run() {
       commands::activate_license,
       commands::verify_license_background,
       commands::request_trial,
+      commands::check_for_updates,
       commands::get_machine_id,
       // Global search
       commands::search_global,

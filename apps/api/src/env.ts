@@ -32,6 +32,19 @@ const envSchema = z.object({
   // required so the API and web app still boot without them configured.
   DOWNLOAD_URL_MACOS: z.string().min(1).default("/downloads/sordi-invoicing-mac.dmg"),
   DOWNLOAD_URL_WINDOWS: z.string().min(1).default("/downloads/sordi-invoicing-windows.exe"),
+
+  // GET /releases/latest (apps/desktop's in-app update check). The desktop
+  // app is a Tauri webview, not a browser tab already on sordi.app like
+  // apps/web is — DOWNLOAD_URL_MACOS's relative path only resolves
+  // correctly there. SITE_ORIGIN prefixes it into an absolute URL for the
+  // "Télécharger la mise à jour" link that opens in the user's browser.
+  SITE_ORIGIN: z.string().min(1).default("https://sordi.app"),
+  // Current build's version and changelog text — bumped by hand alongside
+  // apps/desktop/package.json and src-tauri/tauri.conf.json on every
+  // release, kept in sync manually (same pattern as this file's other
+  // hand-maintained constants).
+  LATEST_APP_VERSION: z.string().min(1).default("1.0.0"),
+  RELEASE_NOTES: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
