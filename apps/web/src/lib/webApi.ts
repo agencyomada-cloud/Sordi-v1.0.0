@@ -171,6 +171,23 @@ export const webApi = {
     return res.json();
   },
 
+  // Device-quota stepper next to the "N/M postes" table column — the API
+  // refuses (409) a value below the license's current activation count.
+  updateMaxDevices: async (id: string, maxDevices: number, adminSecret: string): Promise<{ license: License }> => {
+    const res = await fetch(`${API_BASE_URL}/licenses/${id}/max-devices`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-secret": adminSecret,
+      },
+      body: JSON.stringify({ maxDevices }),
+    });
+
+    if (!res.ok) return parseJsonError(res);
+
+    return res.json();
+  },
+
   // Atomic "extend + mark paid" — replaces composing extendLicense +
   // updateContactStatus as two separate calls, which never updated
   // planType and left a converted license looking like a trial forever

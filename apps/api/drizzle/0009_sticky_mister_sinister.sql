@@ -1,0 +1,1 @@
+ALTER TABLE "licenses" ALTER COLUMN "max_devices" SET DEFAULT 1;

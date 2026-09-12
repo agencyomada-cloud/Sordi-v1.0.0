@@ -154,6 +154,13 @@ export const licensesRepo = {
   updatePlanType: (id: string, planType: (typeof licenses.$inferSelect)["planType"]) =>
     db.update(licenses).set({ planType, updatedAt: new Date() }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
 
+  // The admin dashboard's device-quota stepper — raises or lowers how many
+  // machines this license may activate. The route checks the new value
+  // against the live activation count before calling this; this method
+  // itself does no such validation, it's a plain field write.
+  updateMaxDevices: (id: string, maxDevices: number) =>
+    db.update(licenses).set({ maxDevices, updatedAt: new Date() }).where(eq(licenses.id, id)).returning().then((rows) => rows[0] ?? null),
+
   // Atomic version of "extend + mark converted" — the admin dashboard's
   // "Convertir en Annuel" action used to compose extend() and
   // updateContactStatus() as two separate round trips, which never touched

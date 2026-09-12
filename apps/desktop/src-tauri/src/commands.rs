@@ -817,8 +817,51 @@ pub fn create_company(db: State<'_, Mutex<Connection>>, data: CreateCompanyData)
     // password exists, onboarding is over and a real license is required
     // for any further company (protects against an unlicensed install
     // spinning up unlimited multi-company workspaces).
-    if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
+    let password_set = crate::database::has_password_set(&conn).map_err(|e| e.to_string())?;
+    if password_set {
         crate::license::require_active_license()?;
+    }
+
+    // Onboarding's Step 1 (still pre-password) is the one caller that can
+    // land here while the migration-seeded default "Mon Entreprise" company
+    // still sits untouched in the database — see
+    // migrate_multi_company_if_needed's doc comment. Rather than INSERTing
+    // a second row and leaving that seed row as a permanent duplicate in
+    // the workspace switcher, fold the user's real company info into it.
+    if !password_set {
+        if let Some(seed_id) = crate::database::find_updatable_seed_company(&conn).map_err(|e| e.to_string())? {
+            conn.execute(
+                "UPDATE companies SET name = ?1, logo_base64 = ?2, activity = ?3, legal_form = ?4, rc = ?5, nif = ?6, nis = ?7, article_imposition = ?8, address = ?9, phone = ?10, phones = ?11, email = ?12, website = ?13, capital = ?14, rib = ?15, bank_agency = ?16, extra_info = ?17, cnas_adherent = ?18, currency = ?19, invoice_prefix = ?20 WHERE id = ?21",
+                params![
+                    data.name,
+                    data.logo_base64,
+                    data.activity,
+                    data.legal_form,
+                    data.rc,
+                    data.nif,
+                    data.nis,
+                    data.article_imposition,
+                    data.address,
+                    data.phone,
+                    data.phones,
+                    data.email,
+                    data.website,
+                    data.capital,
+                    data.rib,
+                    data.bank_agency,
+                    data.extra_info,
+                    data.cnas_adherent,
+                    data.currency.unwrap_or_else(|| "DZD".to_string()),
+                    data.invoice_prefix.unwrap_or_else(|| "FAC-2026-".to_string()),
+                    seed_id,
+                ],
+            ).map_err(|e| e.to_string())?;
+
+            let _ = log_activity(&conn, "UPDATE", "COMPANY", Some(&seed_id), &format!("Entreprise renseignée lors de l'onboarding: {}", data.name));
+
+            drop(conn);
+            return get_company(db, seed_id).map_err(|e| e.to_string())?.ok_or_else(|| "Failed to retrieve updated company".to_string());
+        }
     }
 
     let id = uuid::Uuid::new_v4().to_string();

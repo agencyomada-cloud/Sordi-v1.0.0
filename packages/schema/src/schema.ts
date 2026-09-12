@@ -448,7 +448,7 @@ export const licenses = pgTable("licenses", {
   email: text("email"),
   activatedAt: timestamp("activated_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  maxDevices: integer("max_devices").notNull().default(2),
+  maxDevices: integer("max_devices").notNull().default(1),
   status: licenseStatusEnum("status").notNull().default("active"),
   contactStatus: licenseContactStatusEnum("contact_status").notNull().default("a_contacter"),
   planType: licensePlanTypeEnum("plan_type").notNull().default("trial"),

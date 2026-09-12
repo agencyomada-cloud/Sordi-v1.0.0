@@ -96,7 +96,9 @@ export const licenseVerifySchema = z.object({
 // Internal admin-only endpoint — you call this by hand per sale/trial
 // signup, so it's deliberately not exposed to any customer-facing UI (only
 // the admin dashboard). expiresAt is a plain ISO date string on the wire;
-// maxDevices defaults to 2 to match the schema default. phone/email are
+// maxDevices defaults to 1 to match the schema default — every license
+// starts scoped to a single machine, and the admin dashboard is the only
+// place that can raise it (see licenseMaxDevicesSchema below). phone/email are
 // required by the admin dashboard's form (every lead needs a way to follow
 // up), but stay optional here since /licenses/create itself has no other
 // caller that could supply them.
@@ -160,6 +162,15 @@ export const licenseContactStatusSchema = z.object({
 // mark annual without also extending it right now, or vice versa).
 export const licensePlanTypeSchema = z.object({
   planType: z.enum(["trial", "annual", "lifetime"]),
+});
+
+// PATCH /licenses/:id/max-devices — the admin dashboard's device-quota
+// stepper (increment/decrement next to the "N/M postes" column). Never
+// lets an admin set the quota below however many devices are currently
+// activated — the route itself checks that against the live activation
+// count, this schema only validates the shape.
+export const licenseMaxDevicesSchema = z.object({
+  maxDevices: z.number().int().positive(),
 });
 
 // PATCH /licenses/:id/convert-to-paid — the admin dashboard's "Convertir en

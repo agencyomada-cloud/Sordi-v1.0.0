@@ -778,6 +778,15 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
     // touches is guaranteed to already exist.
     migrate_multi_company_if_needed(&conn)?;
 
+    // Cleanup: on an install where the seed migration above raced ahead of
+    // onboarding (fixed for new installs by create_company's UPDATE-instead-
+    // of-INSERT path below, but pre-existing databases already have both
+    // rows), drop the leftover "Mon Entreprise" row once a real company
+    // exists alongside it. Only ever touches a row named exactly that with
+    // zero data referencing it — never the user's only company, even if
+    // they happened to name it "Mon Entreprise" themselves.
+    cleanup_orphan_default_company_if_needed(&conn)?;
+
     // Query performance indexes — every list/filter and dashboard
     // aggregate query goes through these columns (see get_invoices,
     // get_dashboard_stats, get_expenses, get_clients in commands.rs), and
@@ -1214,11 +1223,67 @@ fn migrate_expenses_payment_status_if_needed(conn: &Connection) -> Result<(), ru
 //  2. Add company_id to every business table that needs data isolation,
 //     backfilling existing rows to that default company so nothing already
 //     in the database becomes orphaned/invisible after the migration.
-const COMPANY_SCOPED_TABLES: &[&str] = &[
+pub const COMPANY_SCOPED_TABLES: &[&str] = &[
     "clients", "suppliers", "products", "invoices", "payments",
     "orders", "delivery_notes", "expenses", "projects", "employees",
     "partners", "activities",
 ];
+
+/// True if no row in any company-scoped table references this company —
+/// i.e. it's untouched since creation. Used both to decide whether
+/// onboarding's first company should UPDATE a seed row instead of INSERTing
+/// a duplicate (commands.rs's create_company), and to clean up a leftover
+/// seed row on startup (cleanup_orphan_default_company_if_needed below).
+pub fn company_has_no_scoped_data(conn: &Connection, company_id: &str) -> Result<bool, rusqlite::Error> {
+    for table in COMPANY_SCOPED_TABLES {
+        let count: i64 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM {} WHERE company_id = ?1", table),
+            params![company_id],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// If the database holds exactly one company row and it has no data of its
+/// own yet, returns its id — the signal create_company uses to UPDATE that
+/// row (onboarding's real company) instead of INSERTing a second one
+/// alongside the migration-seeded "Mon Entreprise" default.
+pub fn find_updatable_seed_company(conn: &Connection) -> Result<Option<String>, rusqlite::Error> {
+    let company_count: i64 = conn.query_row("SELECT COUNT(*) FROM companies", [], |row| row.get(0))?;
+    if company_count != 1 {
+        return Ok(None);
+    }
+    let id: String = conn.query_row("SELECT id FROM companies LIMIT 1", [], |row| row.get(0))?;
+    if company_has_no_scoped_data(conn, &id)? {
+        Ok(Some(id))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Deletes any company literally named "Mon Entreprise" that has zero data
+/// of its own, but only once at least one OTHER company exists — never the
+/// sole company in the database, even if the user named it that themselves.
+fn cleanup_orphan_default_company_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let company_count: i64 = conn.query_row("SELECT COUNT(*) FROM companies", [], |row| row.get(0))?;
+    if company_count < 2 {
+        return Ok(());
+    }
+    let orphan_ids: Vec<String> = conn
+        .prepare("SELECT id FROM companies WHERE name = 'Mon Entreprise'")?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    for id in orphan_ids {
+        if company_has_no_scoped_data(conn, &id)? {
+            conn.execute("DELETE FROM companies WHERE id = ?1", params![id])?;
+        }
+    }
+    Ok(())
+}
 
 fn migrate_contracts_services_if_needed(conn: &Connection) -> Result<(), rusqlite::Error> {
     let table_info: Result<Vec<_>, _> = conn.prepare("PRAGMA table_info(contracts)")?

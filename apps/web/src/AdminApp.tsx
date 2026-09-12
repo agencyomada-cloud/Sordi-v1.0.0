@@ -62,6 +62,7 @@ import {
   RiNotification3Line as BellIcon,
   RiMoreLine as MoreIcon,
   RiAddLine as AddIcon,
+  RiSubtractLine as SubtractIcon,
   RiCloseLine as CloseIcon,
   RiArrowUpSLine as SortAscIcon,
   RiArrowDownSLine as SortDescIcon,
@@ -504,6 +505,7 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [plan, setPlan] = useState<Plan>("trial14");
+  const [maxDevices, setMaxDevices] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastGenerated, setLastGenerated] = useState<{ licenseKey: string; organizationName: string } | null>(null);
 
@@ -512,6 +514,7 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
     setPhone("");
     setEmail("");
     setPlan("trial14");
+    setMaxDevices(1);
     setLastGenerated(null);
   };
 
@@ -528,6 +531,7 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
           phone: phone.trim(),
           email: email.trim(),
           expiresAt,
+          maxDevices,
           planType: PLAN_TO_PLAN_TYPE[plan],
         },
         adminSecret
@@ -614,6 +618,17 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="max-devices">Nombre de postes autorisés</Label>
+              <Input
+                id="max-devices"
+                type="number"
+                min={1}
+                step={1}
+                value={maxDevices}
+                onChange={(e) => setMaxDevices(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
+              />
+            </div>
             <DialogFooter>
               <Button type="submit" className="w-full" disabled={!clientName.trim() || !phone.trim() || !email.trim() || isSubmitting}>
                 {isSubmitting ? "Génération..." : "Générer la clé"}
@@ -646,6 +661,8 @@ function DeviceDetailsDialog({
   const [activations, setActivations] = useState<DeviceActivation[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [maxDevicesDraft, setMaxDevicesDraft] = useState(1);
+  const [isUpdatingQuota, setIsUpdatingQuota] = useState(false);
 
   useEffect(() => {
     if (!open || !license) {
@@ -660,7 +677,29 @@ function DeviceDetailsDialog({
       .finally(() => setIsLoading(false));
   }, [open, license, adminSecret]);
 
+  // Kept as local draft state (rather than reading license.maxDevices
+  // directly) so +/- clicks feel instant instead of waiting on the parent
+  // table's refetch — onChanged() still refreshes it in the background.
+  useEffect(() => {
+    if (license) setMaxDevicesDraft(license.maxDevices);
+  }, [license?.id, license?.maxDevices]);
+
   if (!license) return null;
+
+  const handleQuotaChange = async (delta: number) => {
+    const next = maxDevicesDraft + delta;
+    if (next < 1 || isUpdatingQuota) return;
+    setIsUpdatingQuota(true);
+    try {
+      const res = await webApi.updateMaxDevices(license.id, next, adminSecret);
+      setMaxDevicesDraft(res.license.maxDevices);
+      onChanged();
+    } catch (error) {
+      toast.error(error instanceof WebApiError ? error.message : "Impossible de modifier le quota.");
+    } finally {
+      setIsUpdatingQuota(false);
+    }
+  };
 
   const handleUnlink = async (fingerprint: string) => {
     setUnlinking(fingerprint);
@@ -684,8 +723,35 @@ function DeviceDetailsDialog({
             <DeviceIcon className="h-4 w-4 text-primary" />
             {license.organizationName}
           </DialogTitle>
-          <DialogDescription>
-            {license.deviceCount} / {license.maxDevices} appareil(s) activé(s)
+          <DialogDescription asChild>
+            <div className="flex items-center gap-3">
+              <span>{license.deviceCount} / {maxDevicesDraft} appareil(s) activé(s)</span>
+              <div className="ml-auto flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={isUpdatingQuota || maxDevicesDraft <= license.deviceCount || maxDevicesDraft <= 1}
+                  onClick={() => handleQuotaChange(-1)}
+                  title="Réduire le quota de postes"
+                >
+                  <SubtractIcon className="h-3 w-3" />
+                </Button>
+                <span className="w-5 text-center text-xs font-semibold tabular-nums text-foreground">{maxDevicesDraft}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={isUpdatingQuota}
+                  onClick={() => handleQuotaChange(1)}
+                  title="Augmenter le quota de postes"
+                >
+                  <AddIcon className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </DialogDescription>
         </DialogHeader>
 

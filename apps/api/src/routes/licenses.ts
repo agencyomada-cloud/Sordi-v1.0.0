@@ -9,6 +9,7 @@ import {
   licenseCreateSchema,
   licenseExtendSchema,
   licenseListQuerySchema,
+  licenseMaxDevicesSchema,
   licensePlanTypeSchema,
   licenseRequestTrialSchema,
   licenseUnlinkDeviceSchema,
@@ -87,8 +88,8 @@ licensesRouter.post(
       const deviceCount = await licensesRepo.countDevices(license.id);
       if (deviceCount >= license.maxDevices) {
         res.status(403).json({
-          error: "device_limit_reached",
-          message: `This license is already active on ${license.maxDevices} device(s). Deactivate one first, or contact support to increase the limit.`,
+          error: "DEVICE_LIMIT_REACHED",
+          message: "La limite d'ordinateurs autorisés pour cette licence est atteinte. Contactez l'administrateur pour ajouter un poste.",
         });
         return;
       }
@@ -179,7 +180,7 @@ licensesRouter.post(
       phone,
       email,
       expiresAt,
-      maxDevices: 2,
+      maxDevices: 1,
       status: "active",
       contactStatus: "a_contacter",
       planType: "trial",
@@ -247,7 +248,7 @@ licensesRouter.post(
       phone: phone ?? null,
       email: email ?? null,
       expiresAt: new Date(expiresAt),
-      maxDevices: maxDevices ?? 2,
+      maxDevices: maxDevices ?? 1,
       status: "active",
       contactStatus: "a_contacter",
       planType: planType ?? "trial",
@@ -344,6 +345,39 @@ licensesRouter.patch(
       return;
     }
     const updated = await licensesRepo.updatePlanType(req.params.id, parsed.data.planType);
+    res.json({ license: updated });
+  })
+);
+
+// PATCH /licenses/:id/max-devices — the admin dashboard's quota
+// increment/decrement stepper. Refuses to set the quota below the number
+// of devices actually activated right now (would silently strand an
+// already-active machine with no way to re-verify) — the admin has to
+// unlink a device first if they genuinely want to shrink the quota below
+// its current usage.
+licensesRouter.patch(
+  "/:id/max-devices",
+  requireAdminSecret,
+  asyncHandler(async (req, res) => {
+    const parsed = licenseMaxDevicesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_request", issues: parsed.error.flatten() });
+      return;
+    }
+    const existing = await licensesRepo.findById(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "license_not_found" });
+      return;
+    }
+    const deviceCount = await licensesRepo.countDevices(req.params.id);
+    if (parsed.data.maxDevices < deviceCount) {
+      res.status(409).json({
+        error: "MAX_DEVICES_BELOW_ACTIVE_COUNT",
+        message: `Cette licence a déjà ${deviceCount} appareil(s) activé(s). Déliez-en un d'abord pour réduire le quota en dessous.`,
+      });
+      return;
+    }
+    const updated = await licensesRepo.updateMaxDevices(req.params.id, parsed.data.maxDevices);
     res.json({ license: updated });
   })
 );
