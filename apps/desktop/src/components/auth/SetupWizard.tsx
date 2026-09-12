@@ -94,8 +94,15 @@ export function SetupWizard() {
     try {
       await createCompany({ name: companyName.trim() || 'Mon Entreprise', activity: resolvedActivity, currency });
       setStep(2);
-    } catch {
-      setErrorMessage("Impossible de créer l'espace entreprise. Réessayez.");
+    } catch (error) {
+      // useWorkspace().createCompany already logs the full error via
+      // logError() — this surfaces the real backend message too (e.g. the
+      // Rust command's own Err(String)) instead of a fixed generic string,
+      // since a silently swallowed cause here is exactly what made a real
+      // bug (the license gate blocking first-run company creation) hard to
+      // diagnose from the UI alone.
+      const detail = typeof error === 'string' ? error : error instanceof Error ? error.message : null;
+      setErrorMessage(detail || "Impossible de créer l'espace entreprise. Réessayez.");
     }
   };
 
@@ -104,8 +111,9 @@ export function SetupWizard() {
     try {
       await createCompany({ name: 'Mon Entreprise', activity: ACTIVITIES[0].value, currency: 'DZD' });
       setStep(2);
-    } catch {
-      setErrorMessage("Impossible de créer l'espace entreprise. Réessayez.");
+    } catch (error) {
+      const detail = typeof error === 'string' ? error : error instanceof Error ? error.message : null;
+      setErrorMessage(detail || "Impossible de créer l'espace entreprise. Réessayez.");
     }
   };
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open as openDirDialog } from "@tauri-apps/plugin-dialog";
 import { Button, Dialog, DialogContent, DialogTitle, DialogDescription } from "@sordi/ui";
 import { useSettings, useUpdateSetting } from "@/hooks/useSettings";
+import { logError } from "@/lib/errorLogger";
 import {
   RiShieldCheckLine as ShieldCheck,
   RiFlashlightLine as Flash,
@@ -24,8 +25,15 @@ export function OnboardingModal() {
   const [step, setStep] = useState<Step>(1);
   const [backupDir, setBackupDir] = useState("");
   const [isPicking, setIsPicking] = useState(false);
+  // Local override so the modal always closes the instant the user acts,
+  // never waiting on (or getting stuck on) the settings-write round-trip.
+  // `open` below is still primarily driven by the server value — this flag
+  // only ever forces it closed, never re-opens it — so a slow/failed write
+  // can't leave "Ignorer"/"Terminer et commencer"/the corner X looking like
+  // they did nothing.
+  const [dismissedLocally, setDismissedLocally] = useState(false);
 
-  const open = !isLoading && settings?.onboarding_completed !== "true";
+  const open = !dismissedLocally && !isLoading && settings?.onboarding_completed !== "true";
 
   // Pre-fill from any value already saved (e.g. wizard was skipped once,
   // then the user set a folder in Paramètres before ever finishing it).
@@ -36,10 +44,23 @@ export function OnboardingModal() {
   }, [settings?.pdf_backup_directory]);
 
   const complete = (savedDir?: string) => {
-    if (savedDir) {
-      updateSetting.mutate({ key: "pdf_backup_directory", value: savedDir });
-    }
-    updateSetting.mutate({ key: "onboarding_completed", value: "true" });
+    // Close immediately — the settings write below is best-effort. A
+    // rejected mutation (e.g. a backend error) must never leave this modal
+    // stuck open forever with no way out; onboarding_completed simply
+    // won't be persisted in that case, and the modal will correctly
+    // reappear on next launch instead of silently freezing this one.
+    setDismissedLocally(true);
+
+    (async () => {
+      try {
+        if (savedDir) {
+          await updateSetting.mutateAsync({ key: "pdf_backup_directory", value: savedDir });
+        }
+        await updateSetting.mutateAsync({ key: "onboarding_completed", value: "true" });
+      } catch (error) {
+        logError("OnboardingModal settings save failed", error);
+      }
+    })();
   };
 
   const handlePickDirectory = async () => {

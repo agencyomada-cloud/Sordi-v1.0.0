@@ -771,9 +771,32 @@ pub fn get_company(db: State<'_, Mutex<Connection>>, id: String) -> Result<Optio
 
 #[tauri::command]
 pub fn create_company(db: State<'_, Mutex<Connection>>, data: CreateCompanyData) -> Result<Company, String> {
-    crate::license::require_active_license()?;
-
     let conn = db.lock().map_err(|e| e.to_string())?;
+
+    // The very first company (SetupWizard's Step 1, "Bienvenue dans Sordi")
+    // must be creatable on a genuinely fresh, unactivated install — there is
+    // no license to check yet at that point, and every company-scoped query
+    // in the app gates on a company existing at all (useWorkspace().isReady).
+    // Gating this unconditionally made onboarding itself impossible: a brand
+    // new customer could never get past step 1.
+    //
+    // Deliberately gated on has_password_set() (SELECT COUNT(*) FROM users),
+    // NOT on company count: this app is single-user, so "no password set
+    // yet" is the one reliable signal that SetupWizard itself is still
+    // running (see useAuth's needsSetup, which is set from this exact same
+    // query and is what makes SetupWizard render at all) — a company row
+    // count is not reliable here, since a database that already went
+    // through onboarding once (e.g. during earlier testing, or a factory
+    // reset that didn't fully clear every table) can carry stray company
+    // rows without ever having had a real license, which would incorrectly
+    // re-trigger the license gate on a still-unactivated install. Once a
+    // password exists, onboarding is over and a real license is required
+    // for any further company (protects against an unlicensed install
+    // spinning up unlimited multi-company workspaces).
+    if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
+        crate::license::require_active_license()?;
+    }
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -814,9 +837,17 @@ pub fn create_company(db: State<'_, Mutex<Connection>>, data: CreateCompanyData)
 
 #[tauri::command]
 pub fn update_company(db: State<'_, Mutex<Connection>>, id: String, data: CreateCompanyData) -> Result<Company, String> {
-    crate::license::require_active_license()?;
-
     let conn = db.lock().map_err(|e| e.to_string())?;
+
+    // Same reasoning and same has_password_set()-based gate as
+    // create_company just above (see its comment for why company count is
+    // not a reliable "onboarding still in progress" signal). Editing the
+    // company profile before a password/license exists (RC/NIF/logo/
+    // address right after onboarding) is still "initial profile setup,"
+    // not the abuse case this gate exists for.
+    if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
+        crate::license::require_active_license()?;
+    }
 
     conn.execute(
         "UPDATE companies SET name = ?2, logo_base64 = ?3, activity = ?4, legal_form = ?5, rc = ?6, nif = ?7, nis = ?8, article_imposition = ?9, address = ?10, phone = ?11, phones = ?12, email = ?13, website = ?14, capital = ?15, rib = ?16, bank_agency = ?17, extra_info = ?18, cnas_adherent = ?19, currency = ?20, invoice_prefix = ?21 WHERE id = ?1",
@@ -3669,22 +3700,36 @@ pub fn get_settings(db: State<'_, Mutex<Connection>>) -> Result<std::collections
 
 #[tauri::command]
 pub fn update_setting(db: State<'_, Mutex<Connection>>, key: String, value: String) -> Result<(), String> {
-    crate::license::require_active_license()?;
-
     let conn = db.lock().map_err(|e| e.to_string())?;
-    
+
+    // Same has_password_set()-gated bypass as create_company/update_company
+    // (see those functions' comments for the full reasoning). This command
+    // is also called during onboarding itself — OnboardingModal.tsx writes
+    // `onboarding_completed` and `pdf_backup_directory` here on "Terminer et
+    // commencer"/"Ignorer", on a still-unactivated install right after
+    // SetupWizard finishes. Blocking it unconditionally made that second
+    // onboarding modal unable to ever close.
+    if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
+        crate::license::require_active_license()?;
+    }
+
     conn.execute(
-        "INSERT INTO settings (key, value) VALUES (?1, ?2) 
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = ?2",
         params![key, value],
     ).map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn update_settings(db: State<'_, Mutex<Connection>>, settings: std::collections::HashMap<String, String>) -> Result<(), String> {
-    crate::license::require_active_license()?;
+    {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
+            crate::license::require_active_license()?;
+        }
+    }
 
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
