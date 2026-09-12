@@ -3726,17 +3726,19 @@ pub fn get_settings(db: State<'_, Mutex<Connection>>) -> Result<std::collections
 pub fn update_setting(db: State<'_, Mutex<Connection>>, key: String, value: String) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
-    // Same has_password_set()-gated bypass as create_company/update_company
-    // (see those functions' comments for the full reasoning). This command
-    // is also called during onboarding itself — OnboardingModal.tsx writes
-    // `onboarding_completed` and `pdf_backup_directory` here on "Terminer et
-    // commencer"/"Ignorer", on a still-unactivated install right after
-    // SetupWizard finishes. Blocking it unconditionally made that second
-    // onboarding modal unable to ever close.
-    if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
-        crate::license::require_active_license()?;
-    }
-
+    // Deliberately NOT license-gated. This was gated during onboarding at
+    // one point (see the removed has_password_set()-gated bypass, kept
+    // briefly for create_company/update_company's benefit) but that
+    // blocked far more than intended: this same command backs invoice
+    // branding/customization (template, accent color, font, logo/stamp
+    // size — see InvoiceCustomizeDrawer.tsx) alongside real app
+    // configuration, none of which is "creating or editing business data"
+    // in the sense read-only mode means to restrict. A trial-expired or
+    // unactivated user should still be able to view their data AND
+    // customize how it's presented — only actually creating/editing/
+    // deleting invoices, clients, and products is gated, via each of
+    // those commands' own require_active_license() call plus the
+    // frontend's useLicenseGate()/LicenseBlockedModal.
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = ?2",
@@ -3748,13 +3750,9 @@ pub fn update_setting(db: State<'_, Mutex<Connection>>, key: String, value: Stri
 
 #[tauri::command]
 pub fn update_settings(db: State<'_, Mutex<Connection>>, settings: std::collections::HashMap<String, String>) -> Result<(), String> {
-    {
-        let conn = db.lock().map_err(|e| e.to_string())?;
-        if crate::database::has_password_set(&conn).map_err(|e| e.to_string())? {
-            crate::license::require_active_license()?;
-        }
-    }
-
+    // Deliberately NOT license-gated — see update_setting's doc comment
+    // above for why (branding/customization writes go through this same
+    // settings table, not just onboarding).
     let mut conn = db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     
