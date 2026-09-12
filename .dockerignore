@@ -3,6 +3,11 @@
 **/.env
 **/.env.*
 !**/.env.*.example
+# Checked-in, non-secret Vite build default (apps/web/.env.production) —
+# unlike .env/.env.local, this holds no secrets, just the production
+# VITE_API_URL, and must reach the Docker build context for `vite build`
+# to pick it up as intended.
+!apps/web/.env.production
 apps/desktop/src-tauri/target
 apps/api/.pgdata
 apps/api/backups
