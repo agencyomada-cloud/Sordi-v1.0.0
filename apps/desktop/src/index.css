@@ -60,18 +60,22 @@
        a whisper of separation from the window canvas without a shadow.
        (Restored from the original Rose/Crimson identity after a brief
        teal/navy/mint/lavender fintech-palette experiment.) */
-    --background: 0 0% 100%;
+    /* Crisp neutral canvas (#F8F9FA) — a hair off pure white so bordered
+       white cards (--card, below) actually separate from the window
+       canvas without needing a shadow. */
+    --background: 210 17% 98%;
     --foreground: 222 47% 11%;
 
     /* Surface — the window-canvas tone used for secondary/muted panels
        and the rounded shell wrapping sidebar+content. Same value as
        --background: this is a 2-tier system (window canvas, content
        pane), not the old 3-tier web-SaaS depth stack. */
-    --surface: 0 0% 100%;
+    --surface: 210 17% 98%;
 
-    /* Card — 98% lightness, a hair below the pure-white background (see
-       the file-level comment above). */
-    --card: 0 0% 98%;
+    /* Card — pure white, a step brighter than the --background canvas
+       (inverted from the old "card sits a hair below background" scheme,
+       now that --background itself isn't pure white anymore). */
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
@@ -195,12 +199,15 @@
        table-row backgrounds) stays in this neutral scale on purpose:
        nothing here should recolor a whole row, card body, or panel
        Scarlet. */
-    --background: 225 15% 5%;
+    /* Deep neutral zinc (#09090B) — matches Tailwind's zinc-950 exactly. */
+    --background: 240 10% 4%;
     --foreground: 220 15% 94%;
 
-    --surface: 225 15% 5%;
+    --surface: 240 10% 4%;
 
-    --card: 222 15% 9%;
+    /* Elevated card (#141417) — a clearly lighter step above the near-
+       black canvas so bordered panels read as raised, not just outlined. */
+    --card: 240 7% 8%;
     --card-foreground: 220 15% 94%;
 
     --popover: 222 15% 8%;

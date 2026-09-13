@@ -40,6 +40,7 @@ import {
   Clock,
 } from "lucide-react";
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, AreaChart, Area, ResponsiveContainer } from "recharts";
+import { AiCopilotBar } from "@/components/dashboard/ai-copilot";
 
 // Dashboard-only palette: the Scarlet brand accent, matching --primary in
 // index.css (was a stale #0052FF "AgentOps-blue" literal left over from
@@ -365,6 +366,7 @@ const Index = () => {
             </div>
             <Skeleton className="h-9 w-72 rounded-full" />
           </div>
+          <Skeleton className="h-11 w-full rounded-lg" />
           <Skeleton className="h-24 w-full rounded-2xl" />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Skeleton className="lg:col-span-2 h-[320px] rounded-2xl" />
@@ -431,6 +433,11 @@ const Index = () => {
             </Tooltip>
           </div>
         </div>
+
+        {/* ── AI Copilot — permanent hero input, above the KPI strip.
+            Fully self-contained (own state, own mock-analysis logic, own
+            Cmd+K handling) — see components/dashboard/ai-copilot/. ── */}
+        <AiCopilotBar />
 
         {/* ── Tier 2 — unified executive metric strip. Every value/delta/
             subtext computed above is unchanged — only the layout is new.

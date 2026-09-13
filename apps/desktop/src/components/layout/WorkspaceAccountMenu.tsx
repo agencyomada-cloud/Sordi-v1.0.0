@@ -120,46 +120,66 @@ export function WorkspaceAccountMenu() {
             <ChevronIcon className="w-3 h-3 shrink-0 text-muted-foreground/60" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56 bg-popover/95 border border-border/80 rounded-md p-1 shadow-xl backdrop-blur-md select-none text-xs">
+        <DropdownMenuContent
+          align="end"
+          className="min-w-[260px] bg-popover/95 border border-border/50 rounded-2xl p-3 shadow-xl backdrop-blur-xl select-none text-xs space-y-3"
+        >
           {/* Account/workspace identity — the active company, not the raw
               session email, is the headline: this menu is primarily a
-              workspace switcher, so it should read as "where am I" first. */}
-          <div className="px-2.5 py-1.5 border-b border-border/50 mb-1">
-            <p className="font-semibold text-foreground text-xs truncate">
-              {activeCompany?.name ?? "Sélectionner"}
-            </p>
-            {user && (
-              <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                <span className="relative flex h-1.5 w-1.5 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                </span>
-                <span className="truncate">{user.email}</span>
+              workspace switcher, so it should read as "where am I" first.
+              An avatar chip anchors it as a proper identity header rather
+              than plain stacked text. */}
+          <div className="flex items-center gap-2.5 px-0.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
+              {initial}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground text-sm truncate">
+                {activeCompany?.name ?? "Sélectionner"}
               </p>
-            )}
+              {user && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="relative flex h-1.5 w-1.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[11px] text-muted-foreground truncate">{user.email}</span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-2.5 py-1">
-            Entreprises
-          </DropdownMenuLabel>
-          {companies.map((company) => (
+          <div>
+            <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-0.5 py-1">
+              Entreprises
+            </DropdownMenuLabel>
+            <div className="space-y-1">
+              {companies.map((company) => {
+                const active = company.id === activeCompanyId;
+                return (
+                  <DropdownMenuItem key={company.id} asChild className="p-0 focus:bg-transparent">
+                    <button
+                      type="button"
+                      onClick={() => switchCompany(company.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between gap-2 rounded-lg p-2 text-xs transition-colors cursor-pointer",
+                        active ? "bg-muted/70 text-foreground font-medium" : "bg-muted/40 hover:bg-muted/70 text-muted-foreground"
+                      )}
+                    >
+                      <span className="flex-1 min-w-0 truncate text-start">{company.name}</span>
+                      {active && <CheckIcon className="size-3.5 text-primary shrink-0" />}
+                    </button>
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
             <DropdownMenuItem
-              key={company.id}
-              onClick={() => switchCompany(company.id)}
-              className="h-7 px-2.5 rounded text-xs flex items-center justify-between hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+              onClick={() => setCreateDialogOpen(true)}
+              className="h-7 px-2 mt-1 rounded-lg text-xs flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
-              <span className="flex-1 min-w-0 truncate">{company.name}</span>
-              {company.id === activeCompanyId && (
-                <CheckIcon className="size-3.5 text-foreground shrink-0" />
-              )}
+              + Nouvelle entreprise...
             </DropdownMenuItem>
-          ))}
-          <DropdownMenuItem
-            onClick={() => setCreateDialogOpen(true)}
-            className="h-7 px-2.5 rounded text-xs flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            + Nouvelle entreprise...
-          </DropdownMenuItem>
+          </div>
 
           <DropdownMenuSeparator />
 
@@ -167,99 +187,117 @@ export function WorkspaceAccountMenu() {
               segmented-control track instead of two separately-styled
               plain-text/icon rows, so both read as the same kind of
               control. */}
-          <div className="px-2 py-1.5 border-t border-border/50">
-            <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-md border border-border/50 w-fit">
-              <LanguageSwitcher />
-              <div className="w-px h-4 bg-border/60 mx-0.5" aria-hidden="true" />
-              <div className="flex items-center gap-0.5">
-                {THEME_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const active = mounted && theme === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setTheme(option.value)}
-                      aria-pressed={active}
-                      title={option.label}
-                      className={cn(
-                        "flex items-center justify-center h-6 w-6 rounded transition-colors duration-150 border",
-                        active
-                          ? "bg-card dark:bg-white/[0.08] text-foreground shadow-sm border-border dark:border-white/[0.1]"
-                          : "text-muted-foreground hover:text-foreground border-transparent"
-                      )}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-md border border-border/50 w-fit">
+            <LanguageSwitcher />
+            <div className="w-px h-4 bg-border/60 mx-0.5" aria-hidden="true" />
+            <div className="flex items-center gap-0.5">
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const active = mounted && theme === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setTheme(option.value)}
+                    aria-pressed={active}
+                    title={option.label}
+                    className={cn(
+                      "flex items-center justify-center h-6 w-6 rounded transition-colors duration-150 border",
+                      active
+                        ? "bg-card dark:bg-white/[0.08] text-foreground shadow-sm border-border dark:border-white/[0.1]"
+                        : "text-muted-foreground hover:text-foreground border-transparent"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="my-0" />
 
-          {/* Abonnement — status, formula, and échéance in one glance, so
-              the customer never has to go hunting through Paramètres to
-              know where they stand. */}
-          <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-2.5 py-1">
-            Abonnement
-          </DropdownMenuLabel>
-          <div className="px-2.5 py-1.5 space-y-1">
-            <div className="flex items-center gap-1.5">
-              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", subscription.dot)} />
-              <span className="text-xs font-medium text-foreground">{subscription.label}</span>
+          {/* Abonnement — a discreet status pill (color keyed off the same
+              subscription lookup) instead of raw trailing text, plus the
+              formula/échéance underneath for the full picture. */}
+          <div>
+            <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-0.5 py-1">
+              Abonnement
+            </DropdownMenuLabel>
+            <div className="px-0.5 space-y-1.5">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  isPro
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : licenseState === "TRIAL_ACTIVE"
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "bg-muted text-muted-foreground"
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", subscription.dot)} />
+                {subscription.label}
+              </span>
+              <p className="text-[11px] text-muted-foreground">{subscription.formula}</p>
+              {expiryFormatted && (
+                <p className="text-[11px] text-muted-foreground">
+                  Échéance : {expiryFormatted}
+                  {daysRemaining !== null && ` (${daysRemaining} j restants)`}
+                </p>
+              )}
             </div>
-            <p className="text-[11px] text-muted-foreground">{subscription.formula}</p>
-            {expiryFormatted && (
-              <p className="text-[11px] text-muted-foreground">
-                Échéance : {expiryFormatted}
-                {daysRemaining !== null && ` (${daysRemaining} j restants)`}
-              </p>
-            )}
           </div>
 
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="my-0" />
 
           {/* Actions & Support */}
-          <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-2.5 py-1">
-            Actions & Support
-          </DropdownMenuLabel>
-          <DropdownMenuItem asChild>
-            <a
-              href={buildWhatsAppSupportUrl(activeCompany?.name)}
-              target="_blank"
-              rel="noreferrer"
-              className="h-7 px-2.5 rounded flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+          <div>
+            <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-0.5 py-1">
+              Actions & Support
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <a
+                href={buildWhatsAppSupportUrl(activeCompany?.name)}
+                target="_blank"
+                rel="noreferrer"
+                className="h-8 px-2 rounded-md flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+              >
+                <WhatsAppIcon className="w-4 h-4" />
+                Support & Assistance
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setActivationOpen(true)}
+              className="h-8 px-2 rounded-md hover:bg-accent hover:text-accent-foreground flex items-center gap-2 cursor-pointer"
             >
-              <WhatsAppIcon className="w-3.5 h-3.5" />
-              Support & Assistance
-            </a>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setActivationOpen(true)}
-            className="h-7 px-2.5 rounded hover:bg-accent hover:text-accent-foreground flex items-center gap-2 cursor-pointer"
-          >
-            <KeyIcon className="w-3.5 h-3.5 text-muted-foreground" />
-            Gérer ma licence / Saisir une clé
-          </DropdownMenuItem>
+              <KeyIcon className="w-4 h-4 text-muted-foreground" />
+              Gérer ma licence / Saisir une clé
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => navigate("/settings")}
+              className="h-8 px-2 rounded-md hover:bg-accent hover:text-accent-foreground flex items-center justify-between cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <SettingsIcon className="w-4 h-4 text-muted-foreground" />
+                Paramètres
+              </span>
+              <span className="text-[10px] text-muted-foreground/70 font-mono">⌘,</span>
+            </DropdownMenuItem>
+          </div>
 
-          <DropdownMenuSeparator />
-
-          <DropdownMenuItem onClick={() => navigate("/settings")} className="h-7 px-2.5 rounded hover:bg-accent hover:text-accent-foreground flex items-center justify-between cursor-pointer">
-            <span className="flex items-center gap-2">
-              <SettingsIcon className="w-3.5 h-3.5 text-muted-foreground" />
-              Paramètres
-            </span>
-            <span className="text-[10px] text-muted-foreground/70 font-mono">⌘,</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={handleLogout}
-            className="h-7 px-2.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center gap-2 cursor-pointer"
-          >
-            <LogoutIcon className="w-3.5 h-3.5" />
-            Déconnexion
-          </DropdownMenuItem>
+          {/* Sign-out — set apart with its own soft divider rather than
+              another DropdownMenuSeparator, so it visually reads as the
+              one destructive/exit action rather than just another item in
+              the Actions & Support list above it. */}
+          <div className="border-t border-border/40 pt-2">
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="h-8 px-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex items-center gap-2 cursor-pointer"
+            >
+              <LogoutIcon className="w-4 h-4" />
+              Déconnexion
+            </DropdownMenuItem>
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
 

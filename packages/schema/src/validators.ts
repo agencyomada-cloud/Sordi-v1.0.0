@@ -282,3 +282,161 @@ export const leadDownloadSchema = z.object({
   company: z.string().optional(),
   osType: z.enum(["macos", "windows"]),
 });
+
+// ---------------------------------------------------------------------------
+// AI Copilot (POST /copilot/parse) — apps/desktop's Dashboard hero input.
+// The request carries the caller's own already-cached lookup context
+// (clients/suppliers/catalog items/expense categories) so entity
+// resolution (matching "ENPEC" to a real clientId) happens against the
+// exact data the desktop app already has, not a stale server-side copy.
+// ---------------------------------------------------------------------------
+
+const copilotContextEntitySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+});
+
+export const copilotContextSchema = z.object({
+  clients: z.array(copilotContextEntitySchema),
+  suppliers: z.array(copilotContextEntitySchema),
+  catalogItems: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      unitPrice: z.number(),
+      category: z.string().optional(),
+    })
+  ),
+  categories: z.array(z.string()),
+});
+
+// Few-shot examples — the last few corrections THIS user made on THIS
+// company's data (see apps/desktop's copilotMemory.ts), sent back up so
+// the model can learn "this user calls this category X" without any
+// server-side fine-tuning or storage. `output` is intentionally untyped
+// here (validated as a whole result only when it's the actual response,
+// not when it's a few-shot example) — the API only ever reads it back
+// out as-is to render into the prompt.
+const copilotFewShotExampleSchema = z.object({
+  input: z.string().min(1),
+  output: z.record(z.string(), z.unknown()),
+});
+
+export const copilotParseRequestSchema = z.object({
+  text: z.string().min(1),
+  context: copilotContextSchema,
+  fewShotExamples: z.array(copilotFewShotExampleSchema).max(5).optional(),
+});
+
+// Canonical values apps/desktop's own Expenses page Select already uses
+// (see pages/Expenses.tsx) — the copilot returns these directly now
+// instead of a separate ESPECES/VIREMENT/CHEQUE/CARTE enum that then
+// needed mapping before every mutation call.
+export const copilotPaymentMethodSchema = z.enum(["cash", "cheque", "transfer", "card"]);
+
+// The two branches of the discriminated union below are deliberately kept
+// close to the shape apps/desktop's existing useCreateExpense/
+// useCreateInvoice mutations already accept, so the confirm handler can
+// hand this result almost straight through rather than remapping fields.
+export const copilotExpenseResultSchema = z.object({
+  action: z.literal("CREATE_EXPENSE"),
+  amount: z.number().positive(),
+  category: z.string().min(1),
+  supplierId: z.string().nullable(),
+  supplierName: z.string().nullable(),
+  paymentMethod: copilotPaymentMethodSchema,
+  notes: z.string(),
+});
+
+export const copilotInvoiceLineSchema = z.object({
+  itemId: z.string().nullable(),
+  description: z.string().min(1),
+  quantity: z.number().positive(),
+  unitPrice: z.number(),
+  total: z.number(),
+});
+
+export const copilotInvoiceResultSchema = z.object({
+  action: z.literal("CREATE_INVOICE"),
+  clientId: z.string().nullable(),
+  clientName: z.string().min(1),
+  isNewClient: z.boolean().optional(),
+  // Deliberately NOT trusted from the model's own raw output — computed
+  // authoritatively server-side (routes/copilot.ts) as
+  // `isNewClient ? {name: clientName} : null` right before validation, so
+  // it can never disagree with isNewClient/clientName even if the model
+  // forgets it or gets it wrong. Present so the desktop app (and any
+  // future consumer) has one explicit "this needs a client created first"
+  // signal instead of re-deriving it from two other fields itself.
+  newClient: z.object({ name: z.string().min(1) }).nullable(),
+  items: z.array(copilotInvoiceLineSchema).min(1),
+  advancePayment: z.number().nullable().optional(),
+  totalAmount: z.number(),
+});
+
+// Standalone client creation ("Nouveau client SARL Atlas tél 0550...") —
+// deliberately close to apps/desktop's CreateClientData (Omit<...,
+// "company_id">), only `name` required there too.
+export const copilotClientResultSchema = z.object({
+  action: z.literal("CREATE_CLIENT"),
+  name: z.string().min(1),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  address: z.string().nullable(),
+});
+
+// Standalone catalog item creation ("Nouveau produit Câble HDMI prix
+// vente 1200 DA achat 700 DA"). `buyPrice` has no home in the real
+// Product row (apps/desktop's products table only stores a single
+// unit_price — no cost/buy-price column exists) — apps/desktop folds it
+// into the product's description as a note rather than silently dropping
+// it, same pattern as CREATE_INVOICE's advancePayment before a real
+// payment-record path existed for it.
+export const copilotProductResultSchema = z.object({
+  action: z.literal("CREATE_PRODUCT"),
+  name: z.string().min(1),
+  sellPrice: z.number().min(0),
+  buyPrice: z.number().min(0).nullable(),
+});
+
+// UI/system toggles ("activer dark mode", "mode nuit", "passer en
+// blanc") — executed immediately by apps/desktop via next-themes'
+// setTheme(), with no review card at all (see AiCopilotBar.tsx). Only
+// "theme" exists today; `setting` is still a discriminant (not just a
+// bare enum for `value`) so a second setting can be added later without
+// reshaping this.
+export const copilotSettingsResultSchema = z.object({
+  action: z.literal("SET_APP_SETTINGS"),
+  setting: z.literal("theme"),
+  value: z.enum(["dark", "light", "system"]),
+});
+
+// Scope guardrail — the model is instructed (see copilotService.ts's
+// prompt) to return this instead of ever answering a general-knowledge/
+// coding/chit-chat prompt. No amount, no entity, nothing to review or
+// confirm — the desktop app renders `message` and offers only "Fermer".
+export const copilotOutOfScopeResultSchema = z.object({
+  action: z.literal("OUT_OF_SCOPE"),
+  message: z.string().min(1),
+});
+
+export const copilotResultSchema = z.discriminatedUnion("action", [
+  copilotExpenseResultSchema,
+  copilotInvoiceResultSchema,
+  copilotClientResultSchema,
+  copilotProductResultSchema,
+  copilotSettingsResultSchema,
+  copilotOutOfScopeResultSchema,
+]);
+
+export type CopilotContext = z.infer<typeof copilotContextSchema>;
+export type CopilotParseRequest = z.infer<typeof copilotParseRequestSchema>;
+export type CopilotFewShotExample = z.infer<typeof copilotFewShotExampleSchema>;
+export type CopilotPaymentMethod = z.infer<typeof copilotPaymentMethodSchema>;
+export type CopilotExpenseResult = z.infer<typeof copilotExpenseResultSchema>;
+export type CopilotInvoiceResult = z.infer<typeof copilotInvoiceResultSchema>;
+export type CopilotClientResult = z.infer<typeof copilotClientResultSchema>;
+export type CopilotProductResult = z.infer<typeof copilotProductResultSchema>;
+export type CopilotSettingsResult = z.infer<typeof copilotSettingsResultSchema>;
+export type CopilotOutOfScopeResult = z.infer<typeof copilotOutOfScopeResultSchema>;
+export type CopilotResult = z.infer<typeof copilotResultSchema>;

@@ -45,6 +45,13 @@ const envSchema = z.object({
   // hand-maintained constants).
   LATEST_APP_VERSION: z.string().min(1).default("1.0.0"),
   RELEASE_NOTES: z.string().default(""),
+
+  // POST /copilot/parse (apps/desktop's Dashboard AI input) — optional by
+  // design: without it, the route falls back to a local keyword/regex
+  // heuristic (see services/copilotHeuristic.ts) instead of refusing to
+  // boot, the same "degrade gracefully rather than hard-require" choice
+  // already made for RESEND_API_KEY above.
+  GEMINI_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);

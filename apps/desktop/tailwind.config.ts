@@ -175,6 +175,10 @@ export default {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
           "50%": { opacity: "0.85", transform: "scale(1.02)" },
         },
+        "spin-slow": {
+          from: { transform: "rotate(0deg)" },
+          to: { transform: "rotate(360deg)" },
+        },
         "shimmer": {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
@@ -214,6 +218,7 @@ export default {
         "slide-in-right": "slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "slide-in-left": "slide-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "pulse-subtle": "pulse-subtle 3s ease-in-out infinite",
+        "spin-slow": "spin-slow 5s linear infinite",
         "shimmer": "shimmer 2.5s infinite linear",
         "float": "float 3s ease-in-out infinite",
         "splash-in": "splash-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",

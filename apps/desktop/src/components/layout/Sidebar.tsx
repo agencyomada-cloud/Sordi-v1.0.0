@@ -496,7 +496,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     // fades already meant to handle this. Calling it as SidebarContent({...})
     // instead of <SidebarContent ... /> keeps its output as part of
     // Sidebar's own element tree, so it reconciles instead of remounting.
-    const SidebarContent = ({ iconOnly = false }: { iconOnly?: boolean }) => (
+    const SidebarContent = ({ iconOnly = false, showToggle = false }: { iconOnly?: boolean; showToggle?: boolean }) => (
       <>
         {/* Reserves clearance above the logo for the macOS traffic lights
             (see trafficLightPosition in tauri.conf.json) and makes that
@@ -504,36 +504,52 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             an invisible overlay with no native drag surface of its own. */}
         <div data-tauri-drag-region className="h-9 w-full shrink-0" />
 
-        {/* Wordmark & Version — fades/collapses away in the icon-only rail
-            (same "always mounted, animate width/opacity" treatment
-            renderNavItem uses) instead of hard-swapping visibility, so it
-            doesn't pop instantly while the <aside> is still 300ms into its
-            own width transition. */}
-        <div
-          className={cn(
-            "flex items-center py-5 transition-all duration-300 ease-in-out",
-            iconOnly ? "px-3 justify-center gap-0" : "px-6 gap-2.5"
-          )}
-        >
-          <div
-            className={cn(
-              // grid-template-columns 1fr/0fr (not width/max-width) — a
-              // flex item with no fixed size can't animate to/from its
-              // "auto" width, it just snaps; max-width didn't animate here
-              // either (browser applied it in under one frame). A grid
-              // track size genuinely interpolates between two fr values.
-              "grid overflow-hidden transition-[grid-template-columns,opacity] duration-300 ease-in-out",
-              iconOnly ? "grid-cols-[0fr] opacity-0" : "grid-cols-[1fr] opacity-100"
+        {/* Wordmark, version tag, and (desktop only) the collapse toggle.
+            The 64px-wide collapsed rail (w-16, minus px-3 padding = 40px
+            content) can't fit a reasonably-sized icon AND the toggle
+            button side by side — collapsed and expanded are genuinely
+            different layouts (row vs. stacked column), not a plain
+            width/opacity fade of the same row, so they're two straight
+            conditional branches rather than one row with a "keep it
+            mounted, animate its grid track" cross-fade: that trick only
+            pays off when the surrounding flex direction stays the same,
+            and CSS can't animate `flex-direction` itself anyway. */}
+        {iconOnly ? (
+          // Tighter vertical padding than the expanded header (pt-2 vs.
+          // pt-8): the expanded row needs that extra breathing room below
+          // the wordmark + version tag, but the collapsed rail has no
+          // such content — the earlier pt-8 here just left a large dead
+          // gap above the icon with nothing to justify it.
+          <div className="flex flex-col items-center gap-2 pt-2 pb-3 px-3">
+            <SordiLogo iconOnly className="h-7 w-7 shrink-0" />
+            {showToggle && onToggleCollapsed && (
+              <button
+                onClick={onToggleCollapsed}
+                title={t("expandMenu")}
+                aria-label={t("expandMenu")}
+                className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 flex items-center justify-center transition-colors"
+              >
+                <PanelLeft className="w-4 h-4" strokeWidth={1.75} />
+              </button>
             )}
-          >
+          </div>
+        ) : (
+          <div className="flex items-center justify-between pt-8 pb-4 px-4">
             {/* Wordmark image already reads "Sordi" (a vector logo, not
-                editable text) — "Finance" is added as its own subtitle tag
-                rather than attempted inside the SVG artwork itself. */}
-            <div className="flex flex-col gap-0.5 overflow-hidden min-w-0">
-              <SordiLogo className="h-6 w-auto object-contain shrink-0 text-foreground" />
-              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 select-none">
-                  Finance
+                editable text) — "Invoicing" is added as its own subtitle
+                tag rather than attempted inside the SVG artwork itself.
+                The subtitle row is offset by `pl-9`, matching where the
+                "sordi" letterforms actually start inside the wordmark SVG
+                (the red icon square takes up the SVG's own left ~28px at
+                this height) — so both lines read as starting at the same
+                point, rather than the subtitle appearing to start under
+                the icon while the wordmark's visible TEXT starts further
+                right. */}
+            <div className="flex flex-col gap-1 overflow-hidden min-w-0">
+              <SordiLogo className="h-7 w-auto object-contain shrink-0 text-foreground" />
+              <div className="flex items-center gap-1.5 whitespace-nowrap pl-9">
+                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase select-none">
+                  Invoicing
                 </span>
                 <span className="text-muted-foreground/30 select-none">·</span>
                 <span className="text-[10px] font-mono text-muted-foreground/50 select-none">
@@ -541,8 +557,19 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
                 </span>
               </div>
             </div>
+
+            {showToggle && onToggleCollapsed && (
+              <button
+                onClick={onToggleCollapsed}
+                title={t("collapseMenu")}
+                aria-label={t("collapseMenu")}
+                className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 flex items-center justify-center transition-colors"
+              >
+                <PanelLeftClose className={cn("w-4 h-4", isRtl && "-scale-x-100")} strokeWidth={1.75} />
+              </button>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Company switcher and search moved to the top Header bar (next to
             the notification/new-invoice icons) — freeing this vertical
@@ -615,30 +642,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             className
           )}
         >
-          {SidebarContent({ iconOnly: collapsed })}
-
-          {onToggleCollapsed && (
-            <button
-              onClick={onToggleCollapsed}
-              title={collapsed ? t("expandMenu") : t("collapseMenu")}
-              aria-label={collapsed ? t("expandMenu") : t("collapseMenu")}
-              // Native desktop toggle, anchored to the sidebar header next
-              // to the wordmark — not a floating pill bleeding past the
-              // sidebar's own border into the main content. Centered in the
-              // icon-only rail (stays visible/clickable to re-expand);
-              // pinned to the trailing edge of the header row otherwise.
-              className={cn(
-                "absolute top-10 z-30 size-7 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors",
-                collapsed ? "start-1/2 -translate-x-1/2" : "end-3"
-              )}
-            >
-              {collapsed ? (
-                <PanelLeft className="w-full h-full" strokeWidth={1.75} />
-              ) : (
-                <PanelLeftClose className={cn("w-full h-full", isRtl && "-scale-x-100")} strokeWidth={1.75} />
-              )}
-            </button>
-          )}
+          {SidebarContent({ iconOnly: collapsed, showToggle: true })}
         </aside>
 
         {/* Mobile Sidebar */}
