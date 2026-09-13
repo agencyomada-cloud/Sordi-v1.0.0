@@ -11,6 +11,7 @@ import {
   Card,
   CardContent,
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -554,6 +555,12 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
         if (!next) reset();
       }}
     >
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-1.5">
+          <AddIcon className="h-3.5 w-3.5" />
+          Générer une licence
+        </Button>
+      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -638,6 +645,82 @@ function GenerateLicenseDialog({ adminSecret, onCreated }: { adminSecret: string
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline device-quota stepper — the table's "Appareils" cell itself, not a
+// modal. Clicking the "X/Y" badge opens a small popover with -/+ controls
+// right above the cell; adjusting the quota calls PATCH .../max-devices
+// directly and closes over nothing else in the row, so it never requires
+// "Voir détails" just to bump a license from 1 to 2 seats.
+// ---------------------------------------------------------------------------
+
+function DeviceQuotaCell({ license, adminSecret, onChanged }: { license: License; adminSecret: string; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [maxDevicesDraft, setMaxDevicesDraft] = useState(license.maxDevices);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    setMaxDevicesDraft(license.maxDevices);
+  }, [license.maxDevices]);
+
+  const handleChange = async (delta: number) => {
+    const next = maxDevicesDraft + delta;
+    if (next < 1 || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      const res = await webApi.updateMaxDevices(license.id, next, adminSecret);
+      setMaxDevicesDraft(res.license.maxDevices);
+      onChanged();
+    } catch (error) {
+      toast.error(error instanceof WebApiError ? error.message : "Impossible de modifier le quota.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center rounded-md border border-border bg-muted/30 px-2 py-1 text-xs font-medium tabular-nums text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
+        >
+          {license.deviceCount} / {maxDevicesDraft}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">Postes autorisés</span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              disabled={isUpdating || maxDevicesDraft <= license.deviceCount || maxDevicesDraft <= 1}
+              onClick={() => handleChange(-1)}
+              title="Réduire le quota de postes"
+            >
+              <SubtractIcon className="h-3 w-3" />
+            </Button>
+            <span className="w-5 text-center text-xs font-semibold tabular-nums text-foreground">{maxDevicesDraft}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              disabled={isUpdating}
+              onClick={() => handleChange(1)}
+              title="Augmenter le quota de postes"
+            >
+              <AddIcon className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1313,7 +1396,7 @@ function Dashboard({
                         <Badge variant={CONTACT_STATUS_BADGE[license.contactStatus]}>{CONTACT_STATUS_LABELS[license.contactStatus]}</Badge>
                       </TableCell>
                       <TableCell>
-                        {license.deviceCount} / {license.maxDevices}
+                        <DeviceQuotaCell license={license} adminSecret={adminSecret} onChanged={() => refetch()} />
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end">
