@@ -302,7 +302,7 @@ export default function EmployeeDetailPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold">{employee.name}</h1>
+                    <h1 className="text-2xl font-bold text-foreground">{employee.name}</h1>
                     {absenceStats?.flagged && (
                       <StatusBadge tone="error" className="gap-1.5">
                         <WarningIcon className="w-3.5 h-3.5" />

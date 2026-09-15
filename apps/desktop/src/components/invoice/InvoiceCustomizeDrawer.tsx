@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  Button, Label, Slider,
+  Button, Label, Slider, Switch,
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@sordi/ui";
 import { RiCloseLine as CloseIcon, RiCheckLine as CheckIcon } from "@remixicon/react";
 import { cn } from "@/lib/utils";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
-import { INVOICE_PDF_THEMES, INVOICE_PDF_FONTS } from "@/components/pdf/invoicePdfShared";
+import { INVOICE_PDF_THEMES, INVOICE_PDF_FONTS, getAutoContrastTextColor } from "@/components/pdf/invoicePdfShared";
 
 const ACCENT_PRESETS = [
   { label: "Bleu Nuit", value: "#1E40AF" },
@@ -15,6 +15,18 @@ const ACCENT_PRESETS = [
   { label: "Bordeaux", value: "#831843" },
   { label: "Violet", value: "#5B21B6" },
 ];
+
+// A settings value read out of the schemaless string-only `settings` store
+// (see useSettings.ts's own note) — booleans are encoded as the literal
+// strings "true"/"false", so every switch in this panel reads through this
+// instead of a `=== "true"` check repeated at every call site (which would
+// silently read a genuinely-absent key as OFF instead of applying the
+// stated default).
+function readBoolSetting(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return defaultValue;
+}
 
 // Miniature wireframes standing in for a real thumbnail per template — just
 // enough visual difference (header shape, band color, line density) to read
@@ -62,13 +74,35 @@ interface InvoiceCustomizeDrawerProps {
 }
 
 /**
- * Quick real-time branding customizer for the invoice editor — template,
- * accent color, font, and logo size, all read from and written straight to
+ * The "Personnaliser" panel — a real-time branding AND document-behavior
+ * customizer for the invoice editor, all read from and written straight to
  * the same global `settings` used by Paramètres > Apparence & Logo. No
- * separate draft-local state: writing through `useUpdateSettings` invalidates
- * the `settings` query, which `EditableInvoicePreview` already subscribes to
- * via `useSettings`, so the live canvas re-renders immediately without any
- * extra plumbing between this drawer and the invoice document.
+ * separate draft-local state: writing through `useUpdateSettings`
+ * invalidates the `settings` query, which `EditableInvoicePreview` already
+ * subscribes to via `useSettings`, so the live canvas re-renders
+ * immediately without any extra plumbing between this drawer and the
+ * invoice document.
+ *
+ * Every setting here — Modèle, Couleur d'accent, Typographie,
+ * Cachet & Signature, Masquer les colonnes vides, Afficher le montant en
+ * lettres, Dimensions — is global per company, not per document type, so it
+ * applies identically no matter which of Facture/Devis/Proforma/Avoir is
+ * currently open: see resolveHtmlInvoiceData (invoiceHtmlShared.ts) for the
+ * web preview and resolveInvoiceData (invoicePdfShared.ts) for the exported
+ * PDF, both of which every document-type renderer already goes through.
+ *
+ * Previously this panel also had "Type de tableau" and "Taille du texte"
+ * controls. Both are removed: table-row styling only ever had 3 hardcoded
+ * variants with no real typographic scaling behind them, and "text size"
+ * was a CSS `zoom` standing in for real font-size control across dozens of
+ * hardcoded per-element sizes — closer to a zoom function than actual
+ * typography. Removed instead of left half-working.
+ *
+ * Visual language: strict 4px corners (`rounded-[4px]`) on every card/
+ * button/input in THIS panel specifically — a deliberate, scoped choice
+ * distinct from the app's own global 6px `--radius` token (src/index.css),
+ * not a request to re-theme the whole app. Color swatches stay circular
+ * (a color dot, not a framing element).
  *
  * Deliberately NOT built on the shared Sheet/Dialog primitive: a design
  * inspector's whole point is to compare a change against the live canvas
@@ -83,6 +117,14 @@ interface InvoiceCustomizeDrawerProps {
  * flex sibling of the canvas (see NewInvoice.tsx), it starts exactly where
  * the canvas starts, however many bars stack above — no pixel math, and
  * nothing to get wrong on the next added toolbar.
+ *
+ * Header/content split: the outer `<aside>` is a plain flex column with NO
+ * overflow of its own — the header is a direct, `shrink-0` child (never
+ * scrolls), and the settings list below it is the ONLY scroll container
+ * (`flex-1 overflow-y-auto`). Making the header `sticky` inside a scrolling
+ * ancestor (the previous structure) is exactly the kind of thing that looks
+ * right until a nested scroll/stacking-context quirk breaks it — a
+ * dedicated non-scrolling header is the version that can't regress.
  */
 export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeDrawerProps) {
   const { data: settings } = useSettings();
@@ -92,7 +134,15 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
 
   const currentTheme = settings?.invoice_pdf_theme || "structure";
   const currentFont = settings?.invoice_pdf_font || "montserrat";
-  const currentColor = settings?.primary_color || "#0067F2";
+  const currentColor = settings?.primary_color || "#FF2949";
+  const showStampSignature = readBoolSetting(settings?.show_stamp_signature, true);
+  const hideEmptyColumns = readBoolSetting(settings?.hide_empty_columns, true);
+  const showAmountInWords = readBoolSetting(settings?.show_amount_in_words, false);
+
+  // Auto-Contrast — recomputed live off whatever accent color is currently
+  // selected, so the swatch below always demonstrates the exact color the
+  // preview/PDF header and totals band compute for real.
+  const autoContrastText = getAutoContrastTextColor(currentColor);
 
   useEffect(() => {
     if (!open) return;
@@ -106,14 +156,14 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
   if (!open) return null;
 
   return (
-    <aside className="w-72 shrink-0 border-l border-border/80 bg-card h-full overflow-y-auto flex flex-col z-20 transition-all">
-      <div className="h-10 border-b border-border/80 px-4 flex items-center justify-between shrink-0 bg-card/95 backdrop-blur-sm sticky top-0 z-10">
+    <aside className="w-72 shrink-0 border-l border-border/80 bg-card h-full flex flex-col z-20 transition-all">
+      <div className="h-10 border-b border-border/80 px-4 flex items-center justify-between shrink-0 sticky top-0 z-20 bg-background">
         <span className="text-xs font-semibold text-foreground">Personnaliser</span>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-md"
+          className="h-7 w-7 rounded-[4px]"
           onClick={() => onOpenChange(false)}
           aria-label="Fermer"
         >
@@ -121,7 +171,7 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
         </Button>
       </div>
 
-      <div className="p-4 pb-8 space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 pb-8 space-y-5">
         <div className="space-y-2">
           <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Modèle</Label>
           <div className="grid grid-cols-3 gap-2">
@@ -133,7 +183,7 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
                   type="button"
                   onClick={() => updateSettings.mutate({ invoice_pdf_theme: theme.value })}
                   className={cn(
-                    "flex flex-col items-center gap-1.5 rounded-md py-2.5 px-2 text-xs transition-colors",
+                    "flex flex-col items-center gap-1.5 rounded-[4px] py-2.5 px-2 text-xs transition-colors",
                     active
                       ? "ring-2 ring-primary bg-primary/5 border border-primary text-primary font-semibold"
                       : "border border-border hover:border-primary/40 text-muted-foreground"
@@ -184,6 +234,22 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
               />
             </label>
           </div>
+
+          {/* Auto-Contrast — live demonstration, not a separate setting: the
+              text color shown here is always derived from currentColor via
+              getAutoContrastTextColor, the same formula the preview/PDF
+              totals band and table header use against this exact accent. */}
+          <div className="flex items-center gap-2 pt-1">
+            <div
+              className="h-7 w-14 rounded-[4px] flex items-center justify-center text-xs font-semibold shrink-0"
+              style={{ backgroundColor: currentColor, color: autoContrastText }}
+            >
+              Aa
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Contraste automatique — texte {autoContrastText === "#FFFFFF" ? "blanc" : "anthracite"} calculé pour rester lisible sur cet accent.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-2 pt-4 border-t border-border/60">
@@ -192,7 +258,7 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
             value={currentFont}
             onValueChange={(value) => updateSettings.mutate({ invoice_pdf_font: value })}
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs rounded-[4px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -205,13 +271,71 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
           </Select>
         </div>
 
+        <div className="space-y-3 pt-4 border-t border-border/60">
+          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cachet & Signature</Label>
+          <div className="flex items-start justify-between gap-3 rounded-[4px] border border-border px-3 py-2.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="toggle-stamp-signature" className="text-xs font-medium text-foreground cursor-pointer">
+                Afficher le cachet et la signature
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                Désactivez pour imprimer un document vierge à tamponner/signer à la main — vos images restent enregistrées.
+              </p>
+            </div>
+            <Switch
+              id="toggle-stamp-signature"
+              checked={showStampSignature}
+              onCheckedChange={(checked) => updateSettings.mutate({ show_stamp_signature: String(checked) })}
+              className="shrink-0 mt-0.5"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-4 border-t border-border/60">
+          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Visibilité</Label>
+
+          <div className="flex items-start justify-between gap-3 rounded-[4px] border border-border px-3 py-2.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="toggle-hide-empty-columns" className="text-xs font-medium text-foreground cursor-pointer">
+                Masquer les colonnes vides
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                Ex. Remise, si elle vaut 0 sur toutes les lignes.
+              </p>
+            </div>
+            <Switch
+              id="toggle-hide-empty-columns"
+              checked={hideEmptyColumns}
+              onCheckedChange={(checked) => updateSettings.mutate({ hide_empty_columns: String(checked) })}
+              className="shrink-0 mt-0.5"
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-3 rounded-[4px] border border-border px-3 py-2.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="toggle-amount-in-words" className="text-xs font-medium text-foreground cursor-pointer">
+                Afficher le montant en lettres
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                Recommandé pour la validité légale du document.
+              </p>
+            </div>
+            <Switch
+              id="toggle-amount-in-words"
+              checked={showAmountInWords}
+              onCheckedChange={(checked) => updateSettings.mutate({ show_amount_in_words: String(checked) })}
+              className="shrink-0 mt-0.5"
+            />
+          </div>
+        </div>
+
         <div className="space-y-4 pt-4 border-t border-border/60">
           <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Dimensions</Label>
 
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Hauteur du logo</Label>
-              <span className="text-[11px] font-mono font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              <span className="text-[11px] font-mono font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-[4px]">
                 {logoSize}px
               </span>
             </div>
@@ -230,7 +354,7 @@ export function InvoiceCustomizeDrawer({ open, onOpenChange }: InvoiceCustomizeD
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Taille du cachet</Label>
-              <span className="text-[11px] font-mono font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              <span className="text-[11px] font-mono font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-[4px]">
                 {stampSize}px
               </span>
             </div>

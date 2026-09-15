@@ -111,7 +111,7 @@ export default function ProjectDetailPage() {
             <div className="flex items-start justify-between mb-6 gap-4">
               <div>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold">{project.name}</h1>
+                  <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
                   {status && <ProjectStatusBadge status={status} />}
                 </div>
                 <p className="text-muted-foreground mt-1">

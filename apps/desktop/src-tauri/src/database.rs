@@ -623,7 +623,7 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
         ("company_nis", ""),
         ("company_ai", ""),
         ("company_rib", ""),
-        ("primary_color", "#FFCD00"),
+        ("primary_color", "#FF2949"),
         ("logo_bg_color", "#000000"),
         ("logo_text_color", "#FFFFFF"),
         ("logo_size", "67"),
@@ -711,6 +711,26 @@ pub fn init_database(db_path: &str) -> Result<Connection, rusqlite::Error> {
             done_at TEXT,
             notes TEXT,
             created_at TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    // Sordi IQ (AI assistant) chat session history — the sidebar's "past
+    // queries" list. Each row is one conversation; `messages_json` holds the
+    // full turn history as a JSON array (role/content pairs) rather than a
+    // normalized child table, since a chat log is read/written as one whole
+    // unit (load a session, append a turn, save) and never queried per
+    // individual message — the same "just store the JSON blob" choice
+    // already made for `company_extra_info`/`sales_cumulatives` elsewhere in
+    // this schema. `title` is derived from the first user message (see
+    // sordi_iq.rs) and stays editable independently after that.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sordi_iq_sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         )",
         [],
     )?;
@@ -1226,7 +1246,7 @@ fn migrate_expenses_payment_status_if_needed(conn: &Connection) -> Result<(), ru
 pub const COMPANY_SCOPED_TABLES: &[&str] = &[
     "clients", "suppliers", "products", "invoices", "payments",
     "orders", "delivery_notes", "expenses", "projects", "employees",
-    "partners", "activities",
+    "partners", "activities", "sordi_iq_sessions",
 ];
 
 /// True if no row in any company-scoped table references this company —
@@ -1366,7 +1386,12 @@ fn migrate_multi_company_if_needed(conn: &Connection) -> Result<(), rusqlite::Er
             "INSERT INTO companies (id, name, logo_base64, activity, rc, nif, nis, article_imposition, address, phone, phones, email, website, capital, rib, bank_agency, extra_info, cnas_adherent, currency, invoice_prefix, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 'DZD', ?19, ?20)",
             params![
                 id,
-                get_setting("company_name").filter(|v| !v.is_empty()).unwrap_or_else(|| "Mon Entreprise".to_string()),
+                // No placeholder fallback ("Mon Entreprise" ghost-entry
+                // name eradicated per the single-enterprise lock) — an
+                // upgrading install with no legacy company_name setting
+                // gets an empty name, left for the user to fill in via
+                // Paramètres, rather than a fake seeded label.
+                get_setting("company_name").unwrap_or_default(),
                 get_setting("logo_data"),
                 None::<String>,
                 get_setting("company_rc"),
@@ -2183,6 +2208,88 @@ pub fn sync_invoice_sequence(conn: &Connection, number_str: &str) -> Result<(), 
             "UPDATE sequences SET value = MAX(value, ?1) WHERE name = 'invoice_number'",
             params![num],
         )?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Strict per-document-type, per-year numbering (Facture/Proforma/Devis/Avoir)
+// — replaces the single flat lifetime `invoice_number` sequence above for
+// every NEW document going forward. Historical documents keep whatever
+// number they already carry (nothing here ever renumbers an existing row);
+// only fresh generation and manual-number sync go through this path now.
+// Each (prefix, year) pair gets its own counter row in the same `sequences`
+// key/value table, keyed as e.g. "doc_seq_FAC_2026" — created on first use
+// via an upsert rather than pre-seeded, since the set of years is unbounded.
+// ---------------------------------------------------------------------------
+
+/// The document-number prefix for a given `invoice_type` — "invoice" is the
+/// default/fallback so a legacy or unrecognized type still gets a sane
+/// "FAC-" number rather than failing generation outright.
+pub fn document_type_prefix(invoice_type: &str) -> &'static str {
+    match invoice_type {
+        "credit_note" => "AVO",
+        "proforma" => "PRO",
+        "quote" => "DEV",
+        _ => "FAC",
+    }
+}
+
+fn document_sequence_key(prefix: &str, year: &str) -> String {
+    format!("doc_seq_{}_{}", prefix, year)
+}
+
+/// Generates the next real number for `invoice_type`, incrementing (and
+/// creating, on first use) that type's counter for the current calendar
+/// year — e.g. "PRO-2026-001", then "PRO-2026-002" for the next proforma
+/// created in 2026, restarting at 001 when 2027 begins.
+pub fn generate_document_number(conn: &Connection, invoice_type: &str) -> Result<String, rusqlite::Error> {
+    let year = chrono::Utc::now().format("%Y").to_string();
+    let prefix = document_type_prefix(invoice_type);
+    let key = document_sequence_key(prefix, &year);
+
+    conn.execute(
+        "INSERT INTO sequences (name, value) VALUES (?1, 1)
+         ON CONFLICT(name) DO UPDATE SET value = value + 1",
+        params![key],
+    )?;
+    let value: i64 = conn.query_row("SELECT value FROM sequences WHERE name = ?1", params![key], |row| row.get(0))?;
+
+    Ok(format!("{}-{}-{:03}", prefix, year, value))
+}
+
+/// Previews the number the NEXT document of this type would get, without
+/// incrementing anything — used by the creation form's live number preview.
+pub fn peek_next_document_number(conn: &Connection, invoice_type: &str) -> Result<String, rusqlite::Error> {
+    let year = chrono::Utc::now().format("%Y").to_string();
+    let prefix = document_type_prefix(invoice_type);
+    let key = document_sequence_key(prefix, &year);
+
+    let current: i64 = conn
+        .query_row("SELECT value FROM sequences WHERE name = ?1", params![key], |row| row.get(0))
+        .unwrap_or(0);
+    Ok(format!("{}-{}-{:03}", prefix, year, current + 1))
+}
+
+/// Keeps a type's per-year counter in sync after a manually-entered number
+/// (the edit form's "custom number" field) — parses "PREFIX-YYYY-NNN" and
+/// bumps that exact (prefix, year) counter up to at least NNN, so the next
+/// auto-generated number for the same type/year never collides with it. A
+/// number that doesn't match this shape (a historical plain-numeric or
+/// legacy "PRO-<timestamp>" value) has nothing to sync — it never fed one
+/// of these per-type-per-year counters in the first place.
+pub fn sync_document_number_sequence(conn: &Connection, invoice_type: &str, number_str: &str) -> Result<(), rusqlite::Error> {
+    let parts: Vec<&str> = number_str.split('-').collect();
+    if parts.len() == 3 {
+        if let Ok(num) = parts[2].parse::<i64>() {
+            let prefix = document_type_prefix(invoice_type);
+            let key = document_sequence_key(prefix, parts[1]);
+            conn.execute(
+                "INSERT INTO sequences (name, value) VALUES (?1, ?2)
+                 ON CONFLICT(name) DO UPDATE SET value = MAX(value, ?2)",
+                params![key, num],
+            )?;
+        }
     }
     Ok(())
 }

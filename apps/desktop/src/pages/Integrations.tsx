@@ -103,9 +103,9 @@ export default function IntegrationsPage() {
 
   return (
     <main className="flex-1 p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Intégrations</h1>
-        <p className="text-muted-foreground mt-1">Connectez Sordi à vos outils Google Workspace et services externes.</p>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Intégrations</h1>
+        <p className="text-sm text-muted-foreground mt-1">Connectez Sordi à vos outils Google Workspace et services externes.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

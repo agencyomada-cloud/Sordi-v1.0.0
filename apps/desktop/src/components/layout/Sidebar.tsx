@@ -6,6 +6,7 @@ import {
   Users,
   FileText,
   FileSpreadsheet,
+  FileStack,
   Truck,
   Store,
   CreditCard,
@@ -22,7 +23,6 @@ import {
   Wallet,
   PieChart,
   UserCog,
-  Plug,
   FileCheck2,
   Undo2,
   PanelLeft,
@@ -68,31 +68,59 @@ interface NavGroup {
 }
 
 const topItem: NavItem = { icon: LayoutDashboard, labelKey: "dashboard", path: "/" };
+const SordiIqIcon = ({ className }: { className?: string }) => {
+  const location = useLocation();
+  const active = location.pathname === "/sordi-iq";
+  return (
+    <SordiLogo
+      bare
+      className={cn(
+        "shrink-0 transition-colors",
+        active ? "text-[#FF2949]" : "text-[#FF2949]/80",
+        className,
+        "w-5 h-5"
+      )}
+    />
+  );
+};
+const sordiIqItem: NavItem = { icon: SordiIqIcon, labelKey: "links.sordiIq", path: "/sordi-iq" };
 
-// The core billing & finance suite — always visible, reorganized into 4
-// clean sections (Facturation & Ventes / Trésorerie & Suivi / Tiers &
-// Relations) plus the single-item "Vue d'ensemble" rendered separately
-// below. Paths point at the sidebar-tree route aliases registered in
-// App.tsx (e.g. /factures), which render the same page components as the
-// canonical paths (/invoices) used by internal navigate()/Link calls
-// elsewhere in the app. Kept as aliases rather than a full rename so
-// nothing else in the codebase had to change.
+// The core billing & finance suite — always visible, organized into 5 clean
+// sections (Gestion commerciale / Catalogue / Trésorerie & Suivi / Tiers & Relations)
+// plus the single-item "Vue d'ensemble" rendered separately below. Paths
+// point at the sidebar-tree route aliases registered in App.tsx (e.g.
+// /factures), which render the same page components as the canonical paths
+// (/invoices) used by internal navigate()/Link calls elsewhere in the app.
+// Kept as aliases rather than a full rename so nothing else in the codebase
+// had to change.
 //
-// Catalogue, Commandes, Analyses and Associés aren't named in the 4-section
-// spec but still need a home now that Opérations/Pilotage were folded away —
-// placed with the closest matching section (catalogue/orders feed the
-// invoicing pipeline; analytics and partner shares are financial tracking)
-// rather than inventing a 5th top-level section.
+// Catalogue is placed right below Gestion commerciale (master data
+// referencing products & services used in sales documents).
 const navGroups: NavGroup[] = [
   {
     id: "billing",
     titleKey: "groups.billing",
     items: [
-      { icon: FileText, labelKey: "links.invoicing", path: "/factures?tab=invoices" },
-      { icon: FileSpreadsheet, labelKey: "links.quotes", path: "/devis?tab=proformas" },
-      { icon: Undo2, labelKey: "links.creditNotes", path: "/factures?tab=credit-notes" },
-      { icon: Package, labelKey: "links.catalogue", path: "/stocks" },
+      // Strict, flat order per the ERP-standard sales architecture: Devis
+      // -> Factures Proforma -> Factures -> Avoirs, each its own
+      // independent route (see App.tsx's /devis, /proformas, /factures,
+      // /avoirs) — a quote, a proforma, a real invoice and a credit note
+      // are 4 distinct, separately-numbered document types now (see
+      // database.rs's generate_document_number), not tabs/variants of one
+      // shared "Factures" page. No nested accordion here on purpose.
+      { icon: FileSpreadsheet, labelKey: "links.quotes", path: "/devis" },
+      { icon: FileStack, labelKey: "links.proformas", path: "/proformas" },
+      { icon: FileText, labelKey: "links.invoicing", path: "/factures" },
+      { icon: Undo2, labelKey: "links.creditNotes", path: "/avoirs" },
       { icon: ClipboardList, labelKey: "links.orders", path: "/commandes" },
+      { icon: Truck, labelKey: "links.deliveries", path: "/deliveries" },
+    ],
+  },
+  {
+    id: "catalogue",
+    titleKey: "groups.catalogue",
+    items: [
+      { icon: Package, labelKey: "links.catalogue", path: "/stocks" },
     ],
   },
   {
@@ -132,14 +160,6 @@ const optionalNavGroups: NavGroup[] = [
     ],
   },
   {
-    id: "deliveries",
-    titleKey: "groups.deliveries",
-    moduleKey: "deliveries",
-    items: [
-      { icon: Truck, labelKey: "links.deliveries", path: "/livraisons" },
-    ],
-  },
-  {
     id: "projects",
     titleKey: "groups.projects",
     moduleKey: "projects",
@@ -160,15 +180,14 @@ const systemGroup: NavGroup = {
   items: [
     { icon: Settings, labelKey: "links.settings", path: "/settings" },
     { icon: History, labelKey: "links.history", path: "/historique" },
-    { icon: Plug, labelKey: "links.integrations", path: "/integrations" },
   ],
 };
 
 const COLLAPSED_GROUPS_KEY = "sordi.sidebar.collapsedGroups";
 
-function loadCollapsedGroups(): Set<string> {
+function loadStringSet(key: string): Set<string> {
   try {
-    const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(parsed) ? parsed : []);
   } catch {
@@ -192,7 +211,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     const counts = useSidebarCounts();
     const moduleFlags = useModuleFlags();
     const visibleOptionalGroups = optionalNavGroups.filter((g) => !g.moduleKey || moduleFlags[g.moduleKey]);
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(loadCollapsedGroups);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => loadStringSet(COLLAPSED_GROUPS_KEY));
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -297,6 +316,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     // the visible tree, consistent with "cleanly hide" in the brief.
     const searchableNavItems: NavItem[] = [
       topItem,
+      sordiIqItem,
       ...navGroups.flatMap((g) => g.items),
       ...visibleOptionalGroups.flatMap((g) => g.items),
       ...systemGroup.items,
@@ -378,20 +398,11 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
       });
     };
 
-    // Most nav items carry a bare pathname and match on pathname alone. But
-    // "Factures" and "Avoirs" now share one pathname (/factures) and are
-    // only told apart by their ?tab= query (same for "Devis" on /devis) —
-    // so when the item's own path carries a tab query, the current tab must
-    // match it too, or "Factures" and "Avoirs" would both light up together
-    // any time either is open.
-    const isActive = (path: string) => {
-      const [itemPathname, itemQuery] = path.split("?");
-      if (location.pathname !== itemPathname) return false;
-      if (!itemQuery) return true;
-      const itemTab = new URLSearchParams(itemQuery).get("tab");
-      if (!itemTab) return true;
-      return new URLSearchParams(location.search).get("tab") === itemTab;
-    };
+    // Every document type (Devis/Proforma/Factures/Avoirs included) now has
+    // its own distinct pathname — strict route isolation means no nav item
+    // needs a ?query to tell itself apart from a sibling sharing the same
+    // page component, so this is a plain pathname match.
+    const isActive = (path: string) => location.pathname === path;
 
     const handleNavigate = (path: string) => {
       navigate(path);
@@ -456,7 +467,9 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
     // navGroups list and the pinned systemGroup footer, so both stay
     // pixel-identical instead of two hand-duplicated render blocks. Every
     // item (grouped or not) renders through the same renderNavItem pill —
-    // no separate indented "tree" treatment for grouped items.
+    // no nested accordion/tree treatment for any item, per the flat-routes
+    // sales architecture (Devis/Factures Proforma/Factures/Avoirs are 4
+    // independent flat links, not a parent+children disclosure).
     const renderGroup = (group: NavGroup, iconOnly: boolean) => {
       const groupCollapsed = !iconOnly && collapsedGroups.has(group.id);
       return (
@@ -504,70 +517,61 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
             an invisible overlay with no native drag surface of its own. */}
         <div data-tauri-drag-region className="h-9 w-full shrink-0" />
 
-        {/* Wordmark, version tag, and (desktop only) the collapse toggle.
-            The 64px-wide collapsed rail (w-16, minus px-3 padding = 40px
-            content) can't fit a reasonably-sized icon AND the toggle
-            button side by side — collapsed and expanded are genuinely
-            different layouts (row vs. stacked column), not a plain
-            width/opacity fade of the same row, so they're two straight
-            conditional branches rather than one row with a "keep it
-            mounted, animate its grid track" cross-fade: that trick only
-            pays off when the surrounding flex direction stays the same,
-            and CSS can't animate `flex-direction` itself anyway. */}
-        {iconOnly ? (
-          // Tighter vertical padding than the expanded header (pt-2 vs.
-          // pt-8): the expanded row needs that extra breathing room below
-          // the wordmark + version tag, but the collapsed rail has no
-          // such content — the earlier pt-8 here just left a large dead
-          // gap above the icon with nothing to justify it.
-          <div className="flex flex-col items-center gap-2 pt-2 pb-3 px-3">
-            <SordiLogo iconOnly className="h-7 w-7 shrink-0" />
-            {showToggle && onToggleCollapsed && (
-              <button
-                onClick={onToggleCollapsed}
-                title={t("expandMenu")}
-                aria-label={t("expandMenu")}
-                className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 flex items-center justify-center transition-colors"
-              >
-                <PanelLeft className="w-4 h-4" strokeWidth={1.75} />
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-between pt-8 pb-4 px-4">
-            {/* Wordmark image already reads "Sordi" (a vector logo, not
-                editable text) — "Invoicing" is added as its own subtitle
-                tag rather than attempted inside the SVG artwork itself.
-                The subtitle row is offset by `pl-9`, matching where the
-                "sordi" letterforms actually start inside the wordmark SVG
-                (the red icon square takes up the SVG's own left ~28px at
-                this height) — so both lines read as starting at the same
-                point, rather than the subtitle appearing to start under
-                the icon while the wordmark's visible TEXT starts further
-                right. */}
-            <div className="flex flex-col gap-1 overflow-hidden min-w-0">
-              <SordiLogo className="h-7 w-auto object-contain shrink-0 text-foreground" />
-              <div className="flex items-center gap-1.5 whitespace-nowrap pl-9">
-                <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase select-none">
-                  Invoicing
-                </span>
-                <span className="text-muted-foreground/30 select-none">·</span>
-                <span className="text-[10px] font-mono text-muted-foreground/50 select-none">
-                  v1.0.0
-                </span>
-              </div>
+        {/* Wordmark / icon-only mark. Centers the icon when collapsed
+            (matching the nav icons' own centering), left-aligns the
+            wordmark when expanded. The two cross-fade via their own grid
+            tracks (width genuinely interpolates 1fr->0fr, inverse of each
+            other). */}
+        <div
+          className={cn(
+            "flex items-center pt-8 pb-2 transition-[padding] duration-300 ease-in-out",
+            iconOnly ? "justify-center px-3" : "justify-start px-4"
+          )}
+        >
+          <div className="flex items-center min-w-0">
+            <div
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-columns,opacity] duration-300 ease-in-out",
+                iconOnly ? "grid-cols-[0fr] opacity-0" : "grid-cols-[1fr] opacity-100"
+              )}
+            >
+              <SordiLogo className="h-8 w-auto object-contain shrink-0 text-foreground" />
             </div>
+            <div
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-columns,opacity] duration-300 ease-in-out",
+                iconOnly ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0"
+              )}
+            >
+              <SordiLogo iconOnly className="h-7 w-7 shrink-0" />
+            </div>
+          </div>
+        </div>
 
-            {showToggle && onToggleCollapsed && (
-              <button
-                onClick={onToggleCollapsed}
-                title={t("collapseMenu")}
-                aria-label={t("collapseMenu")}
-                className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 flex items-center justify-center transition-colors"
-              >
-                <PanelLeftClose className={cn("w-4 h-4", isRtl && "-scale-x-100")} strokeWidth={1.75} />
-              </button>
-            )}
+        {/* Collapse toggle — its own dedicated row, in normal document
+            flow (not absolutely positioned, not floating on an edge or
+            over a banner). Two prior attempts both failed: inside the logo
+            row it competed for width and knocked the icon off-center;
+            floating on the sidebar's border edge required guessing pixel
+            offsets against other UI (traffic lights, the license banner)
+            that shifted depending on what else was on screen. A plain
+            in-flow row can never overlap anything above or below it — it's
+            simply pushed down by the logo row and pushes the nav list down
+            in turn, guaranteed by normal layout instead of coordinates. */}
+        {showToggle && onToggleCollapsed && (
+          <div className={cn("flex pb-3 transition-[padding] duration-300 ease-in-out", iconOnly ? "justify-center px-3" : "justify-end px-4")}>
+            <button
+              onClick={onToggleCollapsed}
+              title={iconOnly ? t("expandMenu") : t("collapseMenu")}
+              aria-label={iconOnly ? t("expandMenu") : t("collapseMenu")}
+              className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground flex items-center justify-center transition-colors"
+            >
+              {iconOnly ? (
+                <PanelLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
+              ) : (
+                <PanelLeftClose className={cn("w-3.5 h-3.5", isRtl && "-scale-x-100")} strokeWidth={1.75} />
+              )}
+            </button>
           </div>
         )}
 
@@ -591,6 +595,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
           )}
           <ul className="space-y-1">
             {renderNavItem(topItem)}
+            {renderNavItem(sordiIqItem)}
           </ul>
 
           {navGroups.map((group) => renderGroup(group, iconOnly))}

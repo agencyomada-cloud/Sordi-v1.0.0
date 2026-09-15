@@ -2,7 +2,8 @@
   "dashboard": "لوحة التحكم",
   "groups": {
     "overview": "نظرة عامة",
-    "billing": "الفوترة والمبيعات",
+    "catalogue": "الكتالوج",
+    "billing": "المبيعات",
     "treasury": "الخزينة والمتابعة",
     "relations": "العملاء والشركاء",
     "hr": "الموارد البشرية",
@@ -11,7 +12,9 @@
     "system": "النظام"
   },
   "links": {
+    "sordiIq": "Sordi IQ",
     "invoicing": "الفواتير",
+    "proformas": "فواتير أولية",
     "quotes": "عروض الأسعار",
     "creditNotes": "الإشعارات الدائنة",
     "payments": "المدفوعات",

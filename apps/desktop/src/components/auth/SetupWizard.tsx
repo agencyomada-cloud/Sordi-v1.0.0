@@ -110,8 +110,15 @@ export function SetupWizard() {
       setErrorMessage('Veuillez préciser votre activité');
       return;
     }
+    // No silent "Mon Entreprise" placeholder fallback — a real name is
+    // required on this path (the explicit "Passer cette étape" link below
+    // is the deliberate way to defer naming, not a blank submit here).
+    if (!companyName.trim()) {
+      setErrorMessage('Veuillez indiquer le nom de votre entreprise');
+      return;
+    }
     try {
-      await createCompany({ name: companyName.trim() || 'Mon Entreprise', activity: resolvedActivity, currency });
+      await createCompany({ name: companyName.trim(), activity: resolvedActivity, currency });
       setStep(2);
     } catch (error) {
       // useWorkspace().createCompany already logs the full error via
@@ -128,7 +135,9 @@ export function SetupWizard() {
   const handleSkipStep1 = async () => {
     setErrorMessage(null);
     try {
-      await createCompany({ name: 'Mon Entreprise', activity: ACTIVITIES[0].value, currency: 'DZD' });
+      // Left blank rather than seeded with a placeholder "Mon Entreprise"
+      // name — the user fills it in later via Paramètres > Entreprise.
+      await createCompany({ name: '', activity: ACTIVITIES[0].value, currency: 'DZD' });
       setStep(2);
     } catch (error) {
       const detail = typeof error === 'string' ? error : error instanceof Error ? error.message : null;

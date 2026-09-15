@@ -29,10 +29,10 @@ export default function SalesAnalysisPage() {
   return (
     <main className="flex-1 min-w-0 p-6">
           <div className="max-w-[1600px] mx-auto space-y-5">
-            <div className="h-9 mb-3 flex items-center justify-between gap-3 relative z-30">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">Analyses & Rapports</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">Analyses &amp; Rapports</h1>
+                <p className="text-sm text-muted-foreground mt-1">
                   Ventilation détaillée des ventes cumulées, par produit et par client
                 </p>
               </div>

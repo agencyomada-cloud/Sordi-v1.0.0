@@ -458,9 +458,11 @@ export default function PaymentsPage() {
     <>
       <main className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-[1600px] mx-auto w-full">
-          {/* Header */}
-          <div className="h-9 mb-3 flex items-center justify-between gap-4">
-            <h1 className="text-sm font-semibold text-foreground truncate">Suivi des Règlements</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Suivi des Règlements</h1>
+              <p className="text-sm text-muted-foreground mt-1">Suivez les encaissements et gérez les paiements clients</p>
+            </div>
             <Button className="h-[30px] px-3 text-xs font-medium rounded-md shadow-xs gap-1.5" onClick={() => openPaymentDialog()}>
               <Plus className="w-3.5 h-3.5" />
               Nouveau paiement

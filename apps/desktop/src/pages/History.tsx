@@ -160,11 +160,10 @@ export default function History() {
     return (
         <>
                 <main className="flex-1 p-6 space-y-5">
-                    {/* Header */}
-                    <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-3">
+                    <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-4 mb-6">
                         <div>
-                            <h1 className="text-lg font-semibold text-foreground tracking-tight">Historique</h1>
-                            <p className="text-xs text-muted-foreground mt-0.5">Suivez toutes les activités et changements</p>
+                            <h1 className="text-xl font-semibold tracking-tight text-foreground">Historique</h1>
+                            <p className="text-sm text-muted-foreground mt-1">Suivez toutes les activités et changements</p>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <Button variant="outline" size="sm" onClick={handleExport} className="h-[30px] gap-1.5 text-xs rounded-md">

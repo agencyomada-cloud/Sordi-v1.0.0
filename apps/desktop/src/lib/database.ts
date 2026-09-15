@@ -726,6 +726,29 @@ export interface UpdateExpenseData {
 export type ActivityEntityType = "invoice" | "client" | "supplier" | "quote";
 export type ActivityKind = "call" | "email" | "meeting" | "todo";
 
+// Sordi IQ (AI assistant) — chat session history. See src-tauri/src/sordi_iq.rs's
+// own module doc for the full picture; these mirror its Rust structs.
+export interface SordiIqStoredMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface SordiIqSessionSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_message_preview: string | null;
+}
+
+export interface SordiIqSession {
+  id: string;
+  title: string;
+  messages: SordiIqStoredMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Activity {
   id: string;
   company_id: string | null;
@@ -1444,7 +1467,7 @@ export const db = {
     },
     getById: async (id: string) => safeInvoke<Invoice | null>("get_invoice", { id }, () => mockStore.getInvoice(id)),
     getItems: (invoice_id: string): Promise<any[]> => safeInvoke("get_invoice_items", { invoiceId: invoice_id }, () => mockStore.getInvoiceItems(invoice_id)),
-    getNextNumber: (): Promise<string> => safeInvoke("get_next_invoice_number", undefined, () => mockStore.getNextInvoiceNumber()),
+    getNextNumber: (invoiceType?: string): Promise<string> => safeInvoke("get_next_invoice_number", { invoiceType }, () => mockStore.getNextInvoiceNumber()),
     create: (data: CreateInvoiceData): Promise<Invoice> => safeInvoke("create_invoice", { data }, () => mockStore.createInvoice(data)),
     update: (id: string, data: Omit<CreateInvoiceData, "company_id">): Promise<Invoice> => safeInvoke("update_invoice", { id, data }, () => mockStore.updateInvoice(id, data as CreateInvoiceData)),
     updateStatus: (id: string, status: string) => safeInvoke("update_invoice_status", { id, status }, () => mockStore.updateInvoiceStatus(id, status)),
@@ -1514,6 +1537,15 @@ export const db = {
     create: (data: CreateActivityData): Promise<Activity> => safeInvoke("create_activity", { data }, () => ({ ...data, id: crypto.randomUUID(), done_at: null, notes: data.notes ?? null, created_at: new Date().toISOString() } as Activity)),
     complete: (id: string): Promise<Activity> => safeInvoke("complete_activity", { id }, () => { throw new Error("complete_activity not available in web mode"); }),
     delete: (id: string): Promise<void> => safeInvoke("delete_activity", { id }, () => {}),
+  },
+
+  // Sordi IQ (AI assistant) — chat session history
+  sordiIq: {
+    listSessions: (): Promise<SordiIqSessionSummary[]> => safeInvoke("get_sordi_iq_sessions", {}, () => []),
+    getSession: (id: string): Promise<SordiIqSession> => safeInvoke("get_sordi_iq_session", { id }, () => { throw new Error("get_sordi_iq_session not available in web mode"); }),
+    createSession: (): Promise<SordiIqSessionSummary> => safeInvoke("create_sordi_iq_session", {}, () => { throw new Error("create_sordi_iq_session not available in web mode"); }),
+    saveMessages: (id: string, messages: SordiIqStoredMessage[]): Promise<void> => safeInvoke("save_sordi_iq_session_messages", { id, messages }, () => {}),
+    deleteSession: (id: string): Promise<void> => safeInvoke("delete_sordi_iq_session", { id }, () => {}),
   },
 
   // Dashboard

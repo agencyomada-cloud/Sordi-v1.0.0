@@ -306,7 +306,7 @@ export default function NewCreditNotePage() {
       })),
     }, {
       onSuccess: () => {
-        navigate("/invoices");
+        navigate("/avoirs");
       },
     });
   };
@@ -322,9 +322,9 @@ export default function NewCreditNotePage() {
         <main className="flex-1 p-8">
           <div className="mb-6 flex justify-between items-center">
             <div>
-              <Button variant="ghost" onClick={() => navigate("/invoices")} className="gap-2 mb-4 p-0 h-auto hover:bg-transparent hover:text-primary">
+              <Button variant="ghost" onClick={() => navigate("/avoirs")} className="gap-2 mb-4 p-0 h-auto hover:bg-transparent hover:text-primary">
                 <ArrowLeft className="w-4 h-4" />
-                Retour aux factures
+                Retour aux avoirs
               </Button>
               <h1 className="text-2xl font-semibold text-foreground">Nouvelle facture d'avoir</h1>
               <p className="text-muted-foreground">Créer une facture d'avoir pour un client</p>

@@ -8,67 +8,108 @@ import { env } from "../env.js";
 // minimal-dependency convention; notifyService.ts's use of the Resend SDK
 // is the one exception, kept as-is rather than rewritten). Returns whatever
 // JSON the model produces; the CALLER (routes/copilot.ts) is responsible
-// for validating it against copilotResultSchema before trusting it — this
-// function makes no correctness guarantee about the model's output.
+// for validating it against copilotBatchResultSchema before trusting it —
+// this function makes no correctness guarantee about the model's output.
 // ---------------------------------------------------------------------------
 
 // Temporarily on the "-lite" tier rather than gemini-3.6-flash — that
 // model's free tier is capped at 20 requests/DAY (shared across every
 // call this whole app makes), which this feature blew through during
 // normal development testing alone. gemini-3.1-flash-lite has its own,
-// much less easily exhausted quota pool, confirmed to produce identical
-// quality results against this exact prompt (compound multi-item
-// invoices, darija expenses, standalone client/product creation, and
-// settings-toggle paraphrases all verified correct). Revisit once on a
-// paid tier or once quota stops being the practical bottleneck.
+// much less easily exhausted quota pool. Revisit once on a paid tier or
+// once quota stops being the practical bottleneck.
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 function buildFewShotSection(examples: CopilotFewShotExample[] | undefined): string {
   if (!examples || examples.length === 0) return "";
   const rendered = examples
-    .map((ex, i) => `Exemple ${i + 1} — entrée : "${ex.input}" -> sortie corrigée : ${JSON.stringify(ex.output)}`)
+    .map((ex, i) => `Example ${i + 1} — input: "${ex.input}" -> corrected output: ${JSON.stringify(ex.output)}`)
     .join("\n");
-  return `\nCorrections précédentes de CET utilisateur — imite son vocabulaire et ses choix (catégories, fournisseurs habituels, etc.) quand une situation similaire se présente :\n${rendered}\n`;
+  return `\nThis user's own previous corrections — imitate their vocabulary and choices (categories, usual client/supplier names, etc.) when a similar situation comes up:\n${rendered}\n`;
 }
 
+// The system prompt below enforces "zero hallucination" for a real
+// financial app: earlier versions used ONE shared `name` field for both
+// "create this new entity" and "attach this to an existing one", and the
+// model would routinely emit a spurious create_client operation any time
+// a name appeared inside an invoice/expense sentence. `entity_name` (a
+// reference, resolved client-side against existing records) and `name`
+// (an actual creation instruction) are now two separate fields specifically
+// so the model can't conflate them — see copilotOperationDataSchema's own
+// doc comment in @sordi/schema for the full rationale. A single wrong
+// operation here creates a real duplicate client or a wrongly-classified
+// transaction in the user's books, so every rule below is deliberately
+// blunt/repetitive rather than polite — this model responds better to
+// unambiguous, all-caps constraints than to a softer phrasing.
 function buildPrompt(text: string, context: CopilotContext, fewShotExamples?: CopilotFewShotExample[]): string {
-  return `Tu es un copilote strictement commercial/comptable pour une TPE/PME algérienne, intégré à l'application Sordi. Tu ne réponds JAMAIS à des questions générales, de culture, de programmation, d'actualité, ni à des blagues ou de la conversation — ton unique rôle est d'interpréter une phrase libre décrivant une dépense, une facture, un nouveau client, un nouveau produit, ou un réglage d'interface à appliquer dans Sordi.
+  const today = new Date().toISOString().slice(0, 10);
+  return `You are the core intelligence engine for "Sordi Invoicing", a professional financial management and desktop accounting application used by real businesses to manage real money. You are a "Multilingual Batch Data Extraction Agent" — NOT a conversational assistant, NOT a chatbot. A single wrong operation here creates a real duplicate client or a wrongly-classified financial transaction in someone's actual books. Treat every extraction as financially consequential. When genuinely uncertain about a rule below, extract LESS, not more — omit an operation entirely rather than guess.
 
-Si la phrase de l'utilisateur n'a AUCUN rapport avec ces cinq actions (question générale, code, histoire, blague, bavardage...), ne tente RIEN d'autre et n'invente aucune réponse : renvoie exactement
-{"action":"OUT_OF_SCOPE","message":"Je peux uniquement vous aider à enregistrer vos dépenses, devis et factures."}
+The user will provide natural language input in English, French, Arabic (including Algerian Darija), or a mix of all three in the same sentence.
 
-Sinon, renvoie UNIQUEMENT un objet JSON (aucun texte autour) respectant exactement l'un des cinq schémas suivants — choisis le plus spécifique : une phrase qui ne fait QUE créer un client (sans achat associé) -> Schéma 3 ; un nouveau client mentionné À L'INTÉRIEUR d'une facture (il a acheté quelque chose) -> reste Schéma 2, avec isNewClient à true.
+YOUR OBJECTIVE:
+Analyze the input and output ONLY a single JSON object containing an array of operations, per the exact schema below. No conversational text, no explanations, no markdown code fences around the JSON — the raw JSON object and nothing else.
 
-Terminologie commerciale algérienne à reconnaître :
-- "مازوت" (mazout), "بنزين" (essence), "كراء" (location), "سيتيشن" (station) -> catégorie "Carburant" ou "Loyer" selon le contexte.
-- "سلاك الخدامة" (paie employé), "لافونس" (avance) -> catégorie "Salaires" ou "Avances".
-- "فاكتير" (facture), "دوفي" (devis), "acompte"/"تسبيق" (avance sur facture) -> action facture.
+═══════════════════════════════════════════════════════════
+RULE 1 — ENTITY RESOLUTION (CRITICAL — THE MOST COMMON MISTAKE):
+═══════════════════════════════════════════════════════════
+- If the user says "Create an invoice for CFCE for 4000 DZD", you output ONLY ONE operation: create_invoice with entity_name: "CFCE". You do NOT also output a create_client operation for "CFCE".
+- ASSUME every name mentioned inside an invoice or expense sentence refers to an entity that ALREADY EXISTS in the database. A name appearing next to "facture"/"invoice"/"dépense"/"expense" is a REFERENCE, never a creation instruction, unless rule 1a fires.
+- RULE 1a — the ONLY exception: emit a create_client or create_supplier operation ONLY when the user uses an EXPLICIT creation phrase — "new client", "nouveau client", "new customer", "عميل جديد", "new supplier", "nouveau fournisseur", "مورد جديد" — referring to that exact name. If no such explicit phrase is present anywhere in the input, NEVER emit create_client or create_supplier.
+- When create_invoice or create_expense references an entity, put that name in "entity_name", NEVER in "name". The "name" field is RESERVED exclusively for create_client/create_supplier operations — it means "create an entity with this name", so using it anywhere else is a direct hallucination of a new record.
 
-Schéma 1 — dépense :
-{"action":"CREATE_EXPENSE","amount":number,"category":string,"supplierId":string|null,"supplierName":string|null,"paymentMethod":"cash"|"cheque"|"transfer"|"card","notes":string}
+═══════════════════════════════════════════════════════════
+RULE 2 — NO DATA HALLUCINATION:
+═══════════════════════════════════════════════════════════
+- If a phone number, address, or description is NOT explicitly present in the input, OMIT that field entirely (or leave it empty). Never invent a plausible-looking phone number, address, or description. Never ask the user a follow-up question — you cannot ask questions, you can only extract or omit.
 
-Schéma 2 — facture (le client peut être nouveau — voir isNewClient ; un pourcentage d'acompte doit être calculé en DA, jamais renvoyé comme "50%" brut) :
-{"action":"CREATE_INVOICE","clientId":string|null,"clientName":string,"isNewClient":boolean,"items":[{"itemId":string|null,"description":string,"quantity":number,"unitPrice":number,"total":number}],"advancePayment":number|null,"totalAmount":number}
+═══════════════════════════════════════════════════════════
+RULE 3 — STRICT CLASSIFICATION BOUNDARIES (INVOICE vs EXPENSE — NEVER MIX THESE):
+═══════════════════════════════════════════════════════════
+- create_invoice (money IN, a sale) is triggered ONLY by: "Facture", "Invoice", "فاتورة", "فاكتير", "بيع".
+- create_expense (money OUT, a purchase/cost) is triggered ONLY by: "Dépense", "Charge", "Expense", "مصروف", "شارج", "خلصت", "شريت", "Achat".
+- These two categories are NEVER interchangeable. Buying internet, fuel, or supplies is ALWAYS create_expense, even if a price is mentioned — it is never create_invoice just because money is involved. Only use create_invoice when the text is unambiguously about the business SELLING something or billing a client.
+- create_client/create_supplier: "Client"/"Customer"/"عميل"/"كليون" and "Fournisseur"/"Supplier"/"Vendor"/"مورد"/"فورنيسور" respectively — subject to RULE 1a above.
 
-Schéma 3 — création de client seule (aucun achat mentionné) :
-{"action":"CREATE_CLIENT","name":string,"phone":string|null,"email":string|null,"address":string|null}
+═══════════════════════════════════════════════════════════
+RULE 4 — MULTILINGUAL NUMBER PARSING (MUST BE FLAWLESS):
+═══════════════════════════════════════════════════════════
+- Plain numbers with a currency word are read literally: "4000 دج" = 4000, "4000 DA" = 4000.
+- Slang/abbreviated numbers are expanded to their real integer value across every language: "50k" = 50000, "50 mille" = 50000, "50 الف" / "50 ألف" = 50000, "50 thousand" = 50000.
+- "amount" MUST always be a valid plain number (e.g. 4000), never a string, never with the currency unit attached.
+- If a currency is not mentioned, assume DZD (this app's default currency) — this does not change how the number itself is parsed.
 
-Schéma 4 — création d'un article/service du catalogue :
-{"action":"CREATE_PRODUCT","name":string,"sellPrice":number,"buyPrice":number|null}
+═══════════════════════════════════════════════════════════
+RULE 5 — BATCH PROCESSING & DEFAULTS:
+═══════════════════════════════════════════════════════════
+- The user may describe multiple operations in one sentence. Extract ALL of them as separate objects in the "operations" array.
+- If an invoice or expense has no date, default to today (${today}).
+- If the input has nothing to do with creating a client, supplier, invoice, or expense (general knowledge, chit-chat, code, jokes...), return exactly {"operations": []} — an empty array, never a fabricated operation.
 
-Schéma 5 — réglage d'interface (ex: "active le mode sombre", "mode nuit", "passer en blanc", "light mode") :
-{"action":"SET_APP_SETTINGS","setting":"theme","value":"dark"|"light"|"system"}
+KNOWN EXISTING ENTITIES — when entity_name/name refers to one of these, reuse the EXACT existing spelling so it resolves correctly instead of near-matching to a duplicate:
+Clients: ${JSON.stringify(context.clients.map((c) => c.name))}
+Suppliers: ${JSON.stringify(context.suppliers.map((s) => s.name))}
+Expense categories already in use: ${JSON.stringify(context.categories)}
 
-Résolution d'entités — utilise ces listes existantes pour retrouver le bon id exact plutôt que de le laisser à null quand une correspondance raisonnable existe :
-Clients: ${JSON.stringify(context.clients)}
-Fournisseurs: ${JSON.stringify(context.suppliers)}
-Catalogue (produits/services): ${JSON.stringify(context.catalogItems)}
-Catégories de dépenses déjà utilisées: ${JSON.stringify(context.categories)}
-
-Si un article du catalogue correspond, réutilise son itemId et son unitPrice stocké plutôt qu'un montant deviné. Si un client/fournisseur ne correspond à rien dans les listes, mets l'id à null et (pour une facture) isNewClient à true.
+EXPECTED JSON SCHEMA:
+{
+  "operations": [
+    {
+      "type": "create_client" | "create_supplier" | "create_invoice" | "create_expense",
+      "data": {
+        "name": "string, ONLY for create_client/create_supplier, ONLY when RULE 1a's explicit creation phrase is present — omit otherwise",
+        "entity_name": "string, ONLY for create_invoice/create_expense, the existing entity this references — e.g. \\"CFCE\\", omit for a create_expense with no counterparty like \\"Internet\\"",
+        "amount": 0,
+        "date": "YYYY-MM-DD",
+        "description": "string, optional, omit if not explicitly present",
+        "category": "string, optional, expense category"
+      }
+    }
+  ]
+}
 ${buildFewShotSection(fewShotExamples)}
-Phrase de l'utilisateur : "${text}"`;
+USER INPUT: "${text}"`;
 }
 
 export async function parseWithGemini(text: string, context: CopilotContext, fewShotExamples?: CopilotFewShotExample[]): Promise<unknown> {

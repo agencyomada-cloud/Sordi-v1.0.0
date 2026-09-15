@@ -8,6 +8,7 @@ mod demo_seed;
 // rather than duplicating that schema and risking drift.
 pub mod license;
 mod pdf_service;
+mod sordi_iq;
 mod splashscreen;
 mod telemetry;
 mod updates;
@@ -370,6 +371,14 @@ pub fn run() {
       // Demo data (safe, reversible — see demo_seed.rs)
       demo_seed::seed_demo_data,
       demo_seed::clear_demo_data,
+      // Sordi IQ (AI assistant)
+      sordi_iq::sordi_iq_chat,
+      sordi_iq::sordi_iq_list_models,
+      sordi_iq::get_sordi_iq_sessions,
+      sordi_iq::get_sordi_iq_session,
+      sordi_iq::create_sordi_iq_session,
+      sordi_iq::save_sordi_iq_session_messages,
+      sordi_iq::delete_sordi_iq_session,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

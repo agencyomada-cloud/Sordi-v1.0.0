@@ -13,9 +13,13 @@ import NewClient from "./pages/NewClient";
 import ClientDetail from "./pages/ClientDetail";
 import Suppliers from "./pages/Suppliers";
 import Invoices from "./pages/Invoices";
+import Devis from "./pages/Devis";
+import Proformas from "./pages/Proformas";
+import Avoirs from "./pages/Avoirs";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import NewInvoice from "./pages/NewInvoice";
 import NewProforma from "./pages/NewProforma";
+import NewQuote from "./pages/NewQuote";
 import NewCreditNote from "./pages/NewCreditNote";
 import Deliveries from "./pages/Deliveries";
 import DeliveryDetail from "./pages/DeliveryDetail";
@@ -27,6 +31,7 @@ import Products from "./pages/Products";
 import SalesAnalysis from "./pages/SalesAnalysis";
 import History from "./pages/History";
 import Expenses from "./pages/Expenses";
+import SordiIQ from "./pages/SordiIQ";
 
 
 import Orders from "./pages/Orders";
@@ -139,7 +144,10 @@ const App = () => {
               <Route path="/invoices/new" element={<NewInvoice />} />
               <Route path="/invoices/:id/edit" element={<NewInvoice />} />
               <Route path="/invoices/:id" element={<InvoiceDetail />} />
+              <Route path="/proformas" element={<Proformas />} />
               <Route path="/proformas/new" element={<NewProforma />} />
+              <Route path="/devis/new" element={<NewQuote />} />
+              <Route path="/avoirs" element={<Avoirs />} />
               <Route path="/invoices/credit-note/new" element={<NewCreditNote />} />
               <Route path="/deliveries" element={<Deliveries />} />
               <Route path="/deliveries/:id" element={<DeliveryDetail />} />
@@ -162,7 +170,7 @@ const App = () => {
                   renaming the canonical paths above, so every existing
                   navigate()/Link call elsewhere in the app keeps working. */}
               <Route path="/factures" element={<Invoices />} />
-              <Route path="/devis" element={<Invoices />} />
+              <Route path="/devis" element={<Devis />} />
               <Route path="/livraisons" element={<Deliveries />} />
               <Route path="/charges" element={<Expenses />} />
               <Route path="/commandes" element={<Orders />} />
@@ -171,6 +179,7 @@ const App = () => {
               <Route path="/employes" element={<Management />} />
               <Route path="/associes" element={<Partners />} />
               <Route path="/historique" element={<History />} />
+              <Route path="/sordi-iq" element={<SordiIQ />} />
 
               <Route path="/test-verification" element={<VerificationTest />} />
               <Route path="/settings" element={<SettingsPage />} />

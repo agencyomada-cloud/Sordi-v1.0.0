@@ -14,7 +14,11 @@ interface WorkspaceContextValue {
   activeCompanyId: string;
   companies: Company[];
   isReady: boolean;
-  switchCompany: (id: string) => void;
+  // STRICT SINGLE-ENTERPRISE LOCK: no switchCompany here — Sordi supports
+  // exactly one company per install (see create_company's hard block in
+  // commands.rs), so there is nothing to switch between. createCompany
+  // still exists solely for onboarding's one-time first-company creation
+  // (SetupWizard) — the backend refuses any call after that.
   createCompany: (data: CreateCompanyData) => Promise<Company>;
   isCreatingCompany: boolean;
 }
@@ -66,6 +70,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess, companies]);
 
+  // Internal only — used by createCompany to select the newly-created (or
+  // onboarding-updated) company, never exposed on the public context value.
   const switchCompany = (id: string) => {
     if (id === activeCompanyId) return;
     setActiveCompanyId(id);
@@ -98,7 +104,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     activeCompanyId,
     companies: companies ?? [],
     isReady: isSuccess && !!activeCompanyId,
-    switchCompany,
     createCompany,
     isCreatingCompany,
     // eslint-disable-next-line react-hooks/exhaustive-deps

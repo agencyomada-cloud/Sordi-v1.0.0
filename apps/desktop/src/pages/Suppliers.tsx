@@ -111,8 +111,8 @@ export default function SuppliersPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Fournisseurs & Prestataires</h1>
-              <p className="text-xs text-slate-500 mt-1">Gérez vos fournisseurs et prestataires</p>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Fournisseurs &amp; Prestataires</h1>
+              <p className="text-sm text-muted-foreground mt-1">Gérez vos fournisseurs et prestataires</p>
             </div>
 
             <div className="flex items-center gap-3">

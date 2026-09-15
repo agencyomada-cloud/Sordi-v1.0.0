@@ -25,6 +25,10 @@ import jetbrainsMonoSemiBold from '@/assets/fonts/pdf/JetBrainsMono-SemiBold.wof
 import jetbrainsMonoBold from '@/assets/fonts/pdf/JetBrainsMono-Bold.woff?url';
 import spaceGroteskRegular from '@/assets/fonts/pdf/SpaceGrotesk-Regular.woff?url';
 import spaceGroteskBold from '@/assets/fonts/pdf/SpaceGrotesk-Bold.woff?url';
+import readexProArabicRegular from '@/assets/fonts/pdf/ReadexPro-Arabic-Regular.woff?url';
+import readexProArabicBold from '@/assets/fonts/pdf/ReadexPro-Arabic-Bold.woff?url';
+import readexProRegular from '@/assets/fonts/pdf/ReadexPro-Regular.woff?url';
+import readexProBold from '@/assets/fonts/pdf/ReadexPro-Bold.woff?url';
 
 // The four selectable document fonts (Paramètres > Thème de la facture PDF >
 // Police) — all registered up front; react-pdf only actually fetches the
@@ -78,5 +82,53 @@ Font.register({
   fonts: [
     { src: spaceGroteskRegular },
     { src: spaceGroteskBold, fontWeight: 'bold' },
+  ]
+});
+
+// Arabic-script fallback for the invoice PDF engine (InvoicePDFDocument /
+// InvoiceTemplateEpure / InvoiceTemplateModerne) — the Arabic subset of
+// Readex Pro, the exact same typeface already used app-wide for Arabic UI
+// (see index.css's "Readex Pro (Arabic, see src/i18n)" import), so exported
+// PDFs stay visually consistent with the in-app Arabic experience instead
+// of introducing a different Arabic face just for exports.
+//
+// This is registered as its OWN family, never assigned directly to a
+// Text's fontFamily — instead resolveInvoicePdfFontStack() (in
+// invoicePdfShared.ts) appends it to whichever body font the user picked
+// (Montserrat/Inter/Poppins/Roboto/Cairo/Tajawal), as a font STACK:
+// `fontFamily: [bodyFont, 'Readex Pro Arabic']`. react-pdf's underlying
+// @react-pdf/textkit layout engine runs real Unicode script itemization,
+// automatic font substitution per script run, and full bidi reordering
+// (@react-pdf/textkit depends on bidi-js) — so once an Arabic-capable font
+// is anywhere in the stack, Arabic glyphs join correctly and read
+// right-to-left automatically, with zero manual reshaping/reversal and no
+// "isRtl" prop needed (react-pdf has none — direction is derived from the
+// Unicode Bidi Algorithm applied to the text itself). This is what fixes
+// the "disconnected and reversed" Arabic rendering bug: the previous
+// fallback chain had no Arabic glyphs in ANY registered font at all, so
+// there was nothing for the engine to shape or substitute.
+Font.register({
+  family: 'Readex Pro Arabic',
+  fonts: [
+    { src: readexProArabicRegular },
+    { src: readexProArabicBold, fontWeight: 'bold' },
+  ]
+});
+
+// The Latin subset of the same typeface, registered under its own plain
+// "Readex Pro" family — this is what the 'cairo'/'tajawal' body-font
+// choices now actually resolve to (see resolveInvoicePdfFontFamily in
+// invoicePdfShared.ts): those two were previously listed as selectable in
+// the Personnaliser panel but never registered with react-pdf at all,
+// silently falling back to Montserrat (a Latin-only font with zero Arabic
+// glyphs) in the exported PDF. Until real Cairo/Tajawal font files are
+// added as a project dependency, "Readex Pro" — already bundled for the
+// app's own Arabic UI — is a genuinely bilingual stand-in that actually
+// renders Arabic instead of silently reverting to a broken default.
+Font.register({
+  family: 'Readex Pro',
+  fonts: [
+    { src: readexProRegular },
+    { src: readexProBold, fontWeight: 'bold' },
   ]
 });

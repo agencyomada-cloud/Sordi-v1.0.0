@@ -649,8 +649,8 @@ export default function PayrollPage() {
                 ugly multi-line wrap at the app's minimum window width. */}
             <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
               <div>
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">Équipe & Salaires</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">Pointages, bulletins de paie et avances</p>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">Équipe &amp; Salaires</h1>
+                <p className="text-sm text-muted-foreground mt-1">Pointages, bulletins de paie et avances</p>
               </div>
               <div className="flex items-center gap-2">
                 {activeTab === "salaries" && (

@@ -25,12 +25,13 @@ import type { DeliveryNoteStatus } from "@/lib/database";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
 import { useSettings } from "@/hooks/useSettings";
-import { generateDeliveryNotePDF, generateDeliveryNotePDFBlob, buildDeliveryNotePDFData, blobToBase64, downloadBlobsAsZip } from "@/lib/pdfGenerator";
+import { generateDeliveryPDF, generateInvoicePDFBlob, buildDeliveryDocumentForPDF, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import type { DraftDeliveryInput } from "@/lib/emailDrafter";
 import { useSecureSession } from "@/hooks/useSecureSession";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
+import { useLicenseStatus } from "@/hooks/useLicense";
 
 const STATUS_CONFIG: Record<DeliveryNoteStatus, { label: string; variant: "neutral" | "warning" | "success" }> = {
   draft: { label: "Brouillon", variant: "neutral" },
@@ -50,6 +51,7 @@ export default function DeliveriesPage() {
     undefined
   );
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const setDeliveryStatus = useSetDeliveryStatus();
   const deleteDeliveryNote = useDeleteDeliveryNote();
@@ -102,12 +104,17 @@ export default function DeliveriesPage() {
 
     try {
       setDownloadingId(id);
-      const pdfData = buildDeliveryNotePDFData(note);
-      const saved = await generateDeliveryNotePDF(pdfData, settings);
-      // First export moves a draft into "awaiting client validation" —
-      // skipped if the user cancelled the save dialog, or the note is
-      // already past this stage (printed/signed).
-      if (saved && (note.status || "draft") === "draft") {
+      const docForPDF = buildDeliveryDocumentForPDF(note);
+      await generateDeliveryPDF(docForPDF, settings, true, undefined, licenseStatus?.license_state, ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
+      // First export moves a draft into "awaiting client validation" — the
+      // note is already past this stage if it's printed/signed.
+      if ((note.status || "draft") === "draft") {
         setDeliveryStatus.mutate({ id, status: "printed" });
       }
     } catch (error) {
@@ -177,9 +184,9 @@ export default function DeliveriesPage() {
         selectedDeliveries.map(async (id) => {
           const note = deliveryNotes?.find((n) => n.id === id);
           if (!note) throw new Error("Bon introuvable");
-          const pdfData = buildDeliveryNotePDFData(note);
-          const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
-          return { blob, fileName: `BonLivraison-${pdfData.delivery_number || id}.pdf` };
+          const docForPDF = buildDeliveryDocumentForPDF(note);
+          const blob = await generateInvoicePDFBlob(docForPDF, settings, licenseStatus?.license_state);
+          return { blob, fileName: `BonLivraison-${docForPDF.delivery_number || id}.pdf` };
         })
       );
       const files = results.filter((r): r is PromiseFulfilledResult<{ blob: Blob; fileName: string }> => r.status === "fulfilled").map((r) => r.value);
@@ -222,7 +229,7 @@ export default function DeliveriesPage() {
   };
 
   const emailNote = deliveryNotes?.find(n => n.id === emailNoteId);
-  const emailPdfData = emailNote ? buildDeliveryNotePDFData(emailNote) : null;
+  const emailPdfData = emailNote ? buildDeliveryDocumentForPDF(emailNote) : null;
 
   return (
     <>
@@ -230,8 +237,8 @@ export default function DeliveriesPage() {
           <div className="max-w-[1600px] mx-auto w-full">
           <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">Bons de livraison</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Bons de livraison</h1>
+              <p className="text-sm text-muted-foreground mt-1">
                 Gérez vos livraisons et générez des factures · {deliveryNotes?.length || 0} bon{(deliveryNotes?.length || 0) > 1 ? "s" : ""}
               </p>
             </div>
@@ -475,29 +482,29 @@ export default function DeliveriesPage() {
         onConfirm={handleBulkDelete}
       />
 
-      {emailPdfData && (
+      {emailNote && emailPdfData && (
         <SendDocumentEmailModal
           open={emailModalOpen}
           onOpenChange={(next) => {
             setEmailModalOpen(next);
             if (!next) setEmailNoteId(null);
           }}
-          recipientEmail={emailPdfData.client.email}
-          fileName={`BonLivraison-${emailPdfData.delivery_number || "000"}.pdf`}
+          recipientEmail={(emailNote.clients as any)?.email}
+          fileName={`BonLivraison-${emailNote.delivery_number || "000"}.pdf`}
           draftInput={{
             docType: "delivery",
-            documentNumber: emailPdfData.delivery_number,
-            clientName: emailPdfData.client.name,
-            documentDate: emailPdfData.delivery_date,
+            documentNumber: emailNote.delivery_number,
+            clientName: emailNote.clients?.name || "",
+            documentDate: emailNote.delivery_date,
             senderCompany: settings?.company_name || "Sordi",
-            items: emailPdfData.items.map((item) => ({
-              name: item.product_name || "Article",
+            items: (emailNote.delivery_note_items || []).map((item) => ({
+              name: item.product_name || item.products?.name || "Article",
               quantity: item.quantity,
-              unitPrice: item.unit_price,
+              unitPrice: item.unit_price ?? item.products?.unit_price,
             })),
           } satisfies DraftDeliveryInput}
           getPdfBase64={async () => {
-            const blob = await generateDeliveryNotePDFBlob(emailPdfData, settings);
+            const blob = await generateInvoicePDFBlob(emailPdfData, settings, licenseStatus?.license_state);
             return blobToBase64(blob);
           }}
         />

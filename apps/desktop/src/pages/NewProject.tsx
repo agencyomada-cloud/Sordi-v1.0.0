@@ -113,7 +113,7 @@ export default function NewProjectPage() {
               Retour
             </button>
 
-            <h1 className="text-2xl font-bold mb-6">{isEditMode ? "Modifier le projet" : "Nouveau projet"}</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-6">{isEditMode ? "Modifier le projet" : "Nouveau projet"}</h1>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-1.5">

@@ -1,4 +1,4 @@
-use crate::database::{generate_invoice_number, peek_next_invoice_number, generate_delivery_note_number, generate_order_number, recalculate_invoice_totals, update_invoice_payment_status};
+use crate::database::{generate_invoice_number, generate_document_number, peek_next_document_number, sync_document_number_sequence, generate_delivery_note_number, generate_order_number, recalculate_invoice_totals, update_invoice_payment_status};
 use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::{AppHandle, State};
@@ -391,7 +391,7 @@ pub fn reset_company_to_factory_state(db: State<'_, Mutex<Connection>>, company_
         tx.execute("DELETE FROM settings WHERE key = ?1", params![key]).map_err(|e| e.to_string())?;
     }
     for (key, default_value) in [
-        ("primary_color", "#0067F2"),
+        ("primary_color", "#FF2949"),
         ("logo_bg_color", "#000000"),
         ("logo_text_color", "#FFFFFF"),
         ("logo_size", "64"),
@@ -829,12 +829,26 @@ pub fn create_company(db: State<'_, Mutex<Connection>>, data: CreateCompanyData)
         crate::license::require_active_license()?;
     }
 
+    // STRICT SINGLE-ENTERPRISE LOCK: Sordi no longer supports multi-company
+    // workspaces at all — once onboarding has produced a real password (see
+    // has_password_set above), this command must never create a second
+    // company row, licensed or not. The former behavior (a licensed user
+    // could spin up additional companies) is intentionally removed; this is
+    // now a hard, unconditional block rather than a license check.
+    if password_set {
+        let existing_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM companies", [], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
+        if existing_count > 0 {
+            return Err("Une seule entreprise est autorisée par installation de Sordi.".to_string());
+        }
+    }
+
     // Onboarding's Step 1 (still pre-password) is the one caller that can
-    // land here while the migration-seeded default "Mon Entreprise" company
-    // still sits untouched in the database — see
-    // migrate_multi_company_if_needed's doc comment. Rather than INSERTing
-    // a second row and leaving that seed row as a permanent duplicate in
-    // the workspace switcher, fold the user's real company info into it.
+    // land here while the migration-seeded default company row still sits
+    // untouched in the database — see migrate_multi_company_if_needed's doc
+    // comment. Rather than INSERTing a second row, fold the user's real
+    // company info into it.
     if !password_set {
         if let Some(seed_id) = crate::database::find_updatable_seed_company(&conn).map_err(|e| e.to_string())? {
             conn.execute(
@@ -1748,30 +1762,19 @@ pub fn create_invoice(db: State<'_, Mutex<Connection>>, data: CreateInvoiceData)
     let now = chrono::Utc::now().to_rfc3339();
     let invoice_type = data.invoice_type.unwrap_or_else(|| "invoice".to_string());
     
-    let invoice_num = if let Some(num) = &data.invoice_number {
+    // Strict per-document-type, per-year numbering — FAC-YYYY-NNN for
+    // invoices, PRO-YYYY-NNN for proformas, DEV-YYYY-NNN for quotes
+    // (devis), AVO-YYYY-NNN for credit notes (avoirs). See
+    // generate_document_number's own doc comment in database.rs; a
+    // manually-provided number is taken as-is and just synced into that
+    // type's counter so the next auto-generated one doesn't collide.
+    let invoice_number = if let Some(num) = &data.invoice_number {
+        sync_document_number_sequence(&conn, &invoice_type, num).map_err(|e| e.to_string())?;
         num.clone()
     } else {
-        generate_invoice_number(&conn).map_err(|e| e.to_string())?
+        generate_document_number(&conn, &invoice_type).map_err(|e| e.to_string())?
     };
 
-    let invoice_number = if data.invoice_number.is_some() {
-        // If manually provided, take it as is.
-        // SYNC sequence so next automatic number doesn't collide
-        crate::database::sync_invoice_sequence(&conn, &invoice_num).map_err(|e| e.to_string())?;
-        invoice_num
-    } else {
-        // If generated
-        if invoice_type == "credit_note" {
-            format!("AV-{}", invoice_num)
-        } else if invoice_type == "proforma" {
-            // Use a specific format for proforma
-            let timestamp = chrono::Utc::now().timestamp();
-            format!("PRO-{}", timestamp)
-        } else {
-            invoice_num
-        }
-    };
-    
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     
     let insert_status = data.status.clone().unwrap_or_else(|| "issued".to_string());
@@ -1859,12 +1862,13 @@ pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: Create
     // guard — status transitions and balance recalculation must keep
     // working on a locked invoice; only manual edits to its header/items
     // are blocked.
-    let existing_status: Option<String> = conn
-        .query_row("SELECT status FROM invoices WHERE id = ?1", params![id], |row| row.get(0))
+    let existing: Option<(String, String)> = conn
+        .query_row("SELECT status, invoice_type FROM invoices WHERE id = ?1", params![id], |row| Ok((row.get(0)?, row.get(1)?)))
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(status) = existing_status.as_deref() {
-        if matches!(status, "paid" | "partial" | "converted" | "cancelled") {
+    let existing_invoice_type = existing.as_ref().map(|(_, t)| t.clone()).unwrap_or_else(|| "invoice".to_string());
+    if let Some((status, _)) = existing.as_ref() {
+        if matches!(status.as_str(), "paid" | "partial" | "converted" | "cancelled") {
             // "INVOICE_LOCKED:" prefix — a stable, machine-checkable error
             // code the frontend can match on (see InvoiceDetail.tsx's
             // isLocked guard) without parsing the localized French text,
@@ -1875,9 +1879,11 @@ pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: Create
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Sync sequence if number is updated
+    // Sync this document's own type/year counter if its number was
+    // manually edited — invoice_type never changes via this command, so
+    // the CURRENT stored type (not anything in `data`) is always correct.
     if let Some(ref num) = data.invoice_number {
-        crate::database::sync_invoice_sequence(&conn, num).map_err(|e| e.to_string())?;
+        sync_document_number_sequence(&conn, &existing_invoice_type, num).map_err(|e| e.to_string())?;
     }
 
     let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -1971,9 +1977,9 @@ pub fn update_invoice(db: State<'_, Mutex<Connection>>, id: String, data: Create
     get_invoice(db, id).map_err(|e| e.to_string())?.ok_or_else(|| "Failed to retrieve updated invoice".to_string())
 }
 #[tauri::command]
-pub fn get_next_invoice_number(db: State<'_, Mutex<Connection>>) -> Result<String, String> {
+pub fn get_next_invoice_number(db: State<'_, Mutex<Connection>>, invoice_type: Option<String>) -> Result<String, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    peek_next_invoice_number(&conn).map_err(|e| e.to_string())
+    peek_next_document_number(&conn, &invoice_type.unwrap_or_else(|| "invoice".to_string())).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2003,10 +2009,38 @@ pub fn update_invoice_status(db: State<'_, Mutex<Connection>>, id: String, statu
     }
 
     if status == "paid" {
+        // Marking an invoice "paid" this way (a manual status flip, or the
+        // AI Copilot's own path) only ever touched invoices.amount_paid —
+        // it never wrote a payments row. The dashboard's cash-flow chart
+        // (monthly_data/daily_data below) is built exclusively from
+        // SUM(payments.amount), never from invoices.amount_paid directly,
+        // so a status-only "paid" was invisible on the chart even though
+        // the top-line KPIs (which do read amount_paid) updated fine —
+        // that mismatch, not a missing cache invalidation, was the actual
+        // "chart doesn't update" bug. Inserting a real payments row for
+        // the remaining balance keeps both readings consistent.
+        let (total_ttc, amount_paid, company_id): (f64, f64, String) = conn
+            .query_row(
+                "SELECT total_ttc, COALESCE(amount_paid, 0.0), company_id FROM invoices WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|e| e.to_string())?;
+        let remaining = total_ttc - amount_paid;
+
         conn.execute(
             "UPDATE invoices SET status = ?2, amount_paid = total_ttc, balance_due = 0 WHERE id = ?1",
             params![id, status]
         ).map_err(|e| e.to_string())?;
+
+        if remaining > 0.0 {
+            let payment_id = uuid::Uuid::new_v4().to_string();
+            let now = chrono::Utc::now();
+            conn.execute(
+                "INSERT INTO payments (id, company_id, invoice_id, payment_date, amount, payment_method, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![payment_id, company_id, id, now.format("%Y-%m-%d").to_string(), remaining, "cash", now.to_rfc3339()],
+            ).map_err(|e| e.to_string())?;
+        }
     } else {
         conn.execute(
             "UPDATE invoices SET status = ?2 WHERE id = ?1", 
@@ -3617,7 +3651,7 @@ pub fn get_client_products(
         FROM invoice_items ii
         INNER JOIN invoices i ON ii.invoice_id = i.id
         INNER JOIN products p ON ii.product_id = p.id
-        WHERE i.client_id = ?1 AND i.invoice_type NOT IN ('credit_note', 'proforma')".to_string();
+        WHERE i.client_id = ?1 AND i.invoice_type NOT IN ('credit_note', 'proforma', 'quote')".to_string();
     
     // Add filters to query
     if productId.is_some() {
@@ -3931,7 +3965,7 @@ pub fn get_product_sales_stats(db: State<'_, Mutex<Connection>>, company_id: Str
          FROM invoice_items ii
          JOIN invoices i ON ii.invoice_id = i.id
          JOIN products p ON ii.product_id = p.id
-         WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND i.company_id = '{}'", company_id.replace('\'', "''")
+         WHERE i.invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND i.company_id = '{}'", company_id.replace('\'', "''")
     );
     
     if let Some(y) = year {
@@ -4463,12 +4497,12 @@ pub fn get_dashboard_stats(
     // 3. Global Receivables (Always Absolute Total Across All Time)
     // Use amount_paid from invoices directly - captures all payment methods (table + direct status change)
     let total_paid_all_time: f64 = conn.query_row(
-        &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", company_filter),
+        &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", company_filter),
         [], |row| row.get(0)
     ).unwrap_or(0.0);
 
     let total_invoiced: f64 = conn.query_row(
-        &format!("SELECT COALESCE(SUM(total_ttc), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", company_filter),
+        &format!("SELECT COALESCE(SUM(total_ttc), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", company_filter),
         [], |row| row.get(0)
     ).unwrap_or(0.0);
     
@@ -4479,7 +4513,7 @@ pub fn get_dashboard_stats(
     // the Dashboard's "Reste à Recouvrer" card subtext ("X factures avec
     // solde restant").
     let outstanding_invoice_count: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND total_ttc > COALESCE(amount_paid, 0.0) AND {}", company_filter),
+        &format!("SELECT COUNT(*) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND total_ttc > COALESCE(amount_paid, 0.0) AND {}", company_filter),
         [], |row| row.get(0)
     ).unwrap_or(0);
 
@@ -4487,7 +4521,7 @@ pub fn get_dashboard_stats(
     let revenue: f64 = conn.query_row(
         &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) 
                   FROM invoices 
-                  WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+                  WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [],
         |row| row.get(0)
     ).unwrap_or(0.0);
@@ -4496,12 +4530,12 @@ pub fn get_dashboard_stats(
     let unpaid: f64 = conn.query_row(
         &format!("SELECT COALESCE(SUM(CASE WHEN (total_ttc - amount_paid) > 0 THEN (total_ttc - amount_paid) ELSE 0.0 END), 0.0)
                   FROM invoices 
-                  WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+                  WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [], |row| row.get(0)
     ).unwrap_or(0.0);
 
     let invoice_count: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+        &format!("SELECT COUNT(*) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [], |row| row.get(0)
     ).unwrap_or(0);
 
@@ -4513,7 +4547,7 @@ pub fn get_dashboard_stats(
                     COALESCE(SUM(tva_amount), 0.0), 
                     COALESCE(SUM(timbre), 0.0)
                   FROM invoices 
-                  WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+                  WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [],
         |row| Ok(SalesCumulativeStats {
             total_ht: row.get(0)?,
@@ -4601,7 +4635,7 @@ pub fn get_dashboard_stats(
              conn.query_row(
                  &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) 
                            FROM invoices 
-                           WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", prev_inv_filter),
+                           WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", prev_inv_filter),
                 [],
                 |row| row.get(0)
             ).unwrap_or(0.0)
@@ -4620,7 +4654,7 @@ pub fn get_dashboard_stats(
         conn.query_row(
             &format!("SELECT COALESCE(SUM(COALESCE(amount_paid, 0.0)), 0.0) 
                       FROM invoices 
-                      WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", prev_inv_filter),
+                      WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", prev_inv_filter),
             [],
             |row| row.get(0)
         ).unwrap_or(0.0)
@@ -4647,7 +4681,7 @@ pub fn get_dashboard_stats(
             "SELECT strftime('%d', p.payment_date) as day, SUM(p.amount) as rev
              FROM payments p
              JOIN invoices i ON p.invoice_id = i.id
-             WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND {}
+             WHERE i.invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}
              GROUP BY day ORDER BY day",
              payment_date_filter
         )).map_err(|e| e.to_string())?;
@@ -4711,7 +4745,7 @@ pub fn get_dashboard_stats(
                     "SELECT COALESCE(SUM(p.amount), 0.0)
                      FROM payments p
                      JOIN invoices i ON p.invoice_id = i.id
-                     WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND {}",
+                     WHERE i.invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}",
                     m_pay_filter
                 ),
                 [], |row| row.get(0)
@@ -4764,7 +4798,7 @@ pub fn get_dashboard_stats(
          FROM invoice_items ii
          JOIN invoices i ON ii.invoice_id = i.id
          JOIN products p ON ii.product_id = p.id
-         WHERE i.invoice_type NOT IN ('credit_note', 'proforma') AND i.{}", company_filter
+         WHERE i.invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND i.{}", company_filter
     );
     if let Some(ref m_list) = months {
         if !m_list.is_empty() {
@@ -6957,7 +6991,7 @@ fn compute_period_net_profit_ht(conn: &Connection, company_id: &str, year: Optio
     }
 
     let revenue_ht: f64 = conn.query_row(
-        &format!("SELECT COALESCE(SUM(subtotal_ht), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+        &format!("SELECT COALESCE(SUM(subtotal_ht), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
 
@@ -7116,7 +7150,7 @@ pub fn get_monthly_partners_report(
     // Recettes HT: invoices issued this month (accrual, tax-exclusive) —
     // same basis as compute_period_net_profit_ht/get_dashboard_stats.
     let recettes_ht: f64 = conn.query_row(
-        &format!("SELECT COALESCE(SUM(subtotal_ht), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma') AND {}", invoice_date_filter),
+        &format!("SELECT COALESCE(SUM(subtotal_ht), 0.0) FROM invoices WHERE invoice_type NOT IN ('credit_note', 'proforma', 'quote') AND {}", invoice_date_filter),
         [], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
 

@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { PDFViewer } from "@react-pdf/renderer";
-import { getVersion } from "@tauri-apps/api/app";
 import {
   RiArrowLeftLine as ArrowLeft,
   RiDownloadLine as Download,
@@ -13,62 +11,50 @@ import {
 import { Button } from "@sordi/ui";
 import { useDeliveryNote } from "@/hooks/useDeliveryNotes";
 import { useSetPageHeader } from "@/hooks/usePageHeader";
-import {
-  generateDeliveryNotePDF,
-  generateDeliveryNotePDFBlob,
-  buildDeliveryNotePDFData,
-  toDeliveryNotePDFSettings,
-  blobToBase64,
-  FALLBACK_APP_VERSION,
-  type DeliveryNotePDFData,
-} from "@/lib/pdfGenerator";
-import { DeliveryNotePDFDocument } from "@/components/pdf/DeliveryNotePDFDocument";
+import { generateDeliveryPDF, generateInvoicePDFBlob, buildDeliveryDocumentForPDF, blobToBase64, openSavedFile } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
+import { useLicenseStatus } from "@/hooks/useLicense";
+import { EditableInvoicePreview } from "@/components/invoice/EditableInvoicePreview";
 import { SendDocumentEmailModal } from "@/components/email/SendDocumentEmailModal";
 import type { DraftDeliveryInput } from "@/lib/emailDrafter";
 
+/** Same shared engine as OrderDetail.tsx — the live preview below is the
+ *  exact same EditableInvoicePreview canvas every document type uses (not a
+ *  react-pdf PDFViewer rendering a delivery-specific template), and export
+ *  goes through generateDeliveryPDF, a plain alias of generateInvoicePDF. */
 export default function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: deliveryNote, isLoading, error } = useDeliveryNote(id);
   const { data: settings } = useSettings();
+  const { data: licenseStatus } = useLicenseStatus();
   const [isGenerating, setIsGenerating] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
-  // Drives the live preview below — same shape the PDF generator consumes,
-  // so the preview (rendered via react-pdf's PDFViewer, the exact same
-  // DeliveryNotePDFDocument) can never drift from the exported file again.
-  const [pdfData, setPdfData] = useState<DeliveryNotePDFData | null>(null);
-  const [appVersion, setAppVersion] = useState<string>(FALLBACK_APP_VERSION);
 
   useSetPageHeader("Livraisons", [
     { label: "Livraisons", path: "/deliveries" },
     { label: deliveryNote?.delivery_number || "…" },
   ]);
 
-  useEffect(() => {
-    getVersion().then(setAppVersion).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setPdfData(deliveryNote ? buildDeliveryNotePDFData(deliveryNote) : null);
-  }, [deliveryNote]);
-
-  const buildPdfData = async () => {
+  const buildDocForPDF = () => {
     if (!deliveryNote) return null;
-    return buildDeliveryNotePDFData(deliveryNote);
+    return buildDeliveryDocumentForPDF(deliveryNote);
   };
 
   const handleDownloadPDF = async () => {
-    const pdfData = await buildPdfData();
-    if (!pdfData) return;
+    const docForPDF = buildDocForPDF();
+    if (!docForPDF) return;
 
     try {
       setIsGenerating(true);
-      // generateDeliveryNotePDF shows its own success toast with the saved
-      // path once the native save dialog resolves; null means cancelled.
-      await generateDeliveryNotePDF(pdfData, settings);
+      await generateDeliveryPDF(docForPDF, settings, true, undefined, licenseStatus?.license_state, ({ path, blob, fileName }) => {
+        toast.success("PDF téléchargé avec succès", {
+          description: `Enregistré sous : ${path || fileName}`,
+          action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
+          duration: 6000,
+        });
+      });
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.error("Erreur lors de la génération du PDF");
@@ -78,14 +64,13 @@ export default function DeliveryDetailPage() {
   };
 
   const handlePrint = async () => {
-    const pdfData = await buildPdfData();
-    if (!pdfData) return;
+    const docForPDF = buildDocForPDF();
+    if (!docForPDF) return;
     setIsGenerating(true);
     try {
-      const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
-      const pdfBase64 = await blobToBase64(blob);
+      const pdfBase64 = await generateDeliveryPDF(docForPDF, settings, false, undefined, licenseStatus?.license_state);
       const { invoke } = await import("@tauri-apps/api/core");
-      const fileName = `Impression-${pdfData.delivery_number || "bon_livraison"}.pdf`;
+      const fileName = `Impression-${docForPDF.delivery_number || "bon_livraison"}.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });
       toast.success("PDF ouvert pour impression");
     } catch (error) {
@@ -94,14 +79,6 @@ export default function DeliveryDetailPage() {
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const formatCurrency = (amount: number | null) => {
-    if (!amount) return "0,00 DA";
-    return new Intl.NumberFormat("fr-DZ", {
-      style: "decimal",
-      minimumFractionDigits: 2,
-    }).format(amount) + " DA";
   };
 
   const formatDate = (date: string) => {
@@ -190,54 +167,48 @@ export default function DeliveryDetailPage() {
             </div>
           </div>
 
-          {/* Delivery Preview Section — the exact PDF template, rendered live
-              via react-pdf's PDFViewer, so this is a 1:1 replica of the
-              exported file by construction, not a second hand-maintained
-              implementation that can drift out of sync. */}
+          {/* Delivery Preview Section — the exact same shared A4 canvas every
+              document type uses (EditableInvoicePreview), read-only here via
+              a no-op onInvoiceChange, same as OrderDetail.tsx's own preview. */}
           <div className="bg-card rounded-3xl border border-border/30 shadow-card overflow-hidden p-8">
-            {pdfData ? (
-              <PDFViewer
-                showToolbar={false}
-                style={{ width: "100%", height: "calc(100vh - 300px)", border: "none", borderRadius: 12 }}
-              >
-                <DeliveryNotePDFDocument
-                  data={pdfData}
-                  appVersion={appVersion}
-                  settings={toDeliveryNotePDFSettings(settings)}
+            <div className="flex justify-center bg-muted rounded-lg p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              <div className="shadow-xl">
+                <EditableInvoicePreview
+                  invoice={{
+                    ...deliveryNote,
+                    invoice_items: deliveryNote.delivery_note_items || [],
+                  }}
+                  onInvoiceChange={() => { }}
+                  documentType="delivery_note"
                 />
-              </PDFViewer>
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                Chargement de l'aperçu...
               </div>
-            )}
+            </div>
           </div>
 
-          {pdfData && (
-            <SendDocumentEmailModal
-              open={emailModalOpen}
-              onOpenChange={setEmailModalOpen}
-              recipientEmail={pdfData.client.email}
-              fileName={`BonLivraison-${pdfData.delivery_number || "000"}.pdf`}
-              draftInput={{
-                docType: "delivery",
-                documentNumber: pdfData.delivery_number,
-                clientName: pdfData.client.name,
-                documentDate: pdfData.delivery_date,
-                senderCompany: settings?.company_name || "Sordi",
-                items: pdfData.items.map((item) => ({
-                  name: item.product_name || "Article",
-                  quantity: item.quantity,
-                  unitPrice: item.unit_price,
-                })),
-              } satisfies DraftDeliveryInput}
-              getPdfBase64={async () => {
-                const blob = await generateDeliveryNotePDFBlob(pdfData, settings);
-                return blobToBase64(blob);
-              }}
-            />
-          )}
+          <SendDocumentEmailModal
+            open={emailModalOpen}
+            onOpenChange={setEmailModalOpen}
+            recipientEmail={(deliveryNote.clients as any)?.email}
+            fileName={`BonLivraison-${deliveryNote.delivery_number || "000"}.pdf`}
+            draftInput={{
+              docType: "delivery",
+              documentNumber: deliveryNote.delivery_number,
+              clientName: deliveryNote.clients?.name || "",
+              documentDate: deliveryNote.delivery_date,
+              senderCompany: settings?.company_name || "Sordi",
+              items: (deliveryNote.delivery_note_items || []).map((item: any) => ({
+                name: item.product_name || item.products?.name || "Article",
+                quantity: item.quantity,
+                unitPrice: item.unit_price ?? item.products?.unit_price,
+              })),
+            } satisfies DraftDeliveryInput}
+            getPdfBase64={async () => {
+              const docForPDF = buildDocForPDF();
+              if (!docForPDF) throw new Error("Bon de livraison introuvable");
+              const blob = await generateInvoicePDFBlob(docForPDF, settings, licenseStatus?.license_state);
+              return blobToBase64(blob);
+            }}
+          />
         </main>
   );
 }
-

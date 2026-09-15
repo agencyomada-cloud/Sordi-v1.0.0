@@ -81,17 +81,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary — rich, professional deep crimson/scarlet (was an electric
-       #0066FF-style cobalt, then briefly a neon blue before that). Same
-       hue family as dark mode's Scarlet, tuned for contrast against white
-       instead of near-black. --primary-hover is the pressed shade (light
-       mode darkens on hover, opposite of dark mode's brighten-on-hover);
-       --accent-soft is the tint used for active-nav/hover backgrounds
-       behind the accent color. */
-    --primary: 346 84% 55%;
+    /* Primary — brand Scarlet, #FF2949 exactly (hsl 351 100% 58%) — the
+       real logo's petal color, same hue family as dark mode's own Scarlet
+       (which already matched this value). --primary-hover is the pressed
+       shade (light mode darkens on hover, opposite of dark mode's
+       brighten-on-hover); --accent-soft is the tint used for active-nav/
+       hover backgrounds behind the accent color. */
+    --primary: 351 100% 58%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 346 84% 45%;
-    --accent-soft: 346 70% 96%;
+    --primary-hover: 351 100% 48%;
+    --accent-soft: 351 70% 96%;
 
     /* Secondary - slate-tinted neutral, hue matches background/border.
        Stays neutral on purpose — same restraint rule as dark mode: Scarlet
@@ -104,7 +103,7 @@
     --muted-foreground: 215 16% 47%;
 
     /* Accent - same Scarlet as primary; one brand color, used consistently */
-    --accent: 346 84% 55%;
+    --accent: 351 100% 58%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive - Red (kept distinct from the brand accent so destructive
@@ -122,7 +121,7 @@
        see boxShadow in tailwind.config.ts, zeroed globally). */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 346 84% 55%;
+    --ring: 351 100% 58%;
 
     /* Radius — strict desktop-compact system: 6px is the ceiling for every
        functional control (buttons, inputs, badges), 8px for modals/panels.
@@ -156,14 +155,14 @@
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 222 47% 11%;
 
-    --sidebar-primary: 346 84% 55%;
+    --sidebar-primary: 351 100% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
 
-    --sidebar-accent: 346 84% 55%;
+    --sidebar-accent: 351 100% 58%;
     --sidebar-accent-foreground: 0 0% 100%;
 
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 346 84% 55%;
+    --sidebar-ring: 351 100% 58%;
 
     /* Charts - primary electric blue first, distinct hues after for series legibility */
     --chart-1: 221 100% 50%;

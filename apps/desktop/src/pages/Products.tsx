@@ -422,9 +422,12 @@ export default function ProductsPage() {
   return (
     <>
       <main className="flex-1 p-8 pt-4">
-          <div className="max-w-[1600px] mx-auto w-full">
-          <div className="h-9 mb-3 flex items-center justify-between gap-4">
-            <h1 className="text-sm font-semibold text-foreground truncate">Catalogue &amp; Services</h1>
+        <div className="max-w-[1600px] mx-auto w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Catalogue &amp; Services</h1>
+              <p className="text-sm text-muted-foreground mt-1">Gérez vos produits, prestations et stocks</p>
+            </div>
             <Dialog
               open={isDialogOpen}
               onOpenChange={(next) => {

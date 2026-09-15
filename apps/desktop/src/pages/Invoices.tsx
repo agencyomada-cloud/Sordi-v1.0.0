@@ -17,14 +17,13 @@ import {
   RiFileCopyLine as Copy,
   RiErrorWarningLine as AlertCircle,
   RiFileTextLine as FileTextIcon,
-  RiFileList3Line as ProformaIcon,
   RiScales3Line as Scales,
 } from "@remixicon/react";
 import { Button, Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, TableLoading, EmptyState, Tooltip, TooltipTrigger, TooltipContent, DesktopSegmentedControl, StatusBadge } from "@sordi/ui";
 import { MetricStrip } from "@/components/ui/metric-strip";
 import { cn } from "@/lib/utils";
 import { useInvoices, useDeleteInvoice, useConvertProforma, useUpdateInvoiceStatus, type InvoiceStatus, type InvoiceType } from "@/hooks/useInvoices";
-import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile } from "@/lib/pdfGenerator";
+import { generateInvoicePDF, generateInvoicePDFBlob, blobToBase64, downloadBlobsAsZip, openSavedFile, resolveDocumentFileName } from "@/lib/pdfGenerator";
 import { getInvoiceStatusConfig, INVOICE_STATUS_PILL_BASE, INVOICE_STATUS_PILL_CLASSES, INVOICE_STATUS_DOT_CLASSES } from "@/lib/invoiceStatus";
 import { toast } from "sonner";
 import { db } from "@/lib/database";
@@ -41,14 +40,122 @@ import { FacetedSearchInput, type SearchFacet } from "@/components/common/Facete
 import { GridGroupBySelect, type GroupByOption } from "@/components/common/GridGroupBySelect";
 import { RiArrowDownSLine as ChevronDown, RiArrowRightSLine as ChevronRight } from "@remixicon/react";
 
-const tabs = [
-  { label: "Toutes", status: undefined, type: undefined },
-  { label: "Factures", status: undefined, type: "invoice" as InvoiceType },
-  { label: "Proformas", status: undefined, type: "proforma" as InvoiceType },
-  { label: "Avoirs", status: undefined, type: "credit_note" as InvoiceType },
-  { label: "Payées", status: "paid" as InvoiceStatus, type: undefined },
-  { label: "En attente", status: "issued" as InvoiceStatus, type: undefined },
+// Payment/approval STATUS only — never a document type. Which document
+// type this whole page shows is fixed by the route (see DOCUMENT_CONFIG
+// below and the documentType prop), not by a tab; strict route isolation
+// means "Factures", "Devis", "Factures Proforma" and "Avoirs" each get
+// their own page instance instead of sharing tabs that used to also
+// double as a type filter.
+//
+// The set of STATUSES shown is also per document type, not shared — a
+// Devis is never "Payée"/"En attente" (that's an invoice payment/collection
+// state), it moves through its own Brouillon/Envoyé/Accepté/Refusé/Expiré
+// lifecycle instead. Proforma/Avoir keep the invoice-style tabs/menu
+// unchanged (not part of this fix's reported scope).
+const STATUS_TABS_INVOICE_LIKE: { label: string; status?: InvoiceStatus }[] = [
+  { label: "Toutes", status: undefined },
+  { label: "Payées", status: "paid" },
+  { label: "En attente", status: "issued" },
 ];
+const STATUS_MENU_INVOICE_LIKE: { label: string; status: InvoiceStatus }[] = [
+  { label: "Payée", status: "paid" },
+  { label: "Émise (Impayée)", status: "issued" },
+  { label: "Brouillon", status: "draft" },
+  { label: "Annulée", status: "cancelled" },
+];
+
+const STATUS_TABS_QUOTE: { label: string; status?: InvoiceStatus }[] = [
+  { label: "Toutes", status: undefined },
+  { label: "Brouillon", status: "draft" },
+  { label: "Envoyé", status: "sent" },
+  { label: "Accepté", status: "accepted" },
+  { label: "Refusé", status: "rejected" },
+  { label: "Expiré", status: "expired" },
+];
+const STATUS_MENU_QUOTE: { label: string; status: InvoiceStatus }[] = [
+  { label: "Brouillon", status: "draft" },
+  { label: "Envoyé", status: "sent" },
+  { label: "Accepté", status: "accepted" },
+  { label: "Refusé", status: "rejected" },
+  { label: "Expiré", status: "expired" },
+];
+
+interface DocumentTypeConfig {
+  pageTitle: string;
+  pageDescription: string;
+  /** Singular noun used in row counts ("3 devis", "1 avoir") — French
+   *  pluralization varies enough (facture/factures, devis/devis,
+   *  avoir/avoirs) that this needs its own plural form too. */
+  nounSingular: string;
+  nounPlural: string;
+  createLabel: string;
+  createPath: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  deleteTitle: string;
+  /** The segmented-control tabs above the table — status only, never a
+   *  document-type filter (see the module comment above). */
+  statusTabs: { label: string; status?: InvoiceStatus }[];
+  /** The per-row "change status" dropdown options — a strict subset/
+   *  reflection of statusTabs' own lifecycle, so a row can never be set to
+   *  a status its own document type doesn't have a tab for. */
+  statusMenu: { label: string; status: InvoiceStatus }[];
+}
+
+const DOCUMENT_CONFIG: Record<InvoiceType, DocumentTypeConfig> = {
+  invoice: {
+    pageTitle: "Facturation & Créances",
+    pageDescription: "Gérez vos factures et suivez vos encaissements",
+    nounSingular: "facture",
+    nounPlural: "factures",
+    createLabel: "Facture",
+    createPath: "/invoices/new",
+    emptyTitle: "Aucune facture",
+    emptyDescription: "Créez votre première facture",
+    deleteTitle: "Supprimer la facture",
+    statusTabs: STATUS_TABS_INVOICE_LIKE,
+    statusMenu: STATUS_MENU_INVOICE_LIKE,
+  },
+  quote: {
+    pageTitle: "Devis",
+    pageDescription: "Gérez vos devis clients",
+    nounSingular: "devis",
+    nounPlural: "devis",
+    createLabel: "Devis",
+    createPath: "/devis/new",
+    emptyTitle: "Aucun devis",
+    emptyDescription: "Créez votre premier devis",
+    deleteTitle: "Supprimer le devis",
+    statusTabs: STATUS_TABS_QUOTE,
+    statusMenu: STATUS_MENU_QUOTE,
+  },
+  proforma: {
+    pageTitle: "Factures Proforma",
+    pageDescription: "Gérez vos factures proforma",
+    nounSingular: "proforma",
+    nounPlural: "proformas",
+    createLabel: "Proforma",
+    createPath: "/proformas/new",
+    emptyTitle: "Aucune proforma",
+    emptyDescription: "Créez votre première facture proforma",
+    deleteTitle: "Supprimer la proforma",
+    statusTabs: STATUS_TABS_INVOICE_LIKE,
+    statusMenu: STATUS_MENU_INVOICE_LIKE,
+  },
+  credit_note: {
+    pageTitle: "Avoirs",
+    pageDescription: "Gérez vos avoirs et notes de crédit",
+    nounSingular: "avoir",
+    nounPlural: "avoirs",
+    createLabel: "Avoir",
+    createPath: "/invoices/credit-note/new",
+    emptyTitle: "Aucun avoir",
+    emptyDescription: "Créez votre premier avoir",
+    deleteTitle: "Supprimer l'avoir",
+    statusTabs: STATUS_TABS_INVOICE_LIKE,
+    statusMenu: STATUS_MENU_INVOICE_LIKE,
+  },
+};
 
 const GROUP_BY_OPTIONS: GroupByOption[] = [
   { value: "none", label: "Aucun regroupement" },
@@ -58,25 +165,36 @@ const GROUP_BY_OPTIONS: GroupByOption[] = [
 ];
 
 
-export default function InvoicesPage() {
+interface InvoicesPageProps {
+  /** Fixed by the route that mounted this page (see App.tsx's /factures,
+   *  /devis, /proformas, /avoirs routes) — strict route isolation means
+   *  this never changes based on a tab or dropdown, only on which URL the
+   *  sidebar link navigated to. */
+  documentType?: InvoiceType;
+}
+
+export default function InvoicesPage({ documentType = "invoice" }: InvoicesPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const config = DOCUMENT_CONFIG[documentType];
+  const docLabel = config.nounSingular.charAt(0).toUpperCase() + config.nounSingular.slice(1);
 
   const getInitialTab = () => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "proformas") return 2;
-    if (tabParam === "invoices") return 1;
-    if (tabParam === "credit-notes") return 3;
-    return 0;
+    const statusParam = searchParams.get("status");
+    if (!statusParam) return 0;
+    const index = config.statusTabs.findIndex((tab) => tab.status === statusParam);
+    return index === -1 ? 0 : index;
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab());
-  const { data: invoices, isLoading, isError, refetch } = useInvoices(tabs[activeTab].status, tabs[activeTab].type);
-  // Unfiltered — the metric strip always summarizes the whole invoicing
-  // picture, independent of the active tab, matching how Suppliers.tsx and
-  // Products.tsx build their own strips from the full dataset rather than
-  // whatever subset the table happens to be showing.
-  const { data: allInvoices } = useInvoices();
+  const { data: invoices, isLoading, isError, refetch } = useInvoices(config.statusTabs[activeTab]?.status, documentType);
+  // Unfiltered (within this route's own document type) — the metric strip
+  // always summarizes the whole picture for this type, independent of the
+  // active status tab, matching how Suppliers.tsx and Products.tsx build
+  // their own strips from the full dataset rather than whatever subset the
+  // table happens to be showing. Only ever rendered for the Factures route
+  // (see showMetricStrip below), so this stays cheap elsewhere.
+  const { data: allInvoices } = useInvoices(undefined, documentType);
   const deleteInvoice = useDeleteInvoice();
   const convertProforma = useConvertProforma();
   const { data: settings } = useSettings();
@@ -103,8 +221,8 @@ export default function InvoicesPage() {
   const handleTabChange = (index: number) => {
     setActiveTab(index);
     setSelectedInvoices([]);
-    const tabName = index === 1 ? "invoices" : index === 2 ? "proformas" : index === 3 ? "credit-notes" : "all";
-    setSearchParams({ tab: tabName });
+    const status = config.statusTabs[index]?.status;
+    setSearchParams(status ? { status } : {});
   };
 
   const toggleAll = () => {
@@ -252,7 +370,7 @@ export default function InvoicesPage() {
   const { focusedIndex, setFocusedIndex } = useTableKeyboardNav({
     rows: visibleInvoices,
     onOpen: (invoice: any) => navigate(`/invoices/${invoice.id}`),
-    onCreate: () => navigate("/invoices/new"),
+    onCreate: () => navigate(config.createPath),
     onEscape: () => {
       setSearchQuery("");
       setSearchFacets([]);
@@ -277,11 +395,15 @@ export default function InvoicesPage() {
 
   // Metric strip — pure summation over fields the backend already computes
   // (total_ttc, amount_paid, balance_due) and stores per invoice; nothing
-  // here recalculates a document's own totals or payment status.
+  // here recalculates a document's own totals or payment status. Only
+  // meaningful on the Factures route: proformas/devis aren't fiscal
+  // invoices with real collections against them, and avoirs are already
+  // netted against real invoices elsewhere — so this whole strip is
+  // skipped on those 3 routes (see showMetricStrip below) rather than
+  // inventing revenue-style metrics for document types that don't have one.
+  const showMetricStrip = documentType === "invoice";
   const realInvoices = (allInvoices ?? []).filter((inv: any) => inv.invoice_type === "invoice" && inv.status !== "cancelled" && inv.status !== "draft");
-  const creditNotes = (allInvoices ?? []).filter((inv: any) => inv.invoice_type === "credit_note" && inv.status !== "cancelled");
-  const totalFacture = realInvoices.reduce((sum: number, inv: any) => sum + (inv.total_ttc || 0), 0)
-    - creditNotes.reduce((sum: number, inv: any) => sum + (inv.total_ttc || 0), 0);
+  const totalFacture = realInvoices.reduce((sum: number, inv: any) => sum + (inv.total_ttc || 0), 0);
   const totalEncaisse = realInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_paid || 0), 0);
   const unpaidInvoices = realInvoices.filter((inv: any) => inv.status === "issued" || inv.status === "partial");
   const resteARecouvrer = unpaidInvoices.reduce((sum: number, inv: any) => sum + (inv.balance_due ?? (inv.total_ttc || 0) - (inv.amount_paid || 0)), 0);
@@ -346,8 +468,8 @@ export default function InvoicesPage() {
       // Wait for the off-screen preview to render before rasterizing it
       await new Promise((r) => setTimeout(r, 500));
 
-      await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob }) => {
-        toast.success("Facture PDF générée", {
+      await generateInvoicePDF(invoiceForPDF, settings, true, undefined, licenseStatus?.license_state, ({ path, blob }) => {
+        toast.success("PDF généré", {
           id: loadingId,
           description: "Le fichier a été enregistré avec succès.",
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
@@ -398,10 +520,10 @@ export default function InvoicesPage() {
     const balance = invoice.balance_due ?? 0;
     const summary =
       balance > 0
-        ? `Facture N° ${reference} | Montant: ${formatCurrency(invoice.total_ttc)} | Reste dû: ${formatCurrency(balance)}`
-        : `Facture N° ${reference} — ${formatCurrency(invoice.total_ttc)} (${getInvoiceStatusConfig(invoice.status).label})`;
+        ? `${docLabel} N° ${reference} | Montant: ${formatCurrency(invoice.total_ttc)} | Reste dû: ${formatCurrency(balance)}`
+        : `${docLabel} N° ${reference} — ${formatCurrency(invoice.total_ttc)} (${getInvoiceStatusConfig(invoice.status).label})`;
     navigator.clipboard.writeText(summary).then(
-      () => toast.success("Résumé de la facture copié"),
+      () => toast.success(`Résumé ${documentType === "invoice" ? "de la facture" : "du document"} copié`),
       () => toast.error("Impossible de copier le résumé")
     );
   };
@@ -430,9 +552,8 @@ export default function InvoicesPage() {
       const results = await Promise.allSettled(
         selectedInvoices.map(async (id) => {
           const invoiceForPDF = await buildInvoiceForPDF(id);
-          const blob = await generateInvoicePDFBlob(invoiceForPDF, settings, licenseStatus?.state === "active");
-          const isCreditNote = invoiceForPDF.invoice_type === "credit_note";
-          const fileName = `${isCreditNote ? "Avoir" : "Facture"}-${invoiceForPDF.invoice_number || id}.pdf`;
+          const blob = await generateInvoicePDFBlob(invoiceForPDF, settings, licenseStatus?.license_state);
+          const fileName = resolveDocumentFileName(invoiceForPDF);
           return { blob, fileName };
         })
       );
@@ -444,11 +565,11 @@ export default function InvoicesPage() {
         return;
       }
 
-      await downloadBlobsAsZip(files, `Factures-${new Date().toISOString().split("T")[0]}.zip`);
+      await downloadBlobsAsZip(files, `${config.nounPlural}-${new Date().toISOString().split("T")[0]}.zip`);
       toast.success(
         failed === 0
-          ? `${files.length} facture${files.length > 1 ? "s" : ""} téléchargée${files.length > 1 ? "s" : ""} (ZIP)`
-          : `${files.length} facture(s) téléchargées, ${failed} en échec`
+          ? `${files.length} ${config.nounSingular}${files.length > 1 ? "s" : ""} téléchargée${files.length > 1 ? "s" : ""} (ZIP)`
+          : `${files.length} ${config.nounSingular}(s) téléchargées, ${failed} en échec`
       );
       clearSelection();
     } catch (error) {
@@ -465,9 +586,9 @@ export default function InvoicesPage() {
       const results = await Promise.allSettled(selectedInvoices.map((id) => deleteInvoice.mutateAsync(id)));
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed === 0) {
-        toast.success(`${results.length} facture${results.length > 1 ? "s" : ""} supprimée${results.length > 1 ? "s" : ""}`);
+        toast.success(`${results.length} document${results.length > 1 ? "s" : ""} supprimé${results.length > 1 ? "s" : ""}`);
       } else {
-        toast.error(`${failed} facture(s) sur ${results.length} n'ont pas pu être supprimées`);
+        toast.error(`${failed} document(s) sur ${results.length} n'ont pas pu être supprimés`);
       }
       clearSelection();
     } finally {
@@ -502,15 +623,11 @@ export default function InvoicesPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-medium tabular-nums tracking-tight">{invoice.invoice_number}</span>
-                            {isCreditNote && (
-                              <span className="text-xs bg-destructive/10 text-destructive px-2 py-0.5 rounded-full font-medium">Avoir</span>
-                            )}
-                            {isProforma && (
-                              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">Proforma</span>
-                            )}
-                          </div>
+                          {/* No per-row type chip — every row on this page is
+                              already the same document type (strict route
+                              isolation), so a type badge would just repeat
+                              what the page title already says. */}
+                          <span className="font-mono font-medium tabular-nums tracking-tight">{invoice.invoice_number}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground max-w-[220px]">
                           <Tooltip>
@@ -546,26 +663,25 @@ export default function InvoicesPage() {
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="center">
-                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "paid" })}>
-                                  Payée
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "issued" })}>
-                                  Émise (Impayée)
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  disabled={invoice.invoice_type === "invoice" || invoice.invoice_type === "credit_note"}
-                                  onClick={() => updateStatus.mutate({ id: invoice.id, status: "draft" })}
-                                  title={
-                                    invoice.invoice_type === "invoice" || invoice.invoice_type === "credit_note"
-                                      ? "Ce document porte un numéro séquentiel officiel et ne peut pas être remis en brouillon"
-                                      : undefined
-                                  }
-                                >
-                                  Brouillon
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => updateStatus.mutate({ id: invoice.id, status: "cancelled" })}>
-                                  Annulée
-                                </DropdownMenuItem>
+                                {/* Options come strictly from this route's own
+                                    documentType (config.statusMenu) — a Devis
+                                    row can only ever move through its own
+                                    Brouillon/Envoyé/Accepté/Refusé/Expiré
+                                    lifecycle, never an invoice payment status
+                                    like "Payée". */}
+                                {config.statusMenu.map((option) => {
+                                  const isDraftLocked = option.status === "draft" && (documentType === "invoice" || documentType === "credit_note");
+                                  return (
+                                    <DropdownMenuItem
+                                      key={option.status}
+                                      disabled={isDraftLocked}
+                                      onClick={() => updateStatus.mutate({ id: invoice.id, status: option.status })}
+                                      title={isDraftLocked ? "Ce document porte un numéro séquentiel officiel et ne peut pas être remis en brouillon" : undefined}
+                                    >
+                                      {option.label}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -619,12 +735,19 @@ export default function InvoicesPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
                                   <Edit className="mr-2 h-4 w-4" />
-                                  Modifier la facture
+                                  Modifier {documentType === "invoice" ? "la facture" : documentType === "credit_note" ? "l'avoir" : documentType === "quote" ? "le devis" : "la proforma"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleOpenEmailModal(invoice.id)}>
                                   <MailIcon className="mr-2 h-4 w-4" />
                                   Envoyer par email
                                 </DropdownMenuItem>
+                                {/* Convertir/Paiement/Avoir are all Facture-lifecycle
+                                    actions that only make sense on their own
+                                    dedicated routes now — a quote is never
+                                    "converted" the way a proforma is (no
+                                    equivalent command exists), and only a real
+                                    invoice can take a payment or an avoir
+                                    against it. */}
                                 {isProforma && invoice.status !== "converted" && (
                                   <DropdownMenuItem
                                     onClick={() =>
@@ -637,7 +760,7 @@ export default function InvoicesPage() {
                                     Convertir en Facture
                                   </DropdownMenuItem>
                                 )}
-                                {!isCreditNote && !isProforma && (
+                                {documentType === "invoice" && (
                                   <>
                                     <DropdownMenuItem onClick={() => navigate(`/payments?invoice=${invoice.id}`)}>
                                       <CreditCard className="w-4 h-4 mr-2" />
@@ -680,69 +803,59 @@ export default function InvoicesPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Facturation & Créances</h1>
-              <p className="text-xs text-slate-500 mt-1">Gérez vos factures, proformas et avoirs</p>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">{config.pageTitle}</h1>
+              <p className="text-sm text-muted-foreground mt-1">{config.pageDescription}</p>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Single compact document-type control — the titlebar's own
-                  "+ Facture" already covers plain invoice creation, so this
-                  no longer duplicates it as a second full-size blue button;
-                  it exists for Proforma/Avoir, with Facture kept as a third
-                  option for anyone already on this page. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-[30px] px-3 text-xs rounded-md gap-1.5">
-                    <Plus className="w-3.5 h-3.5" />
-                    Créer un document
-                    <kbd className="ml-1 text-[10px] font-mono text-muted-foreground/70 border border-border/60 rounded px-1 py-px">N</kbd>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => navigate("/invoices/new")}>
-                    <FileTextIcon className="w-4 h-4 mr-2" />
-                    Facture
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/proformas/new")}>
-                    <ProformaIcon className="w-4 h-4 mr-2" />
-                    Proforma
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/invoices/credit-note/new")}>
-                    <MinusCircle className="w-4 h-4 mr-2" />
-                    Avoir
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* One direct, contextual CTA — no dropdown, no cross-type
+                  picker. Which document type this button creates is fixed
+                  by the route this page instance was mounted for (strict
+                  route isolation), so it never needs to branch on anything
+                  at click time. Same brand-red treatment as the titlebar's
+                  own "+ Facture" button (Header.tsx). */}
+              <Button
+                className="h-[30px] px-3 text-xs rounded-md gap-1.5 bg-primary text-primary-foreground hover:bg-primary-hover"
+                onClick={() => navigate(config.createPath)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {config.createLabel}
+                <kbd className="ml-1 text-[10px] font-mono text-primary-foreground/70 border border-primary-foreground/30 rounded px-1 py-px">N</kbd>
+              </Button>
             </div>
           </div>
 
-          {/* Metric strip */}
-          <div className="mb-6 animate-fade-in-up animation-delay-100">
-            <MetricStrip
-              cells={[
-                { key: "facture", label: "Total Facturé (TTC)", value: formatCurrency(totalFacture), numericValue: totalFacture, format: formatCurrency, icon: FileTextIcon },
-                { key: "encaisse", label: "Total Encaissé", value: formatCurrency(totalEncaisse), numericValue: totalEncaisse, format: formatCurrency, icon: CreditCard },
-                {
-                  key: "reste",
-                  label: "Reste à Recouvrer",
-                  value: formatCurrency(resteARecouvrer),
-                  numericValue: resteARecouvrer,
-                  format: formatCurrency,
-                  icon: Scales,
-                  trend: resteARecouvrer > 0 ? <StatusBadge tone="warning">À recouvrer</StatusBadge> : <StatusBadge tone="neutral">Soldé</StatusBadge>,
-                },
-                {
-                  key: "retard",
-                  label: "Factures en Retard",
-                  value: String(facturesEnRetard),
-                  numericValue: facturesEnRetard,
-                  format: (v) => String(Math.round(v)),
-                  icon: AlertCircle,
-                  trend: facturesEnRetard > 0 ? <StatusBadge tone="error">En retard</StatusBadge> : undefined,
-                },
-              ]}
-            />
-          </div>
+          {/* Metric strip — Factures only (see showMetricStrip's own
+              comment above): proformas/devis/avoirs don't have a
+              collections/overdue story the same way a real invoice does. */}
+          {showMetricStrip && (
+            <div className="mb-6 animate-fade-in-up animation-delay-100">
+              <MetricStrip
+                cells={[
+                  { key: "facture", label: "Total Facturé (TTC)", value: formatCurrency(totalFacture), numericValue: totalFacture, format: formatCurrency, icon: FileTextIcon },
+                  { key: "encaisse", label: "Total Encaissé", value: formatCurrency(totalEncaisse), numericValue: totalEncaisse, format: formatCurrency, icon: CreditCard },
+                  {
+                    key: "reste",
+                    label: "Reste à Recouvrer",
+                    value: formatCurrency(resteARecouvrer),
+                    numericValue: resteARecouvrer,
+                    format: formatCurrency,
+                    icon: Scales,
+                    trend: resteARecouvrer > 0 ? <StatusBadge tone="warning">À recouvrer</StatusBadge> : <StatusBadge tone="neutral">Soldé</StatusBadge>,
+                  },
+                  {
+                    key: "retard",
+                    label: "Factures en Retard",
+                    value: String(facturesEnRetard),
+                    numericValue: facturesEnRetard,
+                    format: (v) => String(Math.round(v)),
+                    icon: AlertCircle,
+                    trend: facturesEnRetard > 0 ? <StatusBadge tone="error">En retard</StatusBadge> : undefined,
+                  },
+                ]}
+              />
+            </div>
+          )}
 
           {/* Tabs and Search — rest directly on the page canvas, no card
               wrapper; a single hairline divider closes off the filter row
@@ -761,12 +874,12 @@ export default function InvoicesPage() {
             <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
               <DesktopSegmentedControl
                 className="h-[30px]"
-                options={tabs.map((tab, index) => ({ value: String(index), label: tab.label }))}
+                options={config.statusTabs.map((tab, index) => ({ value: String(index), label: tab.label }))}
                 value={String(activeTab)}
                 onChange={(value) => handleTabChange(Number(value))}
               />
               <span className="text-xs text-muted-foreground font-mono tabular-nums ps-2 shrink-0 whitespace-nowrap">
-                {invoices?.length || 0} facture{(invoices?.length || 0) > 1 ? "s" : ""}
+                {invoices?.length || 0} {(invoices?.length || 0) > 1 ? config.nounPlural : config.nounSingular}
               </span>
             </div>
 
@@ -811,17 +924,23 @@ export default function InvoicesPage() {
           {/* Bulk action bar */}
           <div className="pt-4">
             <BulkActionBar count={selectedInvoices.length} onClear={clearSelection}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 rounded-full text-xs"
-                onClick={handleBulkMarkPaid}
-                disabled={isBulkMarkingPaid}
-              >
-                {isBulkMarkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                Marquer comme payées
-              </Button>
+              {/* "Marquer comme payées" only makes sense for real invoices —
+                  proformas/devis aren't fiscal documents with a collection
+                  status, and avoirs are already credits, not something you
+                  "pay". */}
+              {documentType === "invoice" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full text-xs"
+                  onClick={handleBulkMarkPaid}
+                  disabled={isBulkMarkingPaid}
+                >
+                  {isBulkMarkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Marquer comme payées
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -887,14 +1006,14 @@ export default function InvoicesPage() {
                     <TableCell colSpan={7}>
                       <EmptyState
                         type="invoices"
-                        title="Aucune facture"
-                        description={searchQuery || searchFacets.length > 0 ? "Essayez une autre recherche" : "Créez votre première facture"}
+                        title={config.emptyTitle}
+                        description={searchQuery || searchFacets.length > 0 ? "Essayez une autre recherche" : config.emptyDescription}
                         action={searchQuery || searchFacets.length > 0 ? {
                           label: "Effacer la recherche",
                           onClick: () => { setSearchQuery(""); setSearchFacets([]); },
                         } : {
                           label: "Créer",
-                          onClick: () => navigate("/invoices/new"),
+                          onClick: () => navigate(config.createPath),
                         }}
                       />
                     </TableCell>
@@ -939,12 +1058,12 @@ export default function InvoicesPage() {
       <DeleteConfirmationModal
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Supprimer la facture"
-        itemIdentifier={invoices?.find((i) => i.id === invoiceToDelete)?.invoice_number || "Facture"}
+        title={config.deleteTitle}
+        itemIdentifier={invoices?.find((i) => i.id === invoiceToDelete)?.invoice_number || docLabel}
         description={(() => {
           const invoice = invoices?.find((i) => i.id === invoiceToDelete);
           if (invoice && (invoice.amount_paid || 0) > 0) {
-            return `Cette facture a des paiements enregistrés totalisant ${invoice.amount_paid.toLocaleString("fr-FR")} DA — ils seront supprimés définitivement avec la facture. Cette action est irréversible.`;
+            return `Ce document a des paiements enregistrés totalisant ${invoice.amount_paid.toLocaleString("fr-FR")} DA — ils seront supprimés définitivement avec lui. Cette action est irréversible.`;
           }
           return "Cette action est irréversible.";
         })()}
@@ -955,8 +1074,8 @@ export default function InvoicesPage() {
       <DeleteConfirmationModal
         open={bulkDeleteDialogOpen}
         onOpenChange={setBulkDeleteDialogOpen}
-        title={`Supprimer ${selectedInvoices.length} facture${selectedInvoices.length > 1 ? "s" : ""} ?`}
-        description={`Cette action est irréversible et supprimera définitivement ${selectedInvoices.length > 1 ? "ces factures" : "cette facture"}.`}
+        title={`Supprimer ${selectedInvoices.length} ${selectedInvoices.length > 1 ? config.nounPlural : config.nounSingular} ?`}
+        description={`Cette action est irréversible et supprimera définitivement ${selectedInvoices.length > 1 ? "ces documents" : "ce document"}.`}
         isLoading={isBulkDeleting}
         onConfirm={handleBulkDelete}
       />
@@ -969,7 +1088,7 @@ export default function InvoicesPage() {
             if (!next) setEmailTarget(null);
           }}
           recipientEmail={emailTarget.clients?.email}
-          fileName={`${emailTarget.invoice_type === "credit_note" ? "Avoir" : "Facture"}-${emailTarget.invoice_number || "000"}.pdf`}
+          fileName={resolveDocumentFileName(emailTarget)}
           draftInput={{
             docType: "invoice",
             isCreditNote: emailTarget.invoice_type === "credit_note",
@@ -988,7 +1107,7 @@ export default function InvoicesPage() {
             })),
           } satisfies DraftInvoiceInput}
           getPdfBase64={async () => {
-            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.state === "active");
+            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.license_state);
             return blobToBase64(blob);
           }}
         />

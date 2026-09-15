@@ -62,7 +62,7 @@ export default function OrderDetailPage() {
 
     try {
       setIsGenerating(true);
-      await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+      await generateOrderPDF(orderData, settings, true, undefined, licenseStatus?.license_state, ({ path, blob, fileName }) => {
         toast.success("PDF téléchargé avec succès", {
           description: `Enregistré sous : ${path || fileName}`,
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
@@ -82,7 +82,7 @@ export default function OrderDetailPage() {
     if (!orderData) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateOrderPDF(orderData, settings, false, undefined, licenseStatus?.state === "active");
+      const pdfBase64 = await generateOrderPDF(orderData, settings, false, undefined, licenseStatus?.license_state);
       const { invoke } = await import("@tauri-apps/api/core");
       const fileName = `Impression-${orderData.order_number || "bon_commande"}.pdf`;
       await invoke("open_pdf", { pdfBase64, fileName });
@@ -229,7 +229,7 @@ export default function OrderDetailPage() {
             getPdfBase64={async () => {
               const orderData = buildOrderData();
               if (!orderData) throw new Error("Commande introuvable");
-              const blob = await generateInvoicePDFBlob(orderData, settings, licenseStatus?.state === "active");
+              const blob = await generateInvoicePDFBlob(orderData, settings, licenseStatus?.license_state);
               return blobToBase64(blob);
             }}
           />

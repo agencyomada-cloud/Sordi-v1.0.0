@@ -240,14 +240,15 @@ export default function ClientsPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          {/* Header — single compact desktop row, title/count left, search +
-              utility icons + primary CTA right. */}
-          <div className="h-9 mb-3 flex items-center justify-between gap-4 animate-fade-in-down">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold text-foreground truncate">Clients &amp; Relations</h1>
-              <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums shrink-0">
-                {clients?.length || 0}
-              </span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">Clients &amp; Relations</h1>
+                <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums shrink-0">
+                  {clients?.length || 0}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">Gérez votre portefeuille clients et relations commerciales</p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">

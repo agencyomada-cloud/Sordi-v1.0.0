@@ -83,10 +83,19 @@ export function AppLayout() {
     <PageHeaderProvider>
       {/* Edge-to-edge native shell — one unified window canvas divided by
           razor-thin 1px borders (Sidebar's border-e, Header's border-b),
-          not floating cards on a gray backdrop. */}
-      <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-background">
+          not floating cards on a gray backdrop.
+
+          Strictly capped at h-screen (not min-h-screen) with overflow-hidden
+          — the previous min-h-screen let this row grow taller than the
+          viewport whenever a page's content (e.g. a long A4 document canvas)
+          overflowed, which made the WINDOW itself scroll and dragged the
+          sidebar along with it despite its own sticky top-0/h-screen. Capping
+          the row here means <main>'s own overflow-y-auto below is the only
+          scrollable region — the sidebar and header now stay perfectly
+          fixed no matter how long the page content is. */}
+      <div className="flex h-screen w-full max-w-full overflow-hidden bg-background">
         <Sidebar collapsed={isCollapsed} onToggleCollapsed={toggleCollapsed} />
-        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           <Header />
           <TrialBanner />
           {/* The actual content canvas — flex-1 so it fills the remaining

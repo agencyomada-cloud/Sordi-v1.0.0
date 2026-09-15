@@ -15,6 +15,7 @@ import { numberToWords } from "@/lib/numberToWords";
 import { getContrastTextColor } from "@/lib/colorContrast";
 import { InvoiceLogoPlaceholder } from "./InvoiceLogoPlaceholder";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
+import { readInvoiceBoolSetting } from "@/components/pdf/invoicePdfShared";
 import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { ClientPickerCombobox } from "./ClientPickerCombobox";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -27,6 +28,8 @@ interface Props {
   invoice: any;
   onInvoiceChange: (invoice: any) => void;
   clients?: any[];
+  /** Bon de commande only — see EditableInvoicePreview's own doc comment. */
+  suppliers?: any[];
   products?: any[];
   settings: any;
   logic: EditableInvoiceLogic;
@@ -39,6 +42,7 @@ export function EditableInvoiceStructure({
   invoice,
   onInvoiceChange,
   clients,
+  suppliers,
   products,
   settings,
   logic,
@@ -46,7 +50,7 @@ export function EditableInvoiceStructure({
   onStampSizeChange,
   onStampSizeCommit,
 }: Props) {
-  const primaryColor = settings?.primary_color || "#476CFF";
+  const primaryColor = settings?.primary_color || "#FF2949";
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
   const scaleContainer = useScaleToFitContainer();
@@ -54,13 +58,18 @@ export function EditableInvoiceStructure({
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel, isTaxExempt,
+    isCreditNote, isProforma, isOrder, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, showPricing, recipientLabel, recipientPlaceholder, stampLabel, grandTotalLabel, isTaxExempt, amountInWordsLabel,
     formatCurrency,
     updateInvoiceField, selectClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleAddCustomItem, handleDeleteItem,
     items, moveItemUp, moveItemDown,
   } = logic;
+  // The recipient picker's data source — a bon de commande addresses a
+  // supplier, every other document type a client. Both lists share the
+  // same shape (id/name/address/rc/nif/nis at minimum) so ClientPickerCombobox
+  // needs no changes of its own to accept either.
+  const recipientList = isOrder ? suppliers : clients;
 
   const createProduct = useCreateProduct();
   // Registers a custom-typed line (no product_id — not yet in the catalog)
@@ -166,18 +175,19 @@ export function EditableInvoiceStructure({
 
                   <div className="flex justify-between items-start mb-6 text-xs">
                     <div className="w-[55%] space-y-1">
-                      <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Destinataire</div>
+                      <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">{recipientLabel}</div>
 
                       <ClientPickerCombobox
-                        clients={clients}
+                        clients={recipientList}
                         selectedClientId={invoice.clients?.id}
                         open={openClientCombo}
                         onOpenChange={setOpenClientCombo}
                         onSelectClient={(client) => { selectClient(client); setOpenClientCombo(false); }}
                         container={scaleContainer}
+                        entityLabel={isOrder ? "fournisseur" : "client"}
                         trigger={
                           <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-sm font-bold uppercase text-black hover:bg-gray-100 w-full flex justify-start leading-tight mb-1 rounded-none">
-                            {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
+                            {invoice.clients?.name || invoice.client_name || recipientPlaceholder}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         }
@@ -284,10 +294,10 @@ export function EditableInvoiceStructure({
                       style={{ backgroundColor: primaryColor, color: getContrastTextColor(primaryColor) }}
                     >
                       <div className="flex-1 min-w-[260px] text-left">Désignation / Prestation</div>
-                      <div className="w-[120px] text-right">P.U (HT)</div>
+                      {showPricing && <div className="w-[120px] text-right">P.U (HT)</div>}
                       <div className="w-[70px] text-right">Qté</div>
                       <div className="w-[130px] text-center">U.M</div>
-                      <div className="w-[130px] text-right">Total HT</div>
+                      {showPricing && <div className="w-[130px] text-right">Total HT</div>}
                       <div className="w-[70px]" />
                     </div>
                     {pageItems.map((item: any, relIdx: number) => {
@@ -301,16 +311,20 @@ export function EditableInvoiceStructure({
                               <div className="font-normal text-[10px] normal-case mt-1 leading-tight text-gray-500">{item.product_description || item.products?.description || item.description}</div>
                             )}
                           </div>
-                          <div className="w-[120px] font-mono pt-1">
-                            <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-6 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-xs" />
-                          </div>
+                          {showPricing && (
+                            <div className="w-[120px] font-mono pt-1">
+                              <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-6 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-xs" />
+                            </div>
+                          )}
                           <div className="w-[70px] font-mono pt-1">
                             <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-6 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-xs" />
                           </div>
                           <div className="w-[130px] text-center uppercase text-gray-500 text-[11px] leading-6 whitespace-nowrap overflow-hidden text-ellipsis px-1 pt-1" title={unit}>{unit}</div>
-                          <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-xs">
-                            {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
-                          </div>
+                          {showPricing && (
+                            <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-xs">
+                              {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                            </div>
+                          )}
                           <div className="w-[70px] flex items-center justify-end gap-0.5 pt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                             {!item.product_id && (item.product_name || item.name) && (
                               <button
@@ -409,6 +423,13 @@ export function EditableInvoiceStructure({
                       </div>
                     );
 
+                    // A bon de livraison never shows pricing/totals at all
+                    // (showPricing false) — notes just get the full row
+                    // width instead of sharing it with a totals column.
+                    if (!showPricing) {
+                      return isFirstPage && <div className="mt-3 mb-4">{notesBox}</div>;
+                    }
+
                     // Notes (page 1) and totals (last page) share one row
                     // only when they're the same page — the common
                     // single-page case. A multi-page invoice keeps them on
@@ -432,10 +453,10 @@ export function EditableInvoiceStructure({
                   {isLastPage && (
                     <>
                       <div className="mt-8 mb-4">
-                        {showMontantEnLettres && (
+                        {showMontantEnLettres && readInvoiceBoolSetting(settings?.show_amount_in_words, false) && (
                           <div className="mb-3">
                             <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">
-                              {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                              {amountInWordsLabel}
                             </div>
                             <div className="mt-1 font-semibold text-xs text-black uppercase tracking-tight">{numberToWords(netTotal)}</div>
                           </div>
@@ -444,23 +465,26 @@ export function EditableInvoiceStructure({
                         {/* Mode de paiement now lives in the top metadata block
                             alongside Date/Numéro — this row just anchors the
                             signature block to the right, same as before. */}
-                        <div className="flex justify-end items-start">
-                          <div className="mr-8 flex flex-col items-center">
-                            {/* No onStampSizeChange/onStampSizeCommit here
-                                on purpose — that's what makes
-                                InteractiveStampZone render its on-canvas
-                                hover slider. Stamp size is now a single
-                                control in the "Personnaliser" drawer
-                                ("Taille du cachet"), writing straight to
-                                settings.stamp_size like every other
-                                branding setting. */}
-                            <InteractiveStampZone
-                              settings={settings}
-                              stampSize={stampSize}
-                              showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
-                            />
+                        {readInvoiceBoolSetting(settings?.show_stamp_signature, true) && (
+                          <div className="flex justify-end items-start">
+                            <div className="mr-8 flex flex-col items-center">
+                              {/* No onStampSizeChange/onStampSizeCommit here
+                                  on purpose — that's what makes
+                                  InteractiveStampZone render its on-canvas
+                                  hover slider. Stamp size is now a single
+                                  control in the "Personnaliser" drawer
+                                  ("Taille du cachet"), writing straight to
+                                  settings.stamp_size like every other
+                                  branding setting. */}
+                              <InteractiveStampZone
+                                settings={settings}
+                                stampSize={stampSize}
+                                showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
+                                label={stampLabel}
+                              />
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </>
                   )}

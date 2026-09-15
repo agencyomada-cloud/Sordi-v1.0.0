@@ -22,6 +22,8 @@ import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { cn } from "@/lib/utils";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import type { Expense } from "@/lib/database";
+import { useLicenseGate } from "@/hooks/useLicenseGate";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 const isExpensePaid = (expense: Expense) => expense.is_paid !== false;
 
@@ -98,6 +100,7 @@ const Expenses = () => {
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
+  const { requireActive, blockedOpen, setBlockedOpen } = useLicenseGate();
   const selectedProject = projects?.find((p) => p.id === formData.project_id);
   const selectedSupplier = suppliers?.find((s) => s.id === formData.supplier_id);
   const editSelectedProject = projects?.find((p) => p.id === editFormData.project_id);
@@ -125,6 +128,7 @@ const Expenses = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireActive()) return;
     const amount = parseFloat(formData.amount);
     if (isNaN(amount) || amount <= 0) {
       toast.error("Montant invalide");
@@ -261,8 +265,11 @@ const Expenses = () => {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="h-9 mb-3 flex items-center justify-between gap-4">
-            <h1 className="text-sm font-semibold text-foreground truncate">Dépenses &amp; Charges</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Dépenses &amp; Charges</h1>
+              <p className="text-sm text-muted-foreground mt-1">Suivez et catégorisez vos dépenses et charges d'exploitation</p>
+            </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -889,6 +896,8 @@ const Expenses = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <LicenseBlockedModal open={blockedOpen} onOpenChange={setBlockedOpen} />
     </>
   );
 };

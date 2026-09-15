@@ -8,9 +8,9 @@ const Management = () => {
     return (
         <main className="flex-1 p-8 pt-4">
             <div className="flex flex-col gap-6">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employés & Contrats</h1>
-                    <p className="text-xs text-slate-500 mt-1">Gérez votre équipe</p>
+                <div className="mb-6">
+                    <h1 className="text-xl font-semibold tracking-tight text-foreground">Employés &amp; Contrats</h1>
+                    <p className="text-sm text-muted-foreground mt-1">Gérez votre équipe et contrats de travail</p>
                 </div>
 
                 <EmployeesSection />

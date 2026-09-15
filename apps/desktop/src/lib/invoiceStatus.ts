@@ -27,6 +27,13 @@ export const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { label: string; varia
   overdue: { label: "En retard", variant: "error" },
   cancelled: { label: "Annulée", variant: "error" },
   converted: { label: "Convertie", variant: "info" },
+  // Devis-only lifecycle (see Invoices.tsx's STATUS_TABS_QUOTE) — a quote
+  // is never "paid"/"issued" the way an invoice is, it moves through its
+  // own send/accept/reject/expire states instead.
+  sent: { label: "Envoyé", variant: "info" },
+  accepted: { label: "Accepté", variant: "success" },
+  rejected: { label: "Refusé", variant: "error" },
+  expired: { label: "Expiré", variant: "warning" },
 };
 
 const FALLBACK_STATUS_CONFIG = { label: "Statut inconnu", variant: "neutral" as StatusBadgeTone };

@@ -7,7 +7,6 @@ import {
 } from "./invoiceHtmlShared";
 import { InteractiveStampZone } from "./InteractiveStampZone";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
-import { PaidWatermark } from "./PaidWatermark";
 import { getContrastTextColor } from "@/lib/colorContrast";
 import type { InvoiceAppearanceConfig } from "@/components/pdf/invoiceAppearance";
 
@@ -30,7 +29,7 @@ export function InvoiceReadOnlyEpure({
   // not re-derived independently from `settings`.
   const accent = appearance.primaryColor;
   const fontFamily = `'${appearance.fontFamily}', sans-serif`;
-  const data = resolveHtmlInvoiceData(invoice);
+  const data = resolveHtmlInvoiceData(invoice, settings);
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
 
@@ -48,7 +47,6 @@ export function InvoiceReadOnlyEpure({
             style={{ width: '210mm', height: '297mm', padding: '14mm', boxSizing: 'border-box', overflow: 'hidden', fontFamily }}
           >
             {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
-            {isFirstPage && invoice.status === "paid" && <PaidWatermark />}
             <div className="flex flex-col h-full justify-between">
               <div>
                 <div className="flex justify-between items-start mb-4">
@@ -141,8 +139,8 @@ export function InvoiceReadOnlyEpure({
                         {(invoice.timbre > 0 || (invoice.payment_method?.toLowerCase().includes("espèce") && invoice.timbre !== 0)) && (
                           <div className="flex justify-between py-1 text-[8.5pt]"><span className="text-gray-500">Timbre Fiscal</span><span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(invoice.timbre || 0)}</span></div>
                         )}
-                        {(invoice.discount > 0 || invoice.discount_value > 0) && (
-                          <div className="flex justify-between py-1 text-[8.5pt] text-red-700"><span>Remise</span><span className="font-mono tabular-nums tracking-tight">-{formatCurrency(invoice.discount || invoice.discount_value)}</span></div>
+                        {data.showRemiseRow && (
+                          <div className="flex justify-between py-1 text-[8.5pt] text-red-700"><span>Remise</span><span className="font-mono tabular-nums tracking-tight">-{formatCurrency(invoice.discount || invoice.discount_value || 0)}</span></div>
                         )}
                         <div className="flex justify-between pt-2 mt-1 border-t" style={{ borderColor: '#111111' }}>
                           <span className="text-[10pt] font-bold">{data.isCreditNote ? "Net à déduire" : "Total TTC"}</span>
@@ -156,30 +154,34 @@ export function InvoiceReadOnlyEpure({
                       </div>
                     </div>
 
-                    <div className="mb-6">
-                      <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">Arrêté la présente facture à la somme de</div>
-                      <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{data.wordsFrench}</div>
-                    </div>
+                    {data.showAmountInWords && (
+                      <div className="mb-6">
+                        <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">{data.amountInWordsLabel}</div>
+                        <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{data.wordsFrench}</div>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-end mb-4">
                       {!data.isProforma && !data.isCreditNote ? (
                         <div className="text-[8.5pt] text-gray-700" />
                       ) : <div />}
-                      <div className="flex flex-col items-center relative" style={{ minWidth: "160px" }}>
-                        {(settings?.stamp_data || settings?.signature_data) && (
-                          <>
-                            <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
-                            <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
-                          </>
-                        )}
-                        <InteractiveStampZone
-                          settings={settings}
-                          stampSize={stampSize}
-                          onStampSizeChange={onStampSizeChange}
-                          onStampSizeCommit={onStampSizeCommit}
-                          showTitle={false}
-                        />
-                      </div>
+                      {data.showStampSignature ? (
+                        <div className="flex flex-col items-center relative" style={{ minWidth: "160px" }}>
+                          {(settings?.stamp_data || settings?.signature_data) && (
+                            <>
+                              <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
+                              <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
+                            </>
+                          )}
+                          <InteractiveStampZone
+                            settings={settings}
+                            stampSize={stampSize}
+                            onStampSizeChange={onStampSizeChange}
+                            onStampSizeCommit={onStampSizeCommit}
+                            showTitle={false}
+                          />
+                        </div>
+                      ) : <div />}
                     </div>
                   </>
                 )}

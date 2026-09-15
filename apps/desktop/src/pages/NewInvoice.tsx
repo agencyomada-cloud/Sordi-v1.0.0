@@ -60,11 +60,21 @@ interface InvoiceItem {
 }
 
 interface NewInvoicePageProps {
-  // Set only by the /proformas/new route — when editing an existing
-  // document (the /invoices/:id/edit route, which also handles proformas
-  // since there's no separate proforma edit route) the type is instead
-  // derived from the loaded invoice itself, once it arrives.
-  documentType?: "invoice" | "proforma";
+  // Set only by the /proformas/new and /devis/new routes — when editing an
+  // existing document (the /invoices/:id/edit route, which also handles
+  // proformas and quotes since there's no separate edit route per type) the
+  // type is instead derived from the loaded invoice itself, once it arrives.
+  documentType?: "invoice" | "proforma" | "quote";
+}
+
+/** Default "titre personnalisé" shown/stored for a freshly created document
+ *  of this type — plain invoices leave it blank (the PDF resolver's own
+ *  "FACTURE" fallback is enough), proformas/quotes get a human-editable
+ *  starting title. */
+function defaultCustomTitleFor(type: "invoice" | "proforma" | "quote"): string {
+  if (type === "proforma") return "Facture Proforma";
+  if (type === "quote") return "Devis";
+  return "";
 }
 
 export default function NewInvoicePage({ documentType: documentTypeProp = "invoice" }: NewInvoicePageProps = {}) {
@@ -92,8 +102,8 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   const lockedProjectId = searchParams.get("project_id");
 
   // Distinct localStorage draft per document type, so a stray "Nouvelle
-  // facture" draft never bleeds into a fresh proforma or vice versa.
-  const draftStorageKey = documentTypeProp === "proforma" ? "draft_proforma" : "draft_invoice";
+  // facture" draft never bleeds into a fresh proforma/devis or vice versa.
+  const draftStorageKey = documentTypeProp === "proforma" ? "draft_proforma" : documentTypeProp === "quote" ? "draft_quote" : "draft_invoice";
 
   const loadDraft = () => {
     if (id) return null; // editing an existing document must never resurrect the "new" draft
@@ -112,8 +122,9 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   // once it arrives (see the "Load existing invoice data" effect below) —
   // update_invoice never touches invoice_type, so this never flips a
   // document's real type, only how this page currently labels/treats it.
-  const [documentType, setDocumentType] = useState<"invoice" | "proforma">(documentTypeProp);
+  const [documentType, setDocumentType] = useState<"invoice" | "proforma" | "quote">(documentTypeProp);
   const isProforma = documentType === "proforma";
+  const isQuote = documentType === "quote";
 
   const [clientId, setClientId] = useState(draftData?.clientId || "");
   const [projectId, setProjectId] = useState<string>(lockedProjectId || draftData?.projectId || "");
@@ -140,7 +151,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   const [discountAmount, setDiscountAmount] = useState<number>(draftData?.discountAmount || 0);
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>(draftData?.discountType || 'percent');
   const [taxMode, setTaxMode] = useState<'standard' | 'exempt' | 'ttc_direct'>(draftData?.taxMode || 'standard');
-  const [customTitle, setCustomTitle] = useState(draftData?.customTitle || (documentTypeProp === "proforma" ? "Facture Proforma" : ""));
+  const [customTitle, setCustomTitle] = useState(draftData?.customTitle || defaultCustomTitleFor(documentTypeProp));
   const [isDownloading, setIsDownloading] = useState(false);
   const [customizeDrawerOpen, setCustomizeDrawerOpen] = useState(false);
   const [licenseBlockedOpen, setLicenseBlockedOpen] = useState(false);
@@ -166,7 +177,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
       setDueDate("");
       setNotes("");
       setHeaderNote("");
-      setCustomTitle(isProforma ? "Facture Proforma" : "");
+      setCustomTitle(defaultCustomTitleFor(documentType));
       setPaymentMode("Espèces");
       setDiscountRate(0);
       setDiscountAmount(0);
@@ -188,7 +199,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
         due_date: null,
         notes: null,
         header_note: null,
-        custom_title: isProforma ? "Facture Proforma" : "",
+        custom_title: defaultCustomTitleFor(documentType),
         payment_method: "Espèces",
         discount_rate: 0,
         discount_amount: 0,
@@ -266,7 +277,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   useEffect(() => {
     if (existingInvoice && products) {
       const inv = existingInvoice as any;
-      setDocumentType(inv.invoice_type === "proforma" ? "proforma" : "invoice");
+      setDocumentType(inv.invoice_type === "proforma" ? "proforma" : inv.invoice_type === "quote" ? "quote" : "invoice");
       setClientId(inv.client_id);
       setProjectId(inv.project_id || "");
       setInvoiceDate(inv.invoice_date);
@@ -447,23 +458,25 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
   useEffect(() => {
     const fetchNextInvoiceNumber = async () => {
       try {
-        const number = await db.invoices.getNextNumber();
+        // Every document type now has its own real, predictable
+        // PREFIX-YYYY-NNN sequence (see database.rs's generate_document_number),
+        // so the live preview applies equally to invoices/proformas/quotes/
+        // credit notes — documentTypeProp is fixed for the lifetime of this
+        // page (set by which route mounted it), so this only needs to run once.
+        const number = await db.invoices.getNextNumber(documentTypeProp);
         setNextInvoiceNumber(number);
       } catch (error) {
         console.error("Error fetching next invoice number:", error);
       }
     };
     fetchNextInvoiceNumber();
-  }, []);
+  }, [documentTypeProp]);
 
   // Build draft invoice for preview - editable version
   const [draftInvoice, setDraftInvoice] = useState(() => {
     const totals = calculateTotals(items);
     return {
-      // Proformas are numbered by the backend at save time (PRO-<timestamp>,
-      // a separate sequence from real invoices) — this placeholder is never
-      // sent as-is (see submitInvoice), just shown until it's saved.
-      invoice_number: documentTypeProp === "proforma" ? "PRO-..." : "",
+      invoice_number: "",
       invoice_type: documentTypeProp,
       invoice_date: invoiceDate,
       due_date: dueDate || null,
@@ -491,11 +504,10 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
     };
   });
 
-  // Update invoice number when nextInvoiceNumber is fetched — proformas are
-  // numbered by the backend at save time instead (see the draftInvoice
-  // initializer above), so the fetched sequential number doesn't apply here.
+  // Update invoice number when nextInvoiceNumber is fetched — every document
+  // type is now previewable this way (see the fetch effect above).
   useEffect(() => {
-    if (nextInvoiceNumber && !id && !isProforma) { // Only set number if NEW invoice
+    if (nextInvoiceNumber && !id) { // Only set number if NEW document
       setDraftInvoice(prev => ({
         ...prev,
         invoice_number: nextInvoiceNumber,
@@ -507,7 +519,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
         invoice_number: existingInvoice.invoice_number,
       }));
     }
-  }, [nextInvoiceNumber, id, isProforma, existingInvoice]);
+  }, [nextInvoiceNumber, id, existingInvoice]);
 
   // Sync draft invoice with form state
   useEffect(() => {
@@ -672,23 +684,26 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
       notes: notes || undefined,
       header_note: headerNote || undefined,
       custom_title: draftInvoice.custom_title,
-      // Proformas are numbered by the backend at save time (its own
-      // PRO-<timestamp> sequence, separate from real invoices) — sending
-      // the unresolved "PRO-..." preview placeholder as a real number would
-      // both skip that and collide across every unsaved proforma.
-      invoice_number: (isProforma && (!draftInvoice.invoice_number || draftInvoice.invoice_number === "PRO-..."))
-        ? undefined
-        : draftInvoice.invoice_number,
+      // Every document type is generated server-side at save time (see
+      // generate_document_number in database.rs) — the fetched preview
+      // number above is only a live approximation shown to the user.
+      // Sending it explicitly on CREATE risks colliding with the real
+      // number if another document of the same type was created in
+      // between (e.g. two windows open at once), so creation always
+      // leaves this to the backend; UPDATE sends the document's own
+      // (possibly manually edited) existing number through as-is.
+      invoice_number: id ? draftInvoice.invoice_number : undefined,
       invoice_type: documentType,
       payment_method: paymentMode,
       use_secondary_register: draftInvoice.use_secondary_register,
       selected_secondary_rc: draftInvoice.selected_secondary_rc || undefined,
       selected_secondary_address: draftInvoice.selected_secondary_address || undefined,
-      // Never force a status for proformas — leaving it undefined keeps the
-      // backend's own default on create ("issued") and, on update, keeps
-      // whatever status the proforma already has (e.g. "converted") intact
-      // instead of silently reverting it every time the form is saved.
-      status: isProforma ? undefined : (isFromDraftProducts ? "paid" : "issued"),
+      // Never force a status for proformas/quotes — leaving it undefined
+      // keeps the backend's own default on create ("issued") and, on
+      // update, keeps whatever status the document already has (e.g.
+      // "converted") intact instead of silently reverting it every time
+      // the form is saved.
+      status: (isProforma || isQuote) ? undefined : (isFromDraftProducts ? "paid" : "issued"),
       amount_paid: isFromDraftProducts ? draftInvoice.total_ttc : 0, // Auto-fill the paid amount
       discount: draftInvoice.discount_amount, // The flat amount for legacy/total displays
       discount_type: discountType,
@@ -710,7 +725,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
       })),
     };
 
-    const listDestination = isProforma ? "/invoices?tab=proformas" : "/invoices";
+    const listDestination = isProforma ? "/proformas" : isQuote ? "/devis" : "/factures";
 
     if (id) {
       // UPDATE MODE
@@ -794,7 +809,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={() => navigate("/invoices")}
+                    onClick={() => navigate(isProforma ? "/proformas" : isQuote ? "/devis" : "/factures")}
                     className="h-7 w-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0 transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" />
@@ -810,8 +825,8 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
                   hidden below `xl`) is the only thing that ever gives way. */}
               <span className="text-xs font-semibold font-mono text-foreground shrink-0 whitespace-nowrap">
                 {id
-                  ? (isProforma ? "Modifier le proforma" : "Modifier la facture")
-                  : (isProforma ? "Nouvelle facture" : "Nouvelle facture")}
+                  ? (isProforma ? "Modifier le proforma" : isQuote ? "Modifier le devis" : "Modifier la facture")
+                  : (isProforma ? "Nouveau proforma" : isQuote ? "Nouveau devis" : "Nouvelle facture")}
                 {(draftInvoice.invoice_number || nextInvoiceNumber) && (
                   <span className="ml-1.5 font-normal text-muted-foreground">
                     N° {draftInvoice.invoice_number || nextInvoiceNumber}
@@ -978,7 +993,7 @@ export default function NewInvoicePage({ documentType: documentTypeProp = "invoi
                       settings,
                       true,
                       undefined,
-                      licenseStatus?.state === "active",
+                      licenseStatus?.license_state,
                       ({ path, blob, fileName }) => {
                         toast.success(isProforma ? "Facture proforma PDF générée" : "Facture PDF générée", {
                           id: toastId,

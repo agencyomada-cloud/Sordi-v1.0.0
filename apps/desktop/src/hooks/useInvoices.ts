@@ -6,8 +6,14 @@ import { db, type Invoice, type CreateInvoiceData as DbCreateInvoiceData } from 
 import { useWorkspace } from "@/hooks/useWorkspace";
 import type { Client } from "@/lib/database";
 
-export type InvoiceStatus = "draft" | "issued" | "paid" | "partial" | "overdue" | "cancelled" | "converted";
-export type InvoiceType = "invoice" | "credit_note" | "proforma";
+// "sent"/"accepted"/"rejected"/"expired" are Devis-only lifecycle statuses
+// (see Invoices.tsx's STATUS_TABS_QUOTE) — kept in this one shared union
+// rather than a separate QuoteStatus type since useUpdateInvoiceStatus and
+// getInvoiceStatusConfig are already generic over every document type; a
+// quote's own status menu is what actually enforces it never gets offered
+// an invoice-only value like "paid".
+export type InvoiceStatus = "draft" | "issued" | "paid" | "partial" | "overdue" | "cancelled" | "converted" | "sent" | "accepted" | "rejected" | "expired";
+export type InvoiceType = "invoice" | "credit_note" | "proforma" | "quote";
 
 export interface InvoiceWithClient extends Invoice {
   clients?: {

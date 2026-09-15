@@ -9,6 +9,11 @@ interface InteractiveStampZoneProps {
   onStampSizeCommit?: (size: number) => void;
   className?: string;
   showTitle?: boolean;
+  /** Overrides the "Cachet et Signature" text shown both above the stamp
+   *  (when showTitle) and inside the empty placeholder box — a bon de
+   *  livraison passes its own "...du Client (Bon pour accord et
+   *  réception)" wording here (see useEditableInvoiceLogic's stampLabel). */
+  label?: string;
 }
 
 export function InteractiveStampZone({
@@ -19,6 +24,7 @@ export function InteractiveStampZone({
   onStampSizeCommit,
   className,
   showTitle = true,
+  label = "Cachet et Signature",
 }: InteractiveStampZoneProps) {
   const [isSelected, setIsSelected] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -99,7 +105,7 @@ export function InteractiveStampZone({
       {/* Title Label */}
       {showTitle && (
         <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1 text-center font-medium">
-          Cachet et signature
+          {label}
         </div>
       )}
 
@@ -148,7 +154,7 @@ export function InteractiveStampZone({
             className="flex items-center justify-center border border-dashed border-gray-300 rounded-lg p-2 text-center"
           >
             <span className="text-[9pt] text-gray-400 uppercase tracking-wide">
-              Cachet et Signature
+              {label}
             </span>
           </div>
         )}

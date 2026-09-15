@@ -126,8 +126,8 @@ export default function ProjectsPage() {
           <div className="max-w-[1600px] mx-auto w-full">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
               <div>
-                <h1 className="text-lg font-semibold tracking-tight text-foreground">Projets & Opérations</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">Suivez vos projets clients, tâches et livrables</p>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">Projets &amp; Opérations</h1>
+                <p className="text-sm text-muted-foreground mt-1">Suivez vos projets clients, tâches et livrables</p>
               </div>
 
               <Button variant="default" size="sm" className="h-[30px] px-3 text-xs rounded-md gap-1.5" onClick={() => navigate("/projects/new")}>

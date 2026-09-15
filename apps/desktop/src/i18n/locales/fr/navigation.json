@@ -2,7 +2,8 @@
   "dashboard": "Tableau de bord",
   "groups": {
     "overview": "Vue d'ensemble",
-    "billing": "Facturation & Ventes",
+    "catalogue": "Catalogue",
+    "billing": "Gestion Commerciale",
     "treasury": "Trésorerie & Suivi",
     "relations": "Tiers & Relations",
     "hr": "Ressources Humaines",
@@ -11,7 +12,9 @@
     "system": "Système"
   },
   "links": {
+    "sordiIq": "Sordi IQ",
     "invoicing": "Factures",
+    "proformas": "Factures Proforma",
     "quotes": "Devis",
     "creditNotes": "Avoirs",
     "payments": "Paiements",

@@ -9,18 +9,15 @@ import { Settings } from "@/hooks/useSettings";
 import { InvoicePDFDocument } from "@/components/pdf/InvoicePDFDocument";
 import { InvoiceTemplateEpure } from "@/components/pdf/InvoiceTemplateEpure";
 import { InvoiceTemplateModerne } from "@/components/pdf/InvoiceTemplateModerne";
-import { PDFInvoice, PDFSettings, PDFInvoiceItem, InvoicePdfTheme } from "@/components/pdf/invoicePdfShared";
+import { PDFInvoice, PDFSettings, PDFInvoiceItem, InvoicePdfTheme, resolveLicenseWatermark } from "@/components/pdf/invoicePdfShared";
 import { resolveInvoiceAppearance } from "@/components/pdf/invoiceAppearance";
 import { CumulativesPDFDocument, ClientCumulativeRecord } from "@/components/pdf/CumulativesPDFDocument";
 import { PayrollPDFDocument, PayrollPDFRow } from "@/components/pdf/PayrollPDFDocument";
 import { BulletinPaiePDFDocument, BulletinPaieRun, BulletinPaieEmployee } from "@/components/pdf/BulletinPaiePDFDocument";
-import { DeliveryNotePDFDocument, DeliveryNotePDFData } from "@/components/pdf/DeliveryNotePDFDocument";
 import { MonthlyReportPDF } from "@/components/pdf/MonthlyReportPDF";
 import { ContractPDFDocument, type ContractPDFProps } from "@/components/pdf/ContractPDFDocument";
 import { db, MonthlyBusinessReport } from "@/lib/database";
 import { toast } from "sonner";
-
-export type { DeliveryNotePDFData, DeliveryNotePDFItem, DeliveryNotePDFClient } from "@/components/pdf/DeliveryNotePDFDocument";
 
 export type { PDFInvoiceItem, PDFInvoice, PDFSettings };
 
@@ -32,6 +29,65 @@ const INVOICE_PDF_TEMPLATES: Record<InvoicePdfTheme, typeof InvoicePDFDocument> 
 };
 
 export type AnyDocument = Partial<PDFInvoice> & Record<string, unknown>;
+
+/** Makes a display string (a client name, typically) safe to embed inside a
+ *  generated file name: collapses whitespace to underscores and strips
+ *  characters the underlying filesystem/OS would reject, without touching
+ *  accented letters — a client called "Établissement Amélioré" stays
+ *  readable as "Établissement_Amélioré" rather than being mangled down to
+ *  ASCII. */
+export function sanitizeFileNamePart(value: string): string {
+  return value.trim().replace(/\s+/g, '_').replace(/[\\/:*?"<>|]+/g, '');
+}
+
+/** The one place that names an exported/attached PDF for a given document —
+ *  shared by generateInvoicePDF's own save path below and by any other call
+ *  site building a file name outside it (bulk ZIP export, email
+ *  attachments), so all three always agree instead of drifting apart.
+ *  The 4 core invoicing types (Facture/Proforma/Devis/Avoir) get
+ *  "[Type]_[Number]_[ClientName].pdf" (e.g. "Devis_DEV-2026-001_Nadatek.pdf")
+ *  — the strict serialized number stays the document's real identity, the
+ *  client name is purely a browsing convenience. Delivery notes, orders and
+ *  the cumulatives report aren't tied to one client the same way, so they
+ *  keep their existing plain "Prefix-Number.pdf" shape. */
+export function resolveDocumentFileName(doc: AnyDocument): string {
+  let prefix = 'Document';
+  let number = '000';
+  let includeClientInFileName = false;
+
+  if (doc.invoice_type === 'proforma') {
+    prefix = 'Proforma';
+    number = doc.invoice_number || '000';
+    includeClientInFileName = true;
+  } else if (doc.invoice_type === 'quote') {
+    prefix = 'Devis';
+    number = doc.invoice_number || '000';
+    includeClientInFileName = true;
+  } else if (doc.invoice_type === 'credit_note') {
+    prefix = 'Avoir';
+    number = doc.invoice_number || '000';
+    includeClientInFileName = true;
+  } else if (doc.invoice_type === 'delivery_note' || doc.delivery_number) {
+    prefix = 'BonLivraison';
+    number = doc.delivery_number || doc.invoice_number || '000';
+  } else if (doc.invoice_type === 'order' || doc.order_number) {
+    prefix = 'BonCommande';
+    number = doc.order_number || doc.invoice_number || '000';
+  } else if (doc.invoice_type === 'cumulatives') {
+    prefix = 'CumulesVentes';
+    number = new Date().toISOString().split('T')[0];
+  } else {
+    prefix = 'Facture';
+    number = doc.invoice_number || '000';
+    includeClientInFileName = true;
+  }
+
+  if (!includeClientInFileName) {
+    return `${prefix}-${number}.pdf`;
+  }
+  const clientName = String(doc.clients?.name || doc.client_name || doc.supplier_name || 'Client');
+  return `${prefix}_${number}_${sanitizeFileNamePart(clientName)}.pdf`;
+}
 
 export interface PDFOptions {
   paper_size?: string;
@@ -125,7 +181,13 @@ export const downloadBlobsAsZip = async (
 export const generateInvoicePDFBlob = async (
   doc: AnyDocument,
   settings?: Settings,
-  licenseActive?: boolean
+  // The device's raw LicenseState (e.g. "TRIAL_ACTIVE", "PAID_ACTIVE",
+  // "TRIAL_EXPIRED") — every call site just forwards
+  // licenseStatus?.license_state, never computes its own "is this licensed"
+  // boolean. resolveLicenseWatermark below is the one place that decision
+  // gets made. Kept as a plain string (not LicenseState) so this file
+  // doesn't need to import that type from @/lib/database.
+  licenseState?: string
 ): Promise<Blob> => {
   try {
     const rawItems = Array.isArray(doc.invoice_items)
@@ -235,8 +297,11 @@ export const generateInvoicePDFBlob = async (
       signature_size: settings.signature_size ? Number(settings.signature_size) : undefined,
       primary_color: settings.primary_color,
       invoice_pdf_font: settings.invoice_pdf_font,
-      license_active: licenseActive,
-    } : { license_active: licenseActive, stamp_size: effectiveStampSize, legal_name: "EURL OMADA AGENCY" };
+      hide_empty_columns: settings.hide_empty_columns,
+      show_amount_in_words: settings.show_amount_in_words,
+      show_stamp_signature: settings.show_stamp_signature,
+      license_watermark: resolveLicenseWatermark(licenseState),
+    } : { license_watermark: resolveLicenseWatermark(licenseState), stamp_size: effectiveStampSize, legal_name: "EURL OMADA AGENCY" };
 
     const theme = resolvedAppearance.theme;
     const Template = INVOICE_PDF_TEMPLATES[theme] || InvoicePDFDocument;
@@ -488,6 +553,7 @@ export const generateMonthlyReportPDF = async (
           company_nif: settings.company_nif,
           company_nis: settings.company_nis,
           company_rc: settings.company_rc,
+          company_ai: settings.company_ai,
           logo_data: settings.logo_data,
           primary_color: settings.primary_color,
           invoice_pdf_font: settings.invoice_pdf_font,
@@ -596,7 +662,8 @@ export const generateInvoicePDF = async (
   settings?: Settings,
   download = true,
   _options?: PDFOptions,
-  licenseActive?: boolean,
+  // The device's raw LicenseState — see generateInvoicePDFBlob's own note.
+  licenseState?: string,
   onSaved?: (info: { path: string | null; blob: Blob; fileName: string }) => void
 ): Promise<string> => {
   try {
@@ -625,37 +692,19 @@ export const generateInvoicePDF = async (
       }
     }
 
-    const blob = await generateInvoicePDFBlob(doc, settings, licenseActive);
+    const blob = await generateInvoicePDFBlob(doc, settings, licenseState);
     const pdfBase64 = await blobToBase64(blob);
 
-    let prefix = 'Document';
-    let number = '000';
-
-    if (doc.invoice_type === 'proforma') {
-      prefix = 'Proforma';
-      number = doc.invoice_number || '000';
-    } else if (doc.invoice_type === 'credit_note') {
-      prefix = 'Avoir';
-      number = doc.invoice_number || '000';
-    } else if (doc.invoice_type === 'delivery_note' || doc.delivery_number) {
-      prefix = 'BonLivraison';
-      number = doc.delivery_number || doc.invoice_number || '000';
-    } else if (doc.invoice_type === 'order' || doc.order_number) {
-      prefix = 'BonCommande';
-      number = doc.order_number || doc.invoice_number || '000';
-    } else if (doc.invoice_type === 'cumulatives') {
-      prefix = 'CumulesVentes';
-      number = new Date().toISOString().split('T')[0];
-    } else {
-      prefix = 'Facture';
-      number = doc.invoice_number || '000';
-    }
+    const clientName = String(doc.clients?.name || doc.client_name || doc.supplier_name || 'Client');
+    // Backup naming stays on the plain document number (no client name/
+    // prefix) — db.pdfBackup.save already takes the client name as its own
+    // argument and builds its own folder/file convention around it.
+    const number = doc.invoice_number || doc.delivery_number || doc.order_number || (doc.invoice_type === 'cumulatives' ? new Date().toISOString().split('T')[0] : '000');
 
     // Non-blocking local backup — never awaited by the caller, never blocks
     // the PDF preview/download UI. Silently skipped if no backup folder is
     // configured in Paramètres.
     if (settings?.pdf_backup_directory && doc.invoice_type !== 'cumulatives') {
-      const clientName = String(doc.clients?.name || doc.client_name || doc.supplier_name || 'Client');
       blob.arrayBuffer()
         .then((buf) => db.pdfBackup.save(settings.pdf_backup_directory!, clientName, number, new Uint8Array(buf)))
         .catch((err) => {
@@ -665,7 +714,7 @@ export const generateInvoicePDF = async (
     }
 
     if (download) {
-      const fileName = `${prefix}-${number}.pdf`;
+      const fileName = resolveDocumentFileName(doc);
 
       try {
         const savedPath = await invoke<string>('save_pdf', { pdfBase64, fileName });
@@ -696,17 +745,11 @@ export const generateOrderPDF = generateInvoicePDF;
 interface DeliveryNoteLike {
   delivery_number: string;
   delivery_date: string;
-  truck_plate?: string | null;
-  driver_name?: string | null;
-  deliverer_name?: string | null;
-  transporter_name?: string | null;
-  delivery_location?: string | null;
-  reserves?: string | null;
-  supplier_delivered_date?: string | null;
   client_received_date?: string | null;
-  /** "Nom du réceptionnaire" — stored in the client_signature column. */
-  client_signature?: string | null;
+  reserves?: string | null;
+  custom_title?: string | null;
   clients?: {
+    id?: string;
     name: string;
     address?: string | null;
     city?: string | null;
@@ -714,6 +757,7 @@ interface DeliveryNoteLike {
     phone?: string | null;
     email?: string | null;
     nif?: string | null;
+    nis?: string | null;
     rc?: string | null;
     contact_person?: string | null;
   };
@@ -729,138 +773,50 @@ interface DeliveryNoteLike {
   }[];
 }
 
-/** Shapes a fetched delivery note (however each page's hook returns it)
- *  into the PDF template's data contract — one place for this instead of
- *  duplicating the mapping in every page that generates the PDF. */
-export function buildDeliveryNotePDFData(note: DeliveryNoteLike): DeliveryNotePDFData {
+/**
+ * Shapes a fetched delivery note (however each page's hook returns it) into
+ * the shared engine's AnyDocument contract — the exact same
+ * InvoicePDFDocument/Epure/Moderne templates and generateInvoicePDF/
+ * generateInvoicePDFBlob that Facture and Bon de Commande already use, with
+ * `invoice_type: 'delivery_note'` so resolveInvoiceData/getDocumentSectionFlags
+ * hide pricing, TVA, timbre, montant-en-lettres and swap the signature text
+ * exactly like the web canvas's own useEditableInvoiceLogic does. One place
+ * for this mapping instead of duplicating it in every page that generates
+ * the PDF, mirroring buildOrderForPDF in Orders.tsx.
+ */
+export function buildDeliveryDocumentForPDF(note: DeliveryNoteLike): AnyDocument {
+  const items = (note.delivery_note_items || []).map((item) => ({
+    product_code: item.product_code ?? item.products?.code,
+    product_name: item.product_name ?? item.products?.name,
+    product_description: item.product_description ?? item.products?.description,
+    quantity: item.quantity,
+    unit_price: item.unit_price ?? item.products?.unit_price ?? 0,
+    tva_rate: item.tva_rate,
+  }));
+  const subtotal_ht = items.reduce((sum, i) => sum + i.quantity * (i.unit_price || 0), 0);
+  const tva_amount = items.reduce((sum, i) => {
+    const rate = i.tva_rate === undefined || i.tva_rate === null ? 19 : i.tva_rate;
+    return sum + i.quantity * (i.unit_price || 0) * (rate / 100);
+  }, 0);
+
   return {
+    invoice_type: 'delivery_note',
+    invoice_number: note.delivery_number,
     delivery_number: note.delivery_number,
-    delivery_date: note.delivery_date,
-    truck_plate: note.truck_plate,
-    driver_name: note.driver_name,
-    deliverer_name: note.deliverer_name,
-    transporter_name: note.transporter_name,
-    delivery_location: note.delivery_location,
-    reserves: note.reserves,
-    supplier_delivered_date: note.supplier_delivered_date,
-    client_received_date: note.client_received_date,
-    receiver_name: note.client_signature,
-    client: {
-      name: note.clients?.name || "Client",
-      address: note.clients?.address,
-      city: note.clients?.city,
-      wilaya: note.clients?.wilaya,
-      phone: note.clients?.phone,
-      email: note.clients?.email,
-      nif: note.clients?.nif,
-      rc: note.clients?.rc,
-      contact_person: note.clients?.contact_person,
-    },
-    items: (note.delivery_note_items || []).map((item) => ({
-      product_code: item.product_code ?? item.products?.code,
-      product_name: item.product_name ?? item.products?.name,
-      product_description: item.product_description ?? item.products?.description,
-      quantity: item.quantity,
-      unit_price: item.unit_price ?? item.products?.unit_price,
-      tva_rate: item.tva_rate,
-    })),
+    invoice_date: note.delivery_date,
+    due_date: note.client_received_date || undefined,
+    notes: note.reserves || undefined,
+    custom_title: note.custom_title || "BON DE LIVRAISON",
+    clients: note.clients ? { ...note.clients } : undefined,
+    invoice_items: items,
+    subtotal_ht,
+    tva_amount,
+    timbre: 0,
+    total_ttc: subtotal_ht + tva_amount,
   };
 }
 
-/** Shared by generateDeliveryNotePDFBlob and the live in-app preview (which
- *  renders this exact same DeliveryNotePDFDocument via react-pdf's
- *  PDFViewer) — one mapping, so the two can never drift apart again. */
-export function toDeliveryNotePDFSettings(settings?: Settings): PDFSettings {
-  if (!settings) return {};
-  return {
-    company_name: settings.company_name,
-    company_address: settings.company_address,
-    company_phone: settings.company_phone,
-    company_phones: settings.company_phones,
-    company_email: settings.company_email,
-    company_nif: settings.company_nif,
-    company_nis: settings.company_nis,
-    company_rc: settings.company_rc,
-    company_ai: settings.company_ai,
-    logo_data: settings.logo_data,
-    primary_color: settings.primary_color,
-    invoice_pdf_font: settings.invoice_pdf_font,
-    stamp_data: settings.stamp_data,
-    stamp_size: settings.stamp_size ? Number(settings.stamp_size) : undefined,
-    signature_data: settings.signature_data,
-    signature_size: settings.signature_size ? Number(settings.signature_size) : undefined,
-  };
-}
-
-/**
- * Renders the delivery note (Bon de Livraison) PDF to a Blob only — no
- * save/download side effect. Used both by generateDeliveryNotePDF below and
- * directly by "Imprimer" flows that open the PDF for printing instead of
- * saving it to disk.
- */
-export const generateDeliveryNotePDFBlob = async (
-  data: DeliveryNotePDFData,
-  settings?: Settings
-): Promise<Blob> => {
-  const appVersion = await getVersion().catch(() => FALLBACK_APP_VERSION);
-  const instance = pdf(
-    React.createElement(DeliveryNotePDFDocument, {
-      data,
-      appVersion,
-      settings: toDeliveryNotePDFSettings(settings),
-    }) as React.ReactElement<DocumentProps>
-  );
-  return await instance.toBlob();
-};
-
-/**
- * Generates the Bon de Livraison PDF and saves it wherever the user picks
- * via the native save dialog (same pattern as generateBulletinPaiePDF).
- * Returns the saved base64 content, or null if the user cancelled — a
- * clean abort, not an error.
- */
-export const generateDeliveryNotePDF = async (
-  data: DeliveryNotePDFData,
-  settings?: Settings
-): Promise<string | null> => {
-  try {
-    const blob = await generateDeliveryNotePDFBlob(data, settings);
-    const pdfBase64 = await blobToBase64(blob);
-    const fileName = `BL-${data.client.name.replace(/[^a-zA-Z0-9]+/g, '_')}-${data.delivery_number}.pdf`;
-
-    let chosenPath: string | null;
-    try {
-      chosenPath = await saveDialog({
-        title: "Enregistrer le bon de livraison",
-        defaultPath: fileName,
-        filters: [{ name: "PDF", extensions: ["pdf"] }],
-      });
-    } catch (err) {
-      console.warn("Tauri save dialog unavailable, triggering browser fallback download:", err);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      return pdfBase64;
-    }
-
-    if (!chosenPath) {
-      return null;
-    }
-
-    await invoke('save_pdf_to_path', { path: chosenPath, pdfBase64 });
-    toast.success("Bon de livraison enregistré", {
-      description: `Enregistré sous : ${chosenPath}`,
-      action: { label: "Ouvrir", onClick: () => openSavedFile(chosenPath, blob) },
-      duration: 6000,
-    });
-    return pdfBase64;
-  } catch (error) {
-    console.error("Failed to generate Delivery Note PDF:", error);
-    throw error;
-  }
-};
+/** The delivery note (Bon de Livraison) PDF — literally the same shared
+ *  engine as every other document type (see buildDeliveryDocumentForPDF's
+ *  own note above), not a bespoke template/save flow. */
+export const generateDeliveryPDF = generateInvoicePDF;

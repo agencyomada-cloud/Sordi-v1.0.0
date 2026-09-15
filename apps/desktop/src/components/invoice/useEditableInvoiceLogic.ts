@@ -7,7 +7,19 @@ import { chunkItems } from "@/lib/paginationUtils";
  * complex totals/timbre/discount math exists exactly once instead of being
  * re-implemented (and re-risked) per theme.
  */
-export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice: any) => void) {
+/**
+ * `documentType`, when passed, forces which kind of document this is
+ * instead of inferring it from `invoice.invoice_type`/`order_number`/
+ * `delivery_number` presence — the single source of truth for Facture/
+ * Devis/Proforma/Avoir/Bon de Commande/Bon de Livraison all sharing this
+ * one hook (and EditableInvoiceStructure/Epure/Moderne below it) instead
+ * of each document type maintaining its own parallel editable-preview
+ * component tree. Omit it (every invoice/proforma/quote/credit-note call
+ * site does) to keep the existing inference behavior unchanged.
+ */
+export type EditableDocumentType = 'invoice' | 'credit_note' | 'proforma' | 'quote' | 'order' | 'delivery_note';
+
+export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice: any) => void, documentType?: EditableDocumentType) {
   const [paymentMode, setPaymentMode] = useState(invoice.payment_method || "Espèces");
   const [discountRate, setDiscountRate] = useState<number>(invoice.discount_rate || 0);
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>(invoice.discount_type || 'percent');
@@ -263,11 +275,31 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     onInvoiceChange({ ...invoice, invoice_items: newItems });
   };
 
-  const isCreditNote = invoice.invoice_type === "credit_note";
-  const isProforma = invoice.invoice_type === "proforma";
-  const isDelivery = invoice.invoice_type === "delivery_note" || !!invoice.delivery_number;
-  const isOrder = invoice.invoice_type === "order" || !!invoice.order_number;
+  const isCreditNote = documentType ? documentType === "credit_note" : invoice.invoice_type === "credit_note";
+  const isProforma = documentType ? documentType === "proforma" : invoice.invoice_type === "proforma";
+  const isQuote = documentType ? documentType === "quote" : invoice.invoice_type === "quote";
+  const isDelivery = documentType ? documentType === "delivery_note" : (invoice.invoice_type === "delivery_note" || !!invoice.delivery_number);
+  const isOrder = documentType ? documentType === "order" : (invoice.invoice_type === "order" || !!invoice.order_number);
   const isOrderOrDelivery = isDelivery || isOrder;
+
+  // The recipient block is addressed to a SUPPLIER for a bon de commande
+  // (you're ordering FROM them) — every other document type addresses a
+  // client. The picker's DATA SOURCE (suppliers vs clients list) is the
+  // caller's job (see EditableInvoiceStructure's own `suppliers` prop);
+  // this only decides the label/placeholder text.
+  const recipientLabel = isOrder ? "Fournisseur" : "Destinataire";
+  const recipientPlaceholder = isOrder ? "Sélectionner un fournisseur..." : "Sélectionner un client...";
+
+  // A bon de livraison only proves what physically moved, never its price —
+  // hides the P.U/Total HT columns and the whole totals block, not just
+  // individual rows the way showTva/showTimbre do for invoices.
+  const showPricing = !isDelivery;
+
+  // A delivery note's signature is the recipient acknowledging physical
+  // receipt, not a company validating a financial document — undefined
+  // lets InteractiveStampZone fall back to its own default "Cachet et
+  // Signature" label for every other document type.
+  const stampLabel = isDelivery ? "Cachet et Signature du Client (Bon pour accord et réception)" : undefined;
 
   // Same doc-type section rules as the exported PDF (getDocumentSectionFlags
   // in invoicePdfShared.ts) — orders/deliveries are internal operational
@@ -277,6 +309,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
   const docTitle = invoice.custom_title
     || (isCreditNote && "FACTURE D'AVOIR")
     || (isProforma && "FACTURE PROFORMA")
+    || (isQuote && "DEVIS")
     || (isDelivery && "BON DE LIVRAISON")
     || (isOrder && "BON DE COMMANDE")
     || "FACTURE";
@@ -289,6 +322,18 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
   const showMontantEnLettres = !isOrderOrDelivery;
   const showPaymentMethod = !isOrderOrDelivery;
   const grandTotalLabel = isCreditNote ? "Net à déduire" : isOrderOrDelivery ? "Total" : "Total TTC";
+  // "Arrêté" itself stays invariant across every document type — only the
+  // article + noun that follows changes ("le présent devis/avoir" vs "la
+  // présente facture[/proforma]"). A devis is never a "facture", so this
+  // is a real wording bug fix, not just cosmetic — a quote must never read
+  // like a real invoice.
+  const amountInWordsLabel = isCreditNote
+    ? "Arrêté le présent avoir à la somme de"
+    : isQuote
+    ? "Arrêté le présent devis à la somme de"
+    : isProforma
+    ? "Arrêté la présente facture proforma à la somme de"
+    : "Arrêté la présente facture à la somme de";
 
   const pages = chunkItems(items);
   const subtotal = invoice.subtotal_ht || 0;
@@ -317,6 +362,7 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     netTotal,
     isCreditNote,
     isProforma,
+    isQuote,
     isDelivery,
     isOrder,
     docTitle,
@@ -324,7 +370,12 @@ export function useEditableInvoiceLogic(invoice: any, onInvoiceChange: (invoice:
     showTimbre,
     showMontantEnLettres,
     showPaymentMethod,
+    showPricing,
+    recipientLabel,
+    recipientPlaceholder,
+    stampLabel,
     grandTotalLabel,
+    amountInWordsLabel,
     taxMode,
     isTaxExempt,
     handleTaxModeChange,

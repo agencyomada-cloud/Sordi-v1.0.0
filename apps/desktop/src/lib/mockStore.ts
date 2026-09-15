@@ -64,7 +64,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   company_phone: "",
   company_email: "",
   company_extra_info: "[]",
-  primary_color: "#476CFF",
+  primary_color: "#FF2949",
   logo_bg_color: "#000000",
   logo_text_color: "#FFFFFF",
   logo_data: "",

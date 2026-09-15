@@ -213,15 +213,12 @@ const Partners = () => {
   return (
     <main className="flex-1 p-6">
       <div className="max-w-[1600px] mx-auto w-full space-y-5">
-        {/* xl, not md — this title is long and the controls need real room;
-            sharing a row at md's 768px squeezed the title into a 3-line
-            wrap at the app's minimum window width. */}
-        <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between gap-3">
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
           <div>
-            <h1 className="text-lg font-semibold text-foreground tracking-tight">Associés &amp; Répartition des Bénéfices</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Gérez la structure du capital et les prélèvements des associés</p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Associés &amp; Répartition des Bénéfices</h1>
+            <p className="text-sm text-muted-foreground mt-1">Gérez la structure du capital et les prélèvements des associés</p>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex flex-wrap items-center gap-3">
             <Select value={selectedYear} onValueChange={setSelectedYear}>
               <SelectTrigger className="w-24 h-[30px] text-xs rounded-md">
                 <SelectValue />
@@ -235,9 +232,6 @@ const Partners = () => {
               </SelectContent>
             </Select>
 
-            {/* Rapport Mensuel d'Activité & Clôture — folded into the top
-                action header as a compact month select + generate button,
-                replacing the previously detached full-width report card. */}
             <Select value={reportMonth} onValueChange={setReportMonth}>
               <SelectTrigger className="w-28 h-[30px] text-xs rounded-md">
                 <SelectValue />
@@ -250,17 +244,17 @@ const Partners = () => {
                 ))}
               </SelectContent>
             </Select>
+
             <Button onClick={handleGenerateMonthlyReport} disabled={isGeneratingReport} variant="outline" size="sm" className="h-[30px] text-xs rounded-md gap-1.5">
               <ReportIcon className="w-3.5 h-3.5" />
               {isGeneratingReport ? "Génération..." : "Générer Rapport Mensuel (PDF)"}
             </Button>
 
-            <div className="w-px h-5 bg-border mx-0.5" />
-
             <Button onClick={() => openWithdrawalDialog()} variant="outline" size="sm" disabled={!partners?.length} className="h-[30px] text-xs rounded-md gap-1.5">
               <WalletIcon className="w-3.5 h-3.5" />
               Enregistrer un prélèvement
             </Button>
+
             <Button onClick={openCreateDialog} size="sm" className="h-[30px] text-xs rounded-md gap-1.5">
               <Plus className="w-3.5 h-3.5" />
               Ajouter un associé

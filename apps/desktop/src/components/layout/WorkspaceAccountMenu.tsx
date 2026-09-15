@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import {
-  RiCheckLine as CheckIcon,
   RiArrowDownSLine as ChevronIcon,
   RiSunLine as SunIcon,
   RiMoonLine as MoonIcon,
@@ -10,19 +9,25 @@ import {
   RiLogoutBoxRLine as LogoutIcon,
   RiWhatsappLine as WhatsAppIcon,
   RiKeyLine as KeyIcon,
+  RiFileCopyLine as CopyIcon,
+  RiCheckLine as CheckIcon,
 } from "@remixicon/react";
+import { Pencil } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
   Tooltip, TooltipTrigger, TooltipContent,
 } from "@sordi/ui";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
-import { useLicenseDecision, buildWhatsAppSupportUrl } from "@/services/licensing";
-import { CreateCompanyDialog } from "@/components/layout/CreateCompanyDialog";
+import { useCompanyAvatarSeed } from "@/hooks/useCompanyAvatarSeed";
+import { useLicenseDecision, buildWhatsAppSupportUrl, useMachineId } from "@/services/licensing";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { ActivationModal } from "@/components/licensing/ActivationModal";
+import { AvatarGeneratorDialog } from "@/components/layout/AvatarGeneratorDialog";
+import { CompanyAvatar } from "@/components/layout/CompanyAvatar";
 
 const THEME_OPTIONS: { value: "light" | "dark"; label: string; icon: React.ElementType }[] = [
   { value: "light", label: "Clair", icon: SunIcon },
@@ -38,13 +43,20 @@ const THEME_OPTIONS: { value: "light" | "dark"; label: string; icon: React.Eleme
  * I" control instead of two disconnected ones.
  */
 export function WorkspaceAccountMenu() {
-  const { activeCompanyId, companies, switchCompany, isReady } = useWorkspace();
+  const { activeCompanyId, companies, isReady } = useWorkspace();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { state: licenseState, daysRemaining, expiresAt } = useLicenseDecision();
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const { data: machineId } = useMachineId();
+  const [machineIdCopied, setMachineIdCopied] = useState(false);
   const [activationOpen, setActivationOpen] = useState(false);
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  // Controlled (not left uncontrolled) specifically so opening the avatar
+  // generator can close the dropdown itself first — otherwise the Dialog
+  // opens layered on top of a still-open DropdownMenuContent.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [avatarSeed, setAvatarSeed] = useCompanyAvatarSeed(activeCompanyId);
   // next-themes' theme value is undefined during SSR/first paint — avoid
   // rendering a toggle that doesn't reflect the real resolved theme yet.
   const [mounted, setMounted] = useState(false);
@@ -62,9 +74,16 @@ export function WorkspaceAccountMenu() {
     }
   };
 
-  if (!isReady) return null;
+  const handleCopyMachineId = () => {
+    if (!machineId) return;
+    navigator.clipboard.writeText(machineId).then(() => {
+      setMachineIdCopied(true);
+      toast.success("Identifiant machine copié");
+      window.setTimeout(() => setMachineIdCopied(false), 1500);
+    });
+  };
 
-  const initial = (activeCompany?.name ?? "?").trim().charAt(0).toUpperCase();
+  if (!isReady) return null;
 
   const isPro = licenseState === "PAID_ACTIVE";
   const expiryFormatted = expiresAt
@@ -92,14 +111,12 @@ export function WorkspaceAccountMenu() {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
-          {/* Understated trigger — a small neutral initial chip, not an
+          {/* Understated trigger — a small neutral avatar chip, not an
               oversized bright-blue avatar badge on a full pill-height button. */}
           <button className="h-7 max-w-[200px] flex items-center gap-1.5 pl-1 pr-2 rounded-md border border-border/60 bg-transparent hover:bg-muted/60 transition-colors duration-150">
-            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-muted text-foreground text-[10px] font-semibold shrink-0">
-              {initial}
-            </span>
+            <CompanyAvatar seed={avatarSeed} size={20} className="rounded-md shrink-0" />
             <span className="text-xs font-medium text-foreground truncate max-w-[140px]">
               {activeCompany?.name ?? "Sélectionner"}
             </span>
@@ -127,12 +144,25 @@ export function WorkspaceAccountMenu() {
           {/* Account/workspace identity — the active company, not the raw
               session email, is the headline: this menu is primarily a
               workspace switcher, so it should read as "where am I" first.
-              An avatar chip anchors it as a proper identity header rather
-              than plain stacked text. */}
+              The avatar itself is a real button (not decorative): closes
+              this dropdown first (see `menuOpen`/`setMenuOpen`), THEN opens
+              the generator dialog, so the Dialog never ends up layered on
+              top of a still-open DropdownMenuContent. */}
           <div className="flex items-center gap-2.5 px-0.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
-              {initial}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setAvatarDialogOpen(true);
+              }}
+              title="Changer l'avatar"
+              className="group relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <CompanyAvatar seed={avatarSeed} size={36} className="rounded-full" />
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Pencil className="w-3.5 h-3.5 text-white" />
+              </span>
+            </button>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-foreground text-sm truncate">
                 {activeCompany?.name ?? "Sélectionner"}
@@ -147,38 +177,6 @@ export function WorkspaceAccountMenu() {
                 </div>
               )}
             </div>
-          </div>
-
-          <div>
-            <DropdownMenuLabel className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-0.5 py-1">
-              Entreprises
-            </DropdownMenuLabel>
-            <div className="space-y-1">
-              {companies.map((company) => {
-                const active = company.id === activeCompanyId;
-                return (
-                  <DropdownMenuItem key={company.id} asChild className="p-0 focus:bg-transparent">
-                    <button
-                      type="button"
-                      onClick={() => switchCompany(company.id)}
-                      className={cn(
-                        "w-full flex items-center justify-between gap-2 rounded-lg p-2 text-xs transition-colors cursor-pointer",
-                        active ? "bg-muted/70 text-foreground font-medium" : "bg-muted/40 hover:bg-muted/70 text-muted-foreground"
-                      )}
-                    >
-                      <span className="flex-1 min-w-0 truncate text-start">{company.name}</span>
-                      {active && <CheckIcon className="size-3.5 text-primary shrink-0" />}
-                    </button>
-                  </DropdownMenuItem>
-                );
-              })}
-            </div>
-            <DropdownMenuItem
-              onClick={() => setCreateDialogOpen(true)}
-              className="h-7 px-2 mt-1 rounded-lg text-xs flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              + Nouvelle entreprise...
-            </DropdownMenuItem>
           </div>
 
           <DropdownMenuSeparator />
@@ -297,12 +295,35 @@ export function WorkspaceAccountMenu() {
               <LogoutIcon className="w-4 h-4" />
               Déconnexion
             </DropdownMenuItem>
+            {/* Version — moved here from the sidebar header, a more
+                conventional place for build info than the primary nav. */}
+            <p className="px-2 pt-1.5 text-[10px] font-mono text-muted-foreground/50 select-none">Sordi Invoicing v1.0.0</p>
+            {/* Machine ID — relocated from the license activation modal
+                (that modal is activation-only now); this is the one place
+                a user needs it, to send along when requesting a key. */}
+            <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-0.5">
+              <span className="text-[10px] font-mono text-muted-foreground/50 truncate select-none">
+                ID: {machineId ?? "…"}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyMachineId}
+                disabled={!machineId}
+                title="Copier l'identifiant machine"
+                className={cn(
+                  "shrink-0 h-5 w-5 rounded flex items-center justify-center transition-colors disabled:opacity-40",
+                  machineIdCopied ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/60 hover:text-foreground"
+                )}
+              >
+                {machineIdCopied ? <CheckIcon className="w-3 h-3" /> : <CopyIcon className="w-3 h-3" />}
+              </button>
+            </div>
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateCompanyDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
       <ActivationModal open={activationOpen} onOpenChange={setActivationOpen} />
+      <AvatarGeneratorDialog open={avatarDialogOpen} onOpenChange={setAvatarDialogOpen} currentSeed={avatarSeed} onSave={setAvatarSeed} />
     </>
   );
 }

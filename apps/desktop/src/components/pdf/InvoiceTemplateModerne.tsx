@@ -7,7 +7,8 @@ import {
   resolveCompanyPhones,
   formatPhone,
   getDocumentSectionFlags,
-  resolveInvoicePdfFontFamily,
+  resolveInvoicePdfFontStack,
+  containsArabicScript,
 } from './invoicePdfShared';
 import { getContrastTextColor } from '@/lib/colorContrast';
 import { PdfStatusBadge } from './PdfStatusBadge';
@@ -34,11 +35,13 @@ function hexToRgba(hex: string, alpha: number): string {
  * fields as the other two themes, just with SaaS-style visual language.
  */
 export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateModerneProps) {
-  const accent = settings?.primary_color || "#476CFF";
+  const accent = settings?.primary_color || "#FF2949";
   const accentBorder = hexToRgba(accent, 0.18);
   const headerTextColor = getContrastTextColor(accent);
-  const fontFamily = resolveInvoicePdfFontFamily(settings);
-  const data = resolveInvoiceData(invoice);
+  // A font STACK, not a single family — see resolveInvoicePdfFontStack's
+  // own doc comment for why this is what actually fixes Arabic rendering.
+  const fontFamily = resolveInvoicePdfFontStack(settings);
+  const data = resolveInvoiceData(invoice, settings);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
   const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
@@ -86,10 +89,12 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
     pageNumber: { position: 'absolute', left: STANDARD_MARGIN_PT, right: STANDARD_MARGIN_PT, bottom: 16, fontSize: 7.5, fontFamily: 'Courier', color: '#a1a1aa', letterSpacing: 1, textAlign: 'center' },
     tableRow: { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: 10, alignItems: 'flex-start' },
     tableRowAlt: { backgroundColor: '#fafafa' },
-    colDesignation: { width: '40%' },
+    // A delivery note never shows pricing — Désignation/Qté/U.M absorb the
+    // width the hidden P.U/Total HT columns would otherwise take.
+    colDesignation: { width: flags.showPricing ? '40%' : '56%' },
     colPrice: { width: '16%', textAlign: 'right' },
-    colQty: { width: '10%', textAlign: 'right' },
-    colUnit: { width: '15%', textAlign: 'center' },
+    colQty: { width: flags.showPricing ? '10%' : '15%', textAlign: 'right' },
+    colUnit: { width: flags.showPricing ? '15%' : '29%', textAlign: 'center' },
     colAmount: { width: '19%', textAlign: 'right' },
     itemName: { fontSize: 9, color: '#111827', fontFamily, fontWeight: 'bold' },
     cellText: { fontFamily: 'JetBrains Mono', fontSize: 8.5, color: '#374151' },
@@ -191,7 +196,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
           <View style={styles.cardsRow}>
             <View style={styles.card}>
               <Text style={styles.cardLabel}>Destinataire</Text>
-              <Text style={styles.clientName}>{data.clientName}</Text>
+              <Text style={[styles.clientName, { textTransform: containsArabicScript(data.clientName) ? 'none' : 'uppercase' }]}>{data.clientName}</Text>
               {data.clientAddress !== "" && <Text style={styles.plainLine}>{data.clientAddress}</Text>}
               {data.clientRc !== "" && <Text style={styles.fiscalLine}>RC {data.clientRc}</Text>}
               {data.clientNif !== "" && <Text style={styles.fiscalLine}>NIF {data.clientNif}</Text>}
@@ -234,10 +239,10 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
           <View style={styles.tableWrap}>
             <View style={styles.tableHeaderRow}>
               <Text style={[styles.tableHeaderCell, styles.colDesignation]}>Désignation / Prestation</Text>
-              <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U (HT)</Text>
+              {flags.showPricing && <Text style={[styles.tableHeaderCell, styles.colPrice]}>P.U (HT)</Text>}
               <Text style={[styles.tableHeaderCell, styles.colQty]}>Qté</Text>
               <Text style={[styles.tableHeaderCell, styles.colUnit]}>U.M</Text>
-              <Text style={[styles.tableHeaderCell, styles.colAmount]}>Total HT</Text>
+              {flags.showPricing && <Text style={[styles.tableHeaderCell, styles.colAmount]}>Total HT</Text>}
             </View>
 
             {data.items.map((item, idx) => {
@@ -250,16 +255,23 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               return (
                 <View key={idx} style={idx % 2 === 1 ? [styles.tableRow, styles.tableRowAlt] : styles.tableRow}>
                   <Text style={[styles.itemName, styles.colDesignation]}>{name}</Text>
-                  <Text style={[styles.cellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>
+                  {flags.showPricing && <Text style={[styles.cellText, styles.colPrice]}>{formatCurrency(item.unit_price)}</Text>}
                   <Text style={[styles.cellText, styles.colQty]}>{formattedQty}</Text>
                   <Text style={[styles.cellUnit, styles.colUnit]}>{unit}</Text>
-                  <Text style={[styles.cellText, styles.colAmount, { fontWeight: 'bold', color: '#111827' }]}>{formatCurrency(itemAmount)}</Text>
+                  {flags.showPricing && <Text style={[styles.cellText, styles.colAmount, { fontWeight: 'bold', color: '#111827' }]}>{formatCurrency(itemAmount)}</Text>}
                 </View>
               );
             })}
           </View>
 
-          {(() => {
+          {!flags.showPricing && invoice.notes && invoice.notes.trim() !== "" && (
+            <View style={[styles.notesBlock, { width: '100%', marginBottom: 14 }]} wrap={false}>
+              <Text style={styles.notesLabel}>Notes</Text>
+              <Text style={styles.notesText}>{invoice.notes}</Text>
+            </View>
+          )}
+
+          {flags.showPricing && (() => {
             const hasNotes = invoice.notes && invoice.notes.trim() !== "";
             const totalsBox = (
               <View style={styles.totalsBox}>
@@ -279,10 +291,10 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                     <Text style={styles.totalsValue}>{formatCurrency(invoice.timbre || 0)}</Text>
                   </View>
                 )}
-                {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
+                {data.showRemiseRow && (
                   <View style={styles.totalsRow}>
                     <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
-                    <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
+                    <Text style={[styles.totalsValue, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value || 0)}</Text>
                   </View>
                 )}
                 <View style={styles.ttcRow}>
@@ -318,18 +330,19 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
 
           {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
           <View style={styles.signRow} wrap={false}>
-            {flags.showMontantEnLettres ? (
+            {flags.showMontantEnLettres && data.showAmountInWords ? (
               <View style={styles.wordsBlock}>
-                <Text style={styles.wordsLabel}>Arrêté la présente facture à la somme de</Text>
+                <Text style={styles.wordsLabel}>{data.amountInWordsLabel}</Text>
                 <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
               </View>
             ) : (
               <View />
             )}
+            {data.showStampSignature ? (
             <View style={[styles.signBox, mainStampUrl ? { width: stampWidth, minWidth: stampWidth } : { width: 140, minWidth: 140 }]}>
               {mainStampUrl && (
                 <>
-                  <Text style={styles.signLabel}>Cachet et signature</Text>
+                  <Text style={styles.signLabel}>{flags.stampLabel || "Cachet et signature"}</Text>
                   <View style={[styles.signLine, { width: stampWidth }]} />
                 </>
               )}
@@ -342,7 +355,7 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
               >
                 {!mainStampUrl ? (
                   <View style={styles.signatureBoxEmpty}>
-                    <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
+                    <Text style={styles.signatureBoxPlaceholder}>{flags.stampLabel || "Cachet et Signature"}</Text>
                   </View>
                 ) : hasBoth ? (
                   <>
@@ -380,6 +393,9 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
                 )}
               </View>
             </View>
+            ) : (
+              <View />
+            )}
           </View>
         </View>
 
@@ -411,8 +427,11 @@ export function InvoiceTemplateModerne({ invoice, settings }: InvoiceTemplateMod
             </View>
           </View>
         </View>
-        {settings?.license_active === false && (
-          <Text style={styles.sordiWatermark} fixed>Created by Sordi v1.0.1 — www.sordi.app</Text>
+        {settings?.license_watermark === "trial" && (
+          <Text style={styles.sordiWatermark} fixed>Created By Sordi — www.sordi.app</Text>
+        )}
+        {settings?.license_watermark === "expired" && (
+          <Text style={styles.sordiWatermark} fixed>Created By Sordi+ version — www.sordi.app</Text>
         )}
         <Text style={styles.pageNumber} fixed render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
 

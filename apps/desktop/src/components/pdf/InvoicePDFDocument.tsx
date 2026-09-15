@@ -7,7 +7,8 @@ import {
   resolveCompanyPhones,
   formatPhone,
   getDocumentSectionFlags,
-  resolveInvoicePdfFontFamily,
+  resolveInvoicePdfFontStack,
+  containsArabicScript,
 } from './invoicePdfShared';
 import { chunkItems } from '@/lib/paginationUtils';
 import { getContrastTextColor } from '@/lib/colorContrast';
@@ -28,10 +29,12 @@ interface InvoicePDFDocumentProps {
  * configured in Settings; there is no fallback company data baked in here.
  */
 export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProps) {
-  const primaryColor = settings?.primary_color || "#476CFF";
+  const primaryColor = settings?.primary_color || "#FF2949";
   const headerTextColor = getContrastTextColor(primaryColor);
-  const fontFamily = resolveInvoicePdfFontFamily(settings);
-  const data = resolveInvoiceData(invoice);
+  // A font STACK, not a single family — see resolveInvoicePdfFontStack's
+  // own doc comment for why this is what actually fixes Arabic rendering.
+  const fontFamily = resolveInvoicePdfFontStack(settings);
+  const data = resolveInvoiceData(invoice, settings);
   const flags = getDocumentSectionFlags(data);
   const phones = resolveCompanyPhones(settings);
   const rawSize = Math.max(80, Math.min(400, Number(invoice?.stamp_size || settings?.stamp_size || 180)));
@@ -245,10 +248,12 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
       alignItems: 'flex-start',
       minHeight: 22,
     },
-    colDesignation: { width: '42%' },
+    // A delivery note never shows pricing — Désignation/Qté/U.M absorb the
+    // width the hidden P.U/Total HT columns would otherwise take.
+    colDesignation: { width: flags.showPricing ? '42%' : '58%' },
     colPrice: { width: '15%', textAlign: 'right' },
-    colQty: { width: '9%', textAlign: 'right' },
-    colUnit: { width: '16%', textAlign: 'center' },
+    colQty: { width: flags.showPricing ? '9%' : '14%', textAlign: 'right' },
+    colUnit: { width: flags.showPricing ? '16%' : '28%', textAlign: 'center' },
     colAmount: { width: '18%', textAlign: 'right' },
     tableCellText: {
       fontSize: 9,
@@ -421,7 +426,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
             <View style={styles.clientMetaGrid}>
               <View style={styles.clientBox}>
                 <Text style={styles.clientHeaderLabel}>DESTINATAIRE</Text>
-                <Text style={styles.clientName}>{data.clientName}</Text>
+                <Text style={[styles.clientName, { textTransform: containsArabicScript(data.clientName) ? 'none' : 'uppercase' }]}>{data.clientName}</Text>
                 {data.clientAddress !== "" && <Text style={styles.clientAddress}>{data.clientAddress}</Text>}
                 {data.clientRc !== "" && (
                   <Text style={styles.clientDetailRow}><Text style={styles.clientDetailBold}>RC:</Text> {data.clientRc}</Text>
@@ -477,10 +482,10 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
             <View style={styles.tableContainer}>
               <View style={styles.tableHeaderRow}>
                 <Text style={[styles.tableHeaderCell, styles.colDesignation, { textAlign: 'left' }]}>Désignation / Prestation</Text>
-                <Text style={[styles.tableHeaderCell, styles.colPrice, { textAlign: 'right' }]}>P.U (HT)</Text>
+                {flags.showPricing && <Text style={[styles.tableHeaderCell, styles.colPrice, { textAlign: 'right' }]}>P.U (HT)</Text>}
                 <Text style={[styles.tableHeaderCell, styles.colQty, { textAlign: 'right' }]}>Qté</Text>
                 <Text style={[styles.tableHeaderCell, styles.colUnit, { textAlign: 'center' }]}>U.M</Text>
-                <Text style={[styles.tableHeaderCell, styles.colAmount, { textAlign: 'right' }]}>Total HT</Text>
+                {flags.showPricing && <Text style={[styles.tableHeaderCell, styles.colAmount, { textAlign: 'right' }]}>Total HT</Text>}
               </View>
 
               {pageItems.map((item, idx) => {
@@ -493,18 +498,25 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 return (
                   <View key={idx} style={styles.tableRow}>
                     <View style={[styles.tableCellText, styles.colDesignation]}>
-                      <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', textTransform: 'uppercase', color: '#000000' }}>{name}</Text>
+                      <Text style={{ fontSize: 9, fontFamily, fontWeight: 'bold', textTransform: containsArabicScript(name) ? 'none' : 'uppercase', color: '#000000' }}>{name}</Text>
                     </View>
-                    <Text style={[styles.tableCellText, styles.colPrice, { fontFamily: 'JetBrains Mono' }]}>{formatCurrency(item.unit_price)}</Text>
+                    {flags.showPricing && <Text style={[styles.tableCellText, styles.colPrice, { fontFamily: 'JetBrains Mono' }]}>{formatCurrency(item.unit_price)}</Text>}
                     <Text style={[styles.tableCellText, styles.colQty, { fontFamily: 'JetBrains Mono' }]}>{formattedQty}</Text>
                     <Text style={[styles.tableCellText, styles.colUnit, { color: '#6b7280', fontSize: 8, textTransform: 'uppercase' }]}>{unit}</Text>
-                    <Text style={[styles.tableCellText, styles.colAmount, { fontFamily: 'JetBrains Mono', fontWeight: 'bold' }]}>{formatCurrency(itemAmount)}</Text>
+                    {flags.showPricing && <Text style={[styles.tableCellText, styles.colAmount, { fontFamily: 'JetBrains Mono', fontWeight: 'bold' }]}>{formatCurrency(itemAmount)}</Text>}
                   </View>
                 );
               })}
             </View>
 
-            {isLastPage && (() => {
+            {isLastPage && !flags.showPricing && invoice.notes && invoice.notes.trim() !== "" && (
+              <View style={[styles.notesBlock, { width: '100%', marginBottom: 14 }]} wrap={false}>
+                <Text style={styles.notesLabel}>Notes</Text>
+                <Text style={styles.notesText}>{invoice.notes}</Text>
+              </View>
+            )}
+
+            {isLastPage && flags.showPricing && (() => {
               const hasNotes = invoice.notes && invoice.notes.trim() !== "";
               const totalsContent = (
                 <>
@@ -525,10 +537,10 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                         <Text style={styles.totalsValueText}>{formatCurrency(invoice.timbre || 0)}</Text>
                       </View>
                     )}
-                    {((invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0) && (
+                    {data.showRemiseRow && (
                       <View style={styles.totalsRow}>
                         <Text style={[styles.totalsLabel, { color: '#b91c1c' }]}>Remise</Text>
-                        <Text style={[styles.totalsValueText, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value)}</Text>
+                        <Text style={[styles.totalsValueText, { color: '#b91c1c' }]}>-{formatCurrency(invoice.discount || invoice.discount_value || 0)}</Text>
                       </View>
                     )}
                     <View style={styles.ttcRow}>
@@ -569,21 +581,22 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
             <View style={styles.bottomBlock}>
               {/* Bottom row: Words on the left, Stamp on the right side-by-side */}
               <View style={[styles.signatureRow, { justifyContent: 'space-between', alignItems: 'flex-end' }]} wrap={false}>
-                {flags.showMontantEnLettres ? (
+                {flags.showMontantEnLettres && data.showAmountInWords ? (
                   // width (not maxWidth) so the amount always gets the full
                   // 62% column instead of shrink-wrapping to its own text —
                   // a narrow maxWidth was forcing long French amounts like
                   // "...ALGÉRIENS..." to hyphen-break mid-word.
                   <View style={{ width: '62%', paddingRight: 16 }}>
-                    <Text style={styles.wordsTitle}>Arrêté la présente facture à la somme de</Text>
+                    <Text style={styles.wordsTitle}>{data.amountInWordsLabel}</Text>
                     <Text style={styles.wordsValue}>{data.wordsFrench}</Text>
                   </View>
                 ) : (
                   <View />
                 )}
+                {data.showStampSignature ? (
                 <View style={{ alignItems: 'center' }}>
                   {mainStampUrl && (
-                    <Text style={[styles.signatureBoxLabel, { textAlign: 'center' }]}>Cachet et Signature</Text>
+                    <Text style={[styles.signatureBoxLabel, { textAlign: 'center' }]}>{flags.stampLabel || "Cachet et Signature"}</Text>
                   )}
                   <View
                     style={
@@ -594,7 +607,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                   >
                     {!mainStampUrl ? (
                       <View style={styles.signatureBoxEmpty}>
-                        <Text style={styles.signatureBoxPlaceholder}>Cachet et Signature</Text>
+                        <Text style={styles.signatureBoxPlaceholder}>{flags.stampLabel || "Cachet et Signature"}</Text>
                       </View>
                     ) : hasBoth ? (
                       <>
@@ -632,6 +645,9 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                     )}
                   </View>
                 </View>
+                ) : (
+                  <View />
+                )}
               </View>
             </View>
             )}
@@ -703,8 +719,11 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               </View>
             </View>
           </View>
-          {settings?.license_active === false && (
-            <Text style={styles.sordiWatermark}>Created by Sordi v1.0.1 — www.sordi.app</Text>
+          {settings?.license_watermark === "trial" && (
+            <Text style={styles.sordiWatermark}>Created By Sordi — www.sordi.app</Text>
+          )}
+          {settings?.license_watermark === "expired" && (
+            <Text style={styles.sordiWatermark}>Created By Sordi+ version — www.sordi.app</Text>
           )}
         </View>
 

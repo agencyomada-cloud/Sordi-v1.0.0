@@ -63,7 +63,7 @@ export default function UpgradePage() {
               <RiArrowLeftLine className="w-4 h-4" />
               Retour
             </button>
-            <h1 className="text-2xl font-bold">Passer à Sordi Pro</h1>
+            <h1 className="text-2xl font-bold text-foreground">Passer à Sordi Pro</h1>
             <p className="text-muted-foreground">
               Effectuez un virement bancaire, puis activez votre licence avec la clé que nous vous enverrons.
             </p>

@@ -7,7 +7,6 @@ import {
 } from "./invoiceHtmlShared";
 import { InteractiveStampZone } from "./InteractiveStampZone";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
-import { PaidWatermark } from "./PaidWatermark";
 import { getContrastTextColor } from "@/lib/colorContrast";
 import type { InvoiceAppearanceConfig } from "@/components/pdf/invoiceAppearance";
 
@@ -32,7 +31,7 @@ export function InvoiceReadOnlyStructure({
   // can never quietly disagree on what "the invoice's color" is.
   const primaryColor = appearance.primaryColor;
   const fontFamily = `'${appearance.fontFamily}', sans-serif`;
-  const data = resolveHtmlInvoiceData(invoice);
+  const data = resolveHtmlInvoiceData(invoice, settings);
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
 
@@ -50,7 +49,6 @@ export function InvoiceReadOnlyStructure({
             style={{ width: '210mm', height: '297mm', position: 'relative', overflow: 'hidden', backgroundColor: '#ffffff', fontFamily }}
           >
             {isFirstPage && <InvoiceStatusBadge status={invoice.status} />}
-            {isFirstPage && invoice.status === "paid" && <PaidWatermark />}
             <header className="absolute top-0 left-0 w-full h-[33.9mm] bg-white z-10">
               <div className="absolute top-0 left-0 w-[50%] h-[25.7mm] pt-[3mm] pl-[5mm] flex flex-col items-start gap-1">
                 {settings?.logo_data && (
@@ -189,10 +187,10 @@ export function InvoiceReadOnlyStructure({
                               <span className="font-mono tabular-nums tracking-tight text-gray-500">{formatCurrency(invoice.timbre || 0)}</span>
                             </div>
                           )}
-                          {(invoice.discount > 0 || invoice.discount_value > 0) && (
+                          {data.showRemiseRow && (
                             <div className="flex justify-between py-1.5 text-red-700">
                               <span>Remise</span>
-                              <span className="font-mono tabular-nums tracking-tight">-{formatCurrency(invoice.discount || invoice.discount_value)}</span>
+                              <span className="font-mono tabular-nums tracking-tight">-{formatCurrency(invoice.discount || invoice.discount_value || 0)}</span>
                             </div>
                           )}
                           <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-300">
@@ -208,22 +206,26 @@ export function InvoiceReadOnlyStructure({
                       </div>
 
                       <div className="mb-4">
-                        <div className="mb-3">
-                          <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">Arrêté la présente facture à la somme de</div>
-                          <div className="mt-1 font-semibold text-xs text-black uppercase tracking-tight">{data.wordsFrench}</div>
-                        </div>
-
-                        <div className="flex justify-end items-start">
-                          <div className="mr-8 flex flex-col items-center">
-                            <InteractiveStampZone
-                              settings={settings}
-                              stampSize={stampSize}
-                              onStampSizeChange={onStampSizeChange}
-                              onStampSizeCommit={onStampSizeCommit}
-                              showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
-                            />
+                        {data.showAmountInWords && (
+                          <div className="mb-3">
+                            <div className="text-gray-400 text-[10px] font-semibold tracking-wider uppercase">{data.amountInWordsLabel}</div>
+                            <div className="mt-1 font-semibold text-xs text-black uppercase tracking-tight">{data.wordsFrench}</div>
                           </div>
-                        </div>
+                        )}
+
+                        {data.showStampSignature && (
+                          <div className="flex justify-end items-start">
+                            <div className="mr-8 flex flex-col items-center">
+                              <InteractiveStampZone
+                                settings={settings}
+                                stampSize={stampSize}
+                                onStampSizeChange={onStampSizeChange}
+                                onStampSizeCommit={onStampSizeCommit}
+                                showTitle={Boolean(settings?.stamp_data || settings?.signature_data)}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}

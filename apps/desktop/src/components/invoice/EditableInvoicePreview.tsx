@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScaleToFitContainerContext } from "./scaleToFitContext";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { resolveInvoiceHtmlTheme } from "./invoiceHtmlShared";
-import { useEditableInvoiceLogic } from "./useEditableInvoiceLogic";
+import { useEditableInvoiceLogic, type EditableDocumentType } from "./useEditableInvoiceLogic";
 import { EditableInvoiceStructure } from "./EditableInvoiceStructure";
 import { EditableInvoiceEpure } from "./EditableInvoiceEpure";
 import { EditableInvoiceModerne } from "./EditableInvoiceModerne";
@@ -13,7 +13,18 @@ interface EditableInvoicePreviewProps {
   invoice: any;
   onInvoiceChange: (invoice: any) => void;
   clients?: any[];
+  /** Only meaningful for documentType="order" — a bon de commande's
+   *  recipient picker sources from this (real Fournisseurs), never from
+   *  `clients`. See useEditableInvoiceLogic's recipientLabel/Placeholder. */
+  suppliers?: any[];
   products?: any[];
+  /** The single source of truth for which document type this is — see
+   *  useEditableInvoiceLogic's own doc comment. Omit for a plain
+   *  invoice/proforma/quote/credit-note (inferred from `invoice` itself);
+   *  pass "order" or "delivery_note" for Bon de Commande / Bon de
+   *  Livraison, which otherwise have no invoice_type of their own to infer
+   *  from. */
+  documentType?: EditableDocumentType;
 }
 
 /**
@@ -110,11 +121,11 @@ export function ScaleToFit({ children }: { children: React.ReactNode }) {
  * All the totals/discount/timbre logic lives once in useEditableInvoiceLogic
  * — the three renderers only differ in presentation.
  */
-export function EditableInvoicePreview({ invoice, onInvoiceChange, clients, products }: EditableInvoicePreviewProps) {
+export function EditableInvoicePreview({ invoice, onInvoiceChange, clients, suppliers, products, documentType }: EditableInvoicePreviewProps) {
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const theme = resolveInvoiceHtmlTheme(settings);
-  const logic = useEditableInvoiceLogic(invoice, onInvoiceChange);
+  const logic = useEditableInvoiceLogic(invoice, onInvoiceChange, documentType);
 
   const [stampSize, setStampSize] = useState(() => {
     return Number(invoice?.stamp_size || settings?.stamp_size || DEFAULT_STAMP_SIZE);
@@ -150,6 +161,7 @@ export function EditableInvoicePreview({ invoice, onInvoiceChange, clients, prod
     invoice,
     onInvoiceChange,
     clients,
+    suppliers,
     products,
     settings,
     logic,

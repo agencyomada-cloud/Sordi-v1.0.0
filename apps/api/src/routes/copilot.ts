@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { copilotParseRequestSchema, copilotResultSchema } from "@sordi/schema";
+import { copilotParseRequestSchema, copilotBatchResultSchema } from "@sordi/schema";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { env } from "../env.js";
 import { parseHeuristically } from "../services/copilotHeuristic.js";
@@ -9,8 +9,9 @@ export const copilotRouter = Router();
 
 // Public — same trust model as GET /health and POST /licenses/request-trial:
 // no admin secret, called directly by the desktop app's Dashboard input.
-// Never persists anything itself; it only returns a structured suggestion
-// the desktop app's own confirm step decides whether to act on.
+// Never persists anything itself; it only returns a structured batch of
+// suggested operations the desktop app's own confirm step decides whether
+// to act on.
 copilotRouter.post(
   "/parse",
   asyncHandler(async (req, res) => {
@@ -22,10 +23,10 @@ copilotRouter.post(
     const { text, context, fewShotExamples } = parsed.data;
 
     // Logged on every call (not just failures) — cheap, and multi-tenant
-    // bugs (a fresh company with empty clients/suppliers/catalog arrays)
-    // are otherwise invisible until something downstream breaks.
+    // bugs (a fresh company with empty clients/suppliers arrays) are
+    // otherwise invisible until something downstream breaks.
     console.log(
-      `[Copilot] parse request — text="${text}" clients=${context.clients.length} suppliers=${context.suppliers.length} catalogItems=${context.catalogItems.length} categories=${context.categories.length}`
+      `[Copilot] parse request — text="${text}" clients=${context.clients.length} suppliers=${context.suppliers.length} categories=${context.categories.length}`
     );
 
     // Gemini failing (quota, rate limit, transient network) degrades to
@@ -64,17 +65,7 @@ copilotRouter.post(
       return;
     }
 
-    // Authoritative normalization of CREATE_INVOICE's newClient — never
-    // trusted from Gemini's own raw JSON (the heuristic path already sets
-    // it correctly itself, but this runs unconditionally so both paths
-    // are guaranteed consistent even if that ever changes). Computed here
-    // rather than asking the model to keep two representations in sync.
-    if (raw && typeof raw === "object" && "action" in raw && raw.action === "CREATE_INVOICE") {
-      const invoice = raw as { isNewClient?: boolean; clientName?: string; newClient?: unknown };
-      invoice.newClient = invoice.isNewClient ? { name: invoice.clientName } : null;
-    }
-
-    const result = copilotResultSchema.safeParse(raw);
+    const result = copilotBatchResultSchema.safeParse(raw);
     if (!result.success) {
       console.error("Copilot parse produced an invalid shape:", result.error.flatten(), raw);
       res.status(502).json({

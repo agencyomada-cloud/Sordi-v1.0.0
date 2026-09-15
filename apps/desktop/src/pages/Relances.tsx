@@ -255,7 +255,11 @@ export default function Relances() {
     };
   }, [relanceTarget, settings]);
 
-  const isLicensed = licenseStatus?.state === "active";
+  // Passed straight through to generateInvoicePDFBlob's licenseState param
+  // (see pdfGenerator.ts) — a raw LicenseState string, not a boolean,
+  // despite the name; kept as-is to match this file's existing local
+  // naming rather than a drive-by rename.
+  const isLicensed = licenseStatus?.license_state;
 
   return (
     <main className="flex-1 p-8 pt-4 min-w-0">
@@ -263,8 +267,8 @@ export default function Relances() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-down">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Relances & Balance Âgée</h1>
-            <p className="text-xs text-slate-500 mt-1">Suivi et relances des créances échues</p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Relances &amp; Balance Âgée</h1>
+            <p className="text-sm text-muted-foreground mt-1">Suivi et relances des créances échues</p>
           </div>
         </div>
 

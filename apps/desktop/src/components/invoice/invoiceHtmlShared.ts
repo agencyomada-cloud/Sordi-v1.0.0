@@ -1,6 +1,6 @@
 import { numberToWords } from "@/lib/numberToWords";
 import { chunkItems } from "@/lib/paginationUtils";
-import { INVOICE_PDF_FONTS } from "@/components/pdf/invoicePdfShared";
+import { INVOICE_PDF_FONTS, readInvoiceBoolSetting } from "@/components/pdf/invoicePdfShared";
 
 /**
  * Shared between the read-only preview, the print view, and the editable
@@ -38,13 +38,15 @@ export function formatPhone(p: string): string {
   return p.startsWith("(+") ? p : `(+213) ${p.replace(/^0/, '')}`;
 }
 
-export function resolveHtmlInvoiceData(invoice: any) {
+export function resolveHtmlInvoiceData(invoice: any, settings?: any) {
   const isCreditNote = invoice.invoice_type === "credit_note";
   const isProforma = invoice.invoice_type === "proforma";
+  const isQuote = invoice.invoice_type === "quote";
 
   const docTitle = invoice.custom_title
     || (isCreditNote && "FACTURE D'AVOIR")
     || (isProforma && "FACTURE PROFORMA")
+    || (isQuote && "DEVIS")
     || "FACTURE";
 
   const clientName = invoice.clients?.name || invoice.client_name || "";
@@ -63,10 +65,26 @@ export function resolveHtmlInvoiceData(invoice: any) {
   const items = invoice.invoice_items || [];
   const pages = chunkItems(items);
 
+  // "Arrêté" stays invariant across every type — only the article + noun
+  // that follows changes. A devis/proforma must never read like a real
+  // "facture" here, same reasoning as docTitle above.
+  const amountInWordsLabel = isCreditNote
+    ? "Arrêté le présent avoir à la somme de"
+    : isQuote
+    ? "Arrêté le présent devis à la somme de"
+    : isProforma
+    ? "Arrêté la présente facture proforma à la somme de"
+    : "Arrêté la présente facture à la somme de";
+
+  const hasDiscount = (invoice.discount || 0) > 0 || (invoice.discount_value || 0) > 0;
+  const hideEmptyColumns = readInvoiceBoolSetting(settings?.hide_empty_columns, true);
+
   return {
     isCreditNote,
     isProforma,
+    isQuote,
     docTitle,
+    amountInWordsLabel,
     clientName,
     clientAddress,
     clientRc,
@@ -78,6 +96,12 @@ export function resolveHtmlInvoiceData(invoice: any) {
     items,
     pages,
     wordsFrench: numberToWords(invoice.total_ttc || 0),
+    // See ResolvedInvoiceData's own doc comments in invoicePdfShared.ts —
+    // same defaults/semantics, just the web-preview side of the same
+    // Smart Control Panel fields.
+    showAmountInWords: readInvoiceBoolSetting(settings?.show_amount_in_words, false),
+    showRemiseRow: hasDiscount || !hideEmptyColumns,
+    showStampSignature: readInvoiceBoolSetting(settings?.show_stamp_signature, true),
   };
 }
 

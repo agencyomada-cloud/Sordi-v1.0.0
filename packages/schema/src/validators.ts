@@ -285,10 +285,29 @@ export const leadDownloadSchema = z.object({
 
 // ---------------------------------------------------------------------------
 // AI Copilot (POST /copilot/parse) — apps/desktop's Dashboard hero input.
-// The request carries the caller's own already-cached lookup context
-// (clients/suppliers/catalog items/expense categories) so entity
-// resolution (matching "ENPEC" to a real clientId) happens against the
-// exact data the desktop app already has, not a stale server-side copy.
+//
+// Re-architected as a "Multilingual Batch Data Extraction Agent": one call
+// can extract MULTIPLE operations from a single mixed-language sentence
+// (English/French/Arabic/Darija), each a flat {type, data} pair, rather
+// than the earlier single discriminated-union result. This deliberately
+// DROPS several things the earlier schema had:
+// - No entity-ID resolution in the wire shape at all (no clientId/
+//   supplierId/itemId/isNewClient) — apps/desktop now matches `data.name`
+//   against its own context by name at confirm time instead. The request
+//   still sends `context` so the MODEL can prefer an existing exact name
+//   over inventing a near-duplicate, but the response never carries an id.
+// - CREATE_PRODUCT and SET_APP_SETTINGS (the theme toggle) are gone —
+//   out of scope for this extraction-agent spec. (SET_APP_SETTINGS used to
+//   execute instantly with no review card; there is no equivalent now.)
+// - CREATE_INVOICE no longer carries a line-items array or advancePayment
+//   — just one flat `amount`. apps/desktop builds a single synthetic line
+//   item from it.
+// - CREATE_EXPENSE no longer carries supplierId/supplierName or
+//   paymentMethod — those fields don't exist in this schema; apps/desktop
+//   defaults payment method to "cash" and leaves the expense supplier-less.
+// - The OUT_OF_SCOPE branch is gone as a distinct action; an out-of-scope
+//   input is now just `{"operations": []}` — an empty batch, not a
+//   dedicated message. apps/desktop's review card handles the empty case.
 // ---------------------------------------------------------------------------
 
 const copilotContextEntitySchema = z.object({
@@ -299,14 +318,6 @@ const copilotContextEntitySchema = z.object({
 export const copilotContextSchema = z.object({
   clients: z.array(copilotContextEntitySchema),
   suppliers: z.array(copilotContextEntitySchema),
-  catalogItems: z.array(
-    z.object({
-      id: z.string().min(1),
-      name: z.string().min(1),
-      unitPrice: z.number(),
-      category: z.string().optional(),
-    })
-  ),
   categories: z.array(z.string()),
 });
 
@@ -328,115 +339,52 @@ export const copilotParseRequestSchema = z.object({
   fewShotExamples: z.array(copilotFewShotExampleSchema).max(5).optional(),
 });
 
-// Canonical values apps/desktop's own Expenses page Select already uses
-// (see pages/Expenses.tsx) — the copilot returns these directly now
-// instead of a separate ESPECES/VIREMENT/CHEQUE/CARTE enum that then
-// needed mapping before every mutation call.
-export const copilotPaymentMethodSchema = z.enum(["cash", "cheque", "transfer", "card"]);
+export const copilotOperationTypeSchema = z.enum(["create_client", "create_supplier", "create_invoice", "create_expense"]);
 
-// The two branches of the discriminated union below are deliberately kept
-// close to the shape apps/desktop's existing useCreateExpense/
-// useCreateInvoice mutations already accept, so the confirm handler can
-// hand this result almost straight through rather than remapping fields.
-export const copilotExpenseResultSchema = z.object({
-  action: z.literal("CREATE_EXPENSE"),
-  amount: z.number().positive(),
-  category: z.string().min(1),
-  supplierId: z.string().nullable(),
-  supplierName: z.string().nullable(),
-  paymentMethod: copilotPaymentMethodSchema,
-  notes: z.string(),
+// One flat data shape shared by all four operation types — the caller
+// (apps/desktop) knows which fields are meaningful for a given `type` and
+// ignores the rest (e.g. `category` is only read for create_expense).
+//
+// `name` and `entity_name` are DELIBERATELY separate fields, not one
+// shared field — this is the fix for a real hallucination bug: the model
+// was reading a bare name inside an invoice/expense sentence ("Create an
+// invoice for CFCE") as license to also emit a create_client operation
+// for that name, since the one shared `name` field looked identical
+// whether it meant "create this" or "this already exists, just attach
+// to it". `name` now ONLY appears on create_client/create_supplier (an
+// actual creation), `entity_name` ONLY appears on create_invoice/
+// create_expense (a reference to an existing entity by name, resolved
+// client-side — see apps/desktop's resolveEntityMatch.ts — never a
+// creation instruction). Both stay optional: confirmed live against
+// Gemini that it reliably omits `entity_name` for create_expense (an
+// expense's category/description carry the identifying meaning, not a
+// counterparty name).
+export const copilotOperationDataSchema = z.object({
+  name: z.string().min(1).optional(),
+  entity_name: z.string().min(1).optional(),
+  phone: z.string().nullable().optional(),
+  amount: z.number().nullable().optional(),
+  date: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
 });
 
-export const copilotInvoiceLineSchema = z.object({
-  itemId: z.string().nullable(),
-  description: z.string().min(1),
-  quantity: z.number().positive(),
-  unitPrice: z.number(),
-  total: z.number(),
+export const copilotOperationSchema = z.object({
+  type: copilotOperationTypeSchema,
+  data: copilotOperationDataSchema,
 });
 
-export const copilotInvoiceResultSchema = z.object({
-  action: z.literal("CREATE_INVOICE"),
-  clientId: z.string().nullable(),
-  clientName: z.string().min(1),
-  isNewClient: z.boolean().optional(),
-  // Deliberately NOT trusted from the model's own raw output — computed
-  // authoritatively server-side (routes/copilot.ts) as
-  // `isNewClient ? {name: clientName} : null` right before validation, so
-  // it can never disagree with isNewClient/clientName even if the model
-  // forgets it or gets it wrong. Present so the desktop app (and any
-  // future consumer) has one explicit "this needs a client created first"
-  // signal instead of re-deriving it from two other fields itself.
-  newClient: z.object({ name: z.string().min(1) }).nullable(),
-  items: z.array(copilotInvoiceLineSchema).min(1),
-  advancePayment: z.number().nullable().optional(),
-  totalAmount: z.number(),
+// The whole response — a batch, possibly empty (an empty array is how an
+// out-of-scope/nothing-to-extract input is represented now, rather than a
+// dedicated OUT_OF_SCOPE action).
+export const copilotBatchResultSchema = z.object({
+  operations: z.array(copilotOperationSchema),
 });
-
-// Standalone client creation ("Nouveau client SARL Atlas tél 0550...") —
-// deliberately close to apps/desktop's CreateClientData (Omit<...,
-// "company_id">), only `name` required there too.
-export const copilotClientResultSchema = z.object({
-  action: z.literal("CREATE_CLIENT"),
-  name: z.string().min(1),
-  phone: z.string().nullable(),
-  email: z.string().nullable(),
-  address: z.string().nullable(),
-});
-
-// Standalone catalog item creation ("Nouveau produit Câble HDMI prix
-// vente 1200 DA achat 700 DA"). `buyPrice` has no home in the real
-// Product row (apps/desktop's products table only stores a single
-// unit_price — no cost/buy-price column exists) — apps/desktop folds it
-// into the product's description as a note rather than silently dropping
-// it, same pattern as CREATE_INVOICE's advancePayment before a real
-// payment-record path existed for it.
-export const copilotProductResultSchema = z.object({
-  action: z.literal("CREATE_PRODUCT"),
-  name: z.string().min(1),
-  sellPrice: z.number().min(0),
-  buyPrice: z.number().min(0).nullable(),
-});
-
-// UI/system toggles ("activer dark mode", "mode nuit", "passer en
-// blanc") — executed immediately by apps/desktop via next-themes'
-// setTheme(), with no review card at all (see AiCopilotBar.tsx). Only
-// "theme" exists today; `setting` is still a discriminant (not just a
-// bare enum for `value`) so a second setting can be added later without
-// reshaping this.
-export const copilotSettingsResultSchema = z.object({
-  action: z.literal("SET_APP_SETTINGS"),
-  setting: z.literal("theme"),
-  value: z.enum(["dark", "light", "system"]),
-});
-
-// Scope guardrail — the model is instructed (see copilotService.ts's
-// prompt) to return this instead of ever answering a general-knowledge/
-// coding/chit-chat prompt. No amount, no entity, nothing to review or
-// confirm — the desktop app renders `message` and offers only "Fermer".
-export const copilotOutOfScopeResultSchema = z.object({
-  action: z.literal("OUT_OF_SCOPE"),
-  message: z.string().min(1),
-});
-
-export const copilotResultSchema = z.discriminatedUnion("action", [
-  copilotExpenseResultSchema,
-  copilotInvoiceResultSchema,
-  copilotClientResultSchema,
-  copilotProductResultSchema,
-  copilotSettingsResultSchema,
-  copilotOutOfScopeResultSchema,
-]);
 
 export type CopilotContext = z.infer<typeof copilotContextSchema>;
 export type CopilotParseRequest = z.infer<typeof copilotParseRequestSchema>;
 export type CopilotFewShotExample = z.infer<typeof copilotFewShotExampleSchema>;
-export type CopilotPaymentMethod = z.infer<typeof copilotPaymentMethodSchema>;
-export type CopilotExpenseResult = z.infer<typeof copilotExpenseResultSchema>;
-export type CopilotInvoiceResult = z.infer<typeof copilotInvoiceResultSchema>;
-export type CopilotClientResult = z.infer<typeof copilotClientResultSchema>;
-export type CopilotProductResult = z.infer<typeof copilotProductResultSchema>;
-export type CopilotSettingsResult = z.infer<typeof copilotSettingsResultSchema>;
-export type CopilotOutOfScopeResult = z.infer<typeof copilotOutOfScopeResultSchema>;
-export type CopilotResult = z.infer<typeof copilotResultSchema>;
+export type CopilotOperationType = z.infer<typeof copilotOperationTypeSchema>;
+export type CopilotOperationData = z.infer<typeof copilotOperationDataSchema>;
+export type CopilotOperation = z.infer<typeof copilotOperationSchema>;
+export type CopilotBatchResult = z.infer<typeof copilotBatchResultSchema>;

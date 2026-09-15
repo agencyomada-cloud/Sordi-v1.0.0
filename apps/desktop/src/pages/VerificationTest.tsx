@@ -158,7 +158,7 @@ export default function VerificationTest() {
     return (
         <main className="flex-1 p-8">
                     <div className="mb-6">
-                        <h1 className="text-2xl font-bold mb-2">Test de Vérification Système</h1>
+                        <h1 className="text-2xl font-bold text-foreground mb-2">Test de Vérification Système</h1>
                         <p className="text-muted-foreground">
                             Ce test automatique vérifie le flux complet de données : création client, produit, facture et statistiques.
                         </p>

@@ -43,11 +43,28 @@ export interface Settings {
     body_pattern_data?: string;
     qr_code_data?: string;
     invoice_pdf_theme?: string; // 'structure' | 'epure' | 'moderne'
-    invoice_pdf_font?: string; // 'montserrat' | 'inter' | 'poppins' | 'roboto'
+    invoice_pdf_font?: string; // 'montserrat' | 'inter' | 'poppins' | 'roboto' | 'cairo' | 'tajawal' — see INVOICE_PDF_FONTS
+    // --- "Personnaliser" Smart Control Panel (InvoiceCustomizeDrawer) ---
+    // All plain strings like every other key here, since this whole store is
+    // a schemaless HashMap<String, String> on the Rust side (see
+    // update_settings/get_settings in commands.rs) — no migration needed to
+    // add a field, but booleans have no native representation and are
+    // encoded as the literal strings "true"/"false" instead.
+    show_stamp_signature?: string; // "true" | "false", default "true" — hides the cachet/signature from the live preview only (for printing blank invoices to stamp by hand); never touches stamp_data/signature_data themselves
+    hide_empty_columns?: string; // "true" | "false", default TRUE — hides the Remise totals row when nothing was discounted (this was this app's unconditional, hardcoded behavior before this setting existed, so default true preserves it; false always shows the row, even at zero)
+    show_amount_in_words?: string; // "true" | "false", default "false" — spell out the TTC total (legal/financial validity)
     pdf_backup_directory?: string; // local folder root for automated PDF backups (omada-agency branch only)
     smtp_email?: string; // Gmail sender address for in-app document email dispatch
     smtp_app_password?: string; // Gmail App Password (not the account password) for the address above
     current_language?: string; // 'fr' | 'ar' — workspace-wide UI language, see useLanguage
+    // --- Sordi IQ (AI assistant) — see pages/SordiIQ.tsx and the
+    // sordi_iq_chat Tauri command (src-tauri/src/sordi_iq.rs). The API key
+    // is an OpenRouter key, entered by the user in Settings and stored here
+    // like any other credential (smtp_app_password above) — never hardcoded
+    // in source, never sent anywhere but the sordi_iq_chat command's own
+    // OpenRouter request.
+    sordi_iq_api_key?: string;
+    sordi_iq_model?: string; // OpenRouter model slug, e.g. "anthropic/claude-3.5-sonnet" — see DEFAULT_MODEL in sordi_iq.rs
     [key: string]: string | string[] | undefined;
 }
 

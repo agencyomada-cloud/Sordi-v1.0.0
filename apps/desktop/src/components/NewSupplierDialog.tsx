@@ -10,6 +10,8 @@ import {
 } from "@sordi/ui";
 import { useCreateSupplier, useUpdateSupplier } from "@/hooks/useSuppliers";
 import type { CreateSupplierData, Supplier } from "@/lib/database";
+import { useLicenseGate } from "@/hooks/useLicenseGate";
+import { LicenseBlockedModal } from "@/components/licensing/LicenseBlockedModal";
 
 const defaultForm: Omit<CreateSupplierData, "company_id"> = {
   name: "",
@@ -39,6 +41,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
   const isEditing = !!supplier;
   const createSupplier = useCreateSupplier();
   const updateSupplier = useUpdateSupplier();
+  const { requireActive, blockedOpen, setBlockedOpen } = useLicenseGate();
 
   const [formData, setFormData] = useState<Omit<CreateSupplierData, "company_id">>(defaultForm);
 
@@ -75,6 +78,11 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
         onSuccess: () => onOpenChange(false),
       });
     } else {
+      // Creating a new supplier is a write action, gated the same way
+      // NewClient.tsx gates client creation — editing an existing
+      // supplier's own profile stays available read/write-wise (it's not
+      // net-new data), only new record creation is blocked.
+      if (!requireActive()) return;
       createSupplier.mutate(formData, {
         onSuccess: () => onOpenChange(false),
       });
@@ -239,6 +247,7 @@ export function NewSupplierDialog({ open, onOpenChange, supplier }: NewSupplierD
           </div>
         </form>
       </DialogContent>
+      <LicenseBlockedModal open={blockedOpen} onOpenChange={setBlockedOpen} />
     </Dialog>
   );
 }

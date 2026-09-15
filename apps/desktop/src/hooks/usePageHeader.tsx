@@ -36,6 +36,13 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 // the generic "Sordi" fallback on almost every primary section.
 const ROUTE_TITLES: Array<{ test: (path: string) => boolean; title: string }> = [
   { test: (p) => p === "/", title: "Tableau de bord" },
+  // Checked before the generic /invoices|/factures fallback below — each of
+  // the 4 sales document types now has its own strictly-isolated route
+  // (see App.tsx and Sidebar.tsx's "Ventes" group), so each gets its own
+  // breadcrumb title instead of the old shared "Facturation" for all of them.
+  { test: (p) => p.startsWith("/devis"), title: "Devis" },
+  { test: (p) => p.startsWith("/proformas"), title: "Factures Proforma" },
+  { test: (p) => p.startsWith("/avoirs"), title: "Avoirs" },
   { test: (p) => p.startsWith("/invoices") || p.startsWith("/factures"), title: "Facturation" },
   { test: (p) => p.startsWith("/payments"), title: "Paiements" },
   { test: (p) => p.startsWith("/orders") || p.startsWith("/commandes"), title: "Commandes" },

@@ -2,111 +2,68 @@
 // exports — apps/desktop has no dependency on @sordi/schema (same
 // constraint as the licensing types in services/licensing.ts), so this
 // copy must be kept in sync by hand if the server-side shape changes.
+//
+// Re-architected as a "Multilingual Batch Data Extraction Agent" response:
+// one call can extract MULTIPLE operations from a single mixed-language
+// sentence, each a flat {type, data} pair — see validators.ts's own doc
+// comment for the full list of what this DROPS relative to the earlier
+// single discriminated-union CopilotResult (no entity-ID resolution on
+// the wire, no CREATE_PRODUCT/SET_APP_SETTINGS, no invoice line items, no
+// expense supplier/payment-method fields, no dedicated OUT_OF_SCOPE
+// action — an out-of-scope input is just an empty `operations` array).
 
-// Canonical values apps/desktop's own Expenses page Select already uses
-// (see pages/Expenses.tsx) — the copilot returns these directly, no
-// separate enum/mapping needed before a mutation call.
-export type CopilotPaymentMethod = "cash" | "cheque" | "transfer" | "card";
+export type CopilotOperationType = "create_client" | "create_supplier" | "create_invoice" | "create_expense";
 
-export interface CopilotExpenseResult {
-  action: "CREATE_EXPENSE";
-  amount: number;
-  category: string;
-  supplierId: string | null;
-  supplierName: string | null;
-  paymentMethod: CopilotPaymentMethod;
-  notes: string;
+/** One flat data shape shared by all four operation types — the caller
+ *  (AiCopilotBar.tsx) knows which fields are meaningful for a given
+ *  `type` and ignores the rest (e.g. `category` is only read for
+ *  create_expense).
+ *
+ *  `name` and `entity_name` are DELIBERATELY separate, not one shared
+ *  field — this is the fix for a real hallucination bug where a bare name
+ *  inside an invoice/expense sentence ("facture pour CFCE") got read as
+ *  license to also emit a create_client for it, since one shared field
+ *  looked identical whether it meant "create this" or "reference this
+ *  existing one". `name` appears ONLY on create_client/create_supplier
+ *  (an actual creation); `entity_name` appears ONLY on create_invoice/
+ *  create_expense (a reference resolved by name at confirm time — see
+ *  resolveEntityMatch.ts — never a creation instruction). Both stay
+ *  optional: confirmed live that Gemini reliably omits `entity_name` for
+ *  a create_expense with no real counterparty ("Internet"), where
+ *  category/description carry the identifying meaning instead. */
+export interface CopilotOperationData {
+  name?: string | null;
+  entity_name?: string | null;
+  phone?: string | null;
+  amount?: number | null;
+  date?: string | null;
+  description?: string | null;
+  category?: string | null;
 }
 
-export interface CopilotInvoiceLine {
-  itemId: string | null;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
+export interface CopilotOperation {
+  type: CopilotOperationType;
+  data: CopilotOperationData;
 }
 
-export interface CopilotInvoiceResult {
-  action: "CREATE_INVOICE";
-  clientId: string | null;
-  clientName: string;
-  isNewClient?: boolean;
-  /** Authoritatively computed server-side as `isNewClient ? {name:
-   *  clientName} : null` — see apps/api's routes/copilot.ts. Confirming
-   *  this invoice creates the client first when set. */
-  newClient: { name: string } | null;
-  items: CopilotInvoiceLine[];
-  advancePayment?: number | null;
-  totalAmount: number;
+export interface CopilotBatchResult {
+  operations: CopilotOperation[];
 }
-
-/** Standalone client creation ("Nouveau client SARL Atlas tél 0550..."),
- *  as opposed to a new client mentioned inline inside a CREATE_INVOICE. */
-export interface CopilotClientResult {
-  action: "CREATE_CLIENT";
-  name: string;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
-}
-
-/** Standalone catalog item creation. `buyPrice` has no column on the real
- *  Product row (see prefillDraft-era note in copilotHeuristic.ts — only a
- *  single unit_price/sell price exists), so the confirm handler folds it
- *  into the product's description instead of dropping it. */
-export interface CopilotProductResult {
-  action: "CREATE_PRODUCT";
-  name: string;
-  sellPrice: number;
-  buyPrice: number | null;
-}
-
-/** UI/system toggle — executed immediately by AiCopilotBar via next-
- *  themes' setTheme(), with no review card at all. Only ever "theme"
- *  today. */
-export interface CopilotSettingsResult {
-  action: "SET_APP_SETTINGS";
-  setting: "theme";
-  value: "dark" | "light" | "system";
-}
-
-/** The scope guardrail branch — see copilotService.ts's system prompt.
- *  No amount, no entity, nothing to review; the desktop app renders
- *  `message` and offers only a dismiss action. */
-export interface CopilotOutOfScopeResult {
-  action: "OUT_OF_SCOPE";
-  message: string;
-}
-
-export type CopilotResult =
-  | CopilotExpenseResult
-  | CopilotInvoiceResult
-  | CopilotClientResult
-  | CopilotProductResult
-  | CopilotSettingsResult
-  | CopilotOutOfScopeResult;
 
 export interface CopilotContextEntity {
   id: string;
   name: string;
 }
 
-export interface CopilotContextCatalogItem extends CopilotContextEntity {
-  unitPrice: number;
-  category?: string;
-}
-
 export interface CopilotContext {
   clients: CopilotContextEntity[];
   suppliers: CopilotContextEntity[];
-  catalogItems: CopilotContextCatalogItem[];
   categories: string[];
 }
 
 /** One prior user correction, replayed as a few-shot example in the next
  *  /copilot/parse call — see copilotMemory.ts. `output` is a full
- *  CopilotResult (minus OUT_OF_SCOPE, which is never corrected/learned
- *  from) captured at the moment the user confirmed it. */
+ *  CopilotBatchResult captured at the moment the user confirmed it. */
 export interface CopilotFewShotExample {
   input: string;
   output: Record<string, unknown>;

@@ -137,7 +137,7 @@ export default function OrdersPage() {
   const handleDownloadPDF = async (orderId: string) => {
     try {
       const orderForPDF = await buildOrderForPDF(orderId);
-      await generateOrderPDF(orderForPDF, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob, fileName }) => {
+      await generateOrderPDF(orderForPDF, settings, true, undefined, licenseStatus?.license_state, ({ path, blob, fileName }) => {
         toast.success("PDF téléchargé avec succès", {
           description: `Enregistré sous : ${path || fileName}`,
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
@@ -215,7 +215,7 @@ export default function OrdersPage() {
       const results = await Promise.allSettled(
         selectedOrders.map(async (id) => {
           const orderForPDF = await buildOrderForPDF(id);
-          const blob = await generateInvoicePDFBlob(orderForPDF, settings, licenseStatus?.state === "active");
+          const blob = await generateInvoicePDFBlob(orderForPDF, settings, licenseStatus?.license_state);
           return { blob, fileName: `BonCommande-${orderForPDF.order_number || id}.pdf` };
         })
       );
@@ -262,10 +262,10 @@ export default function OrdersPage() {
     <>
       <main className="flex-1 p-8 pt-4">
           <div className="max-w-[1600px] mx-auto w-full">
-          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-8 gap-4">
+          <div className="flex flex-col items-start xl:flex-row xl:items-center justify-between mb-6 gap-4">
             <div>
-              <h1 className="text-3xl text-foreground tracking-tight">Bons de Commande</h1>
-              <p className="text-muted-foreground mt-1">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">Bons de Commande</h1>
+              <p className="text-sm text-muted-foreground mt-1">
                 Gérez vos bons de commande clients · {orders?.length || 0} commande{(orders?.length || 0) > 1 ? "s" : ""}
               </p>
             </div>
@@ -515,7 +515,7 @@ export default function OrdersPage() {
             })),
           } satisfies DraftOrderInput}
           getPdfBase64={async () => {
-            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.state === "active");
+            const blob = await generateInvoicePDFBlob(emailTarget, settings, licenseStatus?.license_state);
             return blobToBase64(blob);
           }}
         />

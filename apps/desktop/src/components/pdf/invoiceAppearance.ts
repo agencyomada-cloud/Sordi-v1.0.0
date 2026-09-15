@@ -56,13 +56,12 @@ export function normalizeThemeSlug(theme?: string | null): 'structure' | 'epure'
  * disagreeing with what the PDF actually renders.
  */
 export function resolveInvoiceAppearance(invoice: any, settings?: PDFSettings | (Record<string, any> & { invoice_pdf_theme?: string })): InvoiceAppearanceConfig {
-  // #476CFF is the one true app-wide default — every PDF template, every
-  // read-only HTML canvas, and the interactive editor all fall back to this
-  // exact value when settings.primary_color is unset. (A previous version
-  // of this resolver used #2563EB here, a silent drift from that shared
-  // default that would have shown a different "no custom color" blue in
-  // the PDF/appearance-driven surfaces than everywhere else.)
-  const primaryColor = (settings as any)?.primary_color || '#476CFF';
+  // #FF2949 (the Sordi brand "Scarlet", hsl(351 100% 58%) — see index.css's
+  // --primary token) is the one true app-wide default — every PDF template,
+  // every read-only HTML canvas, and the interactive editor all fall back to
+  // this exact value when settings.primary_color is unset, so a brand-new
+  // document is on-brand out of the box instead of an arbitrary blue.
+  const primaryColor = (settings as any)?.primary_color || '#FF2949';
   return {
     theme: normalizeThemeSlug((settings as any)?.invoice_pdf_theme),
     primaryColor,

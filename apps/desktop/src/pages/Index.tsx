@@ -40,7 +40,6 @@ import {
   Clock,
 } from "lucide-react";
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, AreaChart, Area, ResponsiveContainer } from "recharts";
-import { AiCopilotBar } from "@/components/dashboard/ai-copilot";
 
 // Dashboard-only palette: the Scarlet brand accent, matching --primary in
 // index.css (was a stale #0052FF "AgentOps-blue" literal left over from
@@ -394,12 +393,10 @@ const Index = () => {
             underlying value/query (selectedYear, periodPreset ->
             selectedMonths, handleRefresh) is unchanged, only the controls'
             presentation is. */}
-        <div className="flex items-center justify-between shrink-0 animate-fade-in-down">
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-base font-semibold text-foreground tracking-tight">{t("dashboard")}</h1>
-            <span className="text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full truncate">
-              Vue d'ensemble de votre activité
-            </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0 animate-fade-in-down">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("dashboard")}</h1>
+            <p className="text-sm text-muted-foreground mt-1">Vue d'ensemble et pilotage de votre activité</p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -433,11 +430,6 @@ const Index = () => {
             </Tooltip>
           </div>
         </div>
-
-        {/* ── AI Copilot — permanent hero input, above the KPI strip.
-            Fully self-contained (own state, own mock-analysis logic, own
-            Cmd+K handling) — see components/dashboard/ai-copilot/. ── */}
-        <AiCopilotBar />
 
         {/* ── Tier 2 — unified executive metric strip. Every value/delta/
             subtext computed above is unchanged — only the layout is new.

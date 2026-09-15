@@ -227,15 +227,26 @@ export default function InvoiceDetailPage() {
     if (!id) return;
     await executeSecuredAction(() => {
       deleteInvoice.mutate(id, {
-        onSuccess: () => navigate("/invoices"),
+        onSuccess: () => navigate(listPath),
       });
     }, "Autoriser la suppression de la facture");
   };
 
+  // Strict route isolation means "back to the list" now depends on which
+  // of the 4 sales document types this is — a credit note's breadcrumb/
+  // back button must return to /avoirs, never the Factures list.
   const listLabel =
-    invoice?.invoice_type === "credit_note" ? "Avoirs" : invoice?.invoice_type === "proforma" ? "Proformas" : "Facturation";
+    invoice?.invoice_type === "credit_note" ? "Avoirs"
+    : invoice?.invoice_type === "proforma" ? "Factures Proforma"
+    : invoice?.invoice_type === "quote" ? "Devis"
+    : "Facturation";
+  const listPath =
+    invoice?.invoice_type === "credit_note" ? "/avoirs"
+    : invoice?.invoice_type === "proforma" ? "/proformas"
+    : invoice?.invoice_type === "quote" ? "/devis"
+    : "/factures";
   useSetPageHeader(listLabel, [
-    { label: listLabel, path: "/invoices" },
+    { label: listLabel, path: listPath },
     { label: invoice?.invoice_number || "…" },
   ]);
 
@@ -243,7 +254,7 @@ export default function InvoiceDetailPage() {
     if (!invoice) return;
     setIsGenerating(true);
     try {
-      const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.state === "active");
+      const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.license_state);
       toast.success("PDF téléchargé avec succès");
       const b64 = await blobToBase64(blob);
       setPdfBlob(blob);
@@ -265,7 +276,7 @@ export default function InvoiceDetailPage() {
 
     setIsGenerating(true);
     try {
-      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.state === "active", ({ path, blob }) => {
+      await generateInvoicePDF(invoice, settings, true, undefined, licenseStatus?.license_state, ({ path, blob }) => {
         toast.success("Facture PDF générée", {
           description: "Le fichier a été enregistré avec succès.",
           action: { label: "Ouvrir", onClick: () => openSavedFile(path, blob) },
@@ -285,7 +296,7 @@ export default function InvoiceDetailPage() {
     if (!invoice) return;
     setIsGenerating(true);
     try {
-      const pdfBase64 = await generateInvoicePDF(invoice, settings, false, undefined, licenseStatus?.state === "active");
+      const pdfBase64 = await generateInvoicePDF(invoice, settings, false, undefined, licenseStatus?.license_state);
       toast.success("PDF téléchargé avec succès");
       const { invoke } = await import("@tauri-apps/api/core");
       const fileName = `Impression-${invoice.invoice_number || "facture"}.pdf`;
@@ -345,8 +356,8 @@ export default function InvoiceDetailPage() {
             title="Facture introuvable"
             description="Cette facture n'existe plus ou a été déplacée."
           />
-          <Button onClick={() => navigate("/invoices")} className="w-full">
-            Retour aux factures
+          <Button onClick={() => navigate(listPath)} className="w-full">
+            Retour à la liste
           </Button>
         </div>
       </main>
@@ -380,7 +391,7 @@ export default function InvoiceDetailPage() {
                 give up its own space for this one; the client name span is
                 the only piece that visibly truncates under pressure. */}
             <div className="min-w-0 shrink flex items-center gap-2 overflow-hidden">
-              <Button variant="ghost" size="sm" onClick={() => navigate("/invoices")} className="h-7 px-2.5 gap-1.5 text-xs text-zinc-600 shrink-0 rounded-md">
+              <Button variant="ghost" size="sm" onClick={() => navigate(listPath)} className="h-7 px-2.5 gap-1.5 text-xs text-zinc-600 shrink-0 rounded-md">
                 <ArrowLeft className="w-3.5 h-3.5" />
                 Retour
               </Button>
@@ -851,7 +862,7 @@ export default function InvoiceDetailPage() {
               })),
             } satisfies DraftInvoiceInput}
             getPdfBase64={async () => {
-              const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.state === "active");
+              const blob = await generateInvoicePDFBlob(invoice, settings, licenseStatus?.license_state);
               return blobToBase64(blob);
             }}
           />

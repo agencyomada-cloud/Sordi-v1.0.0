@@ -15,6 +15,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { numberToWords } from "@/lib/numberToWords";
 import { getContrastTextColor } from "@/lib/colorContrast";
 import { getCompanyPhones, formatPhone, resolveLegalFields, resolveInvoiceHtmlFontFamily } from "./invoiceHtmlShared";
+import { readInvoiceBoolSetting } from "@/components/pdf/invoicePdfShared";
 import { ProductPickerCombobox } from "@/components/ProductPickerCombobox";
 import { ClientPickerCombobox } from "./ClientPickerCombobox";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -28,6 +29,8 @@ interface Props {
   invoice: any;
   onInvoiceChange: (invoice: any) => void;
   clients?: any[];
+  /** Bon de commande only — see EditableInvoicePreview's own doc comment. */
+  suppliers?: any[];
   products?: any[];
   settings: any;
   logic: EditableInvoiceLogic;
@@ -40,6 +43,7 @@ export function EditableInvoiceEpure({
   invoice,
   onInvoiceChange,
   clients,
+  suppliers,
   products,
   settings,
   logic,
@@ -47,7 +51,7 @@ export function EditableInvoiceEpure({
   onStampSizeChange,
   onStampSizeCommit,
 }: Props) {
-  const accent = settings?.primary_color || "#476CFF";
+  const accent = settings?.primary_color || "#FF2949";
   const phones = getCompanyPhones(settings);
   const legalFields = resolveLegalFields(settings);
   const scaleContainer = useScaleToFitContainer();
@@ -55,13 +59,14 @@ export function EditableInvoiceEpure({
     paymentMode, discountRate, discountType, setDiscountType,
     openPopoverIndex, setOpenPopoverIndex, openClientCombo, setOpenClientCombo,
     pages, subtotal, tvaAmount, timbre, discountAmount, netTotal,
-    isCreditNote, isProforma, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, grandTotalLabel, isTaxExempt,
+    isCreditNote, isProforma, isOrder, docTitle, showTva, showTimbre, showMontantEnLettres, showPaymentMethod, showPricing, recipientLabel, recipientPlaceholder, stampLabel, grandTotalLabel, isTaxExempt, amountInWordsLabel,
     formatCurrency,
     updateInvoiceField, selectClient, handlePaymentModeChange,
     handleDiscountRateChange, handleDiscountAmountChange,
     handleItemUpdate, handleAddProduct, handleAddCustomItem, handleDeleteItem,
     items, moveItemUp, moveItemDown,
   } = logic;
+  const recipientList = isOrder ? suppliers : clients;
 
   const createProduct = useCreateProduct();
   // Registers a custom-typed line (no product_id — not yet in the catalog)
@@ -149,17 +154,18 @@ export function EditableInvoiceEpure({
 
                 <div className="flex justify-between mb-7">
                   <div className="w-[46%]">
-                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Destinataire</div>
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{recipientLabel}</div>
                     <ClientPickerCombobox
-                      clients={clients}
+                      clients={recipientList}
                       selectedClientId={invoice.clients?.id}
                       open={openClientCombo}
                       onOpenChange={setOpenClientCombo}
                       onSelectClient={(client) => { selectClient(client); setOpenClientCombo(false); }}
                       container={scaleContainer}
+                      entityLabel={isOrder ? "fournisseur" : "client"}
                       trigger={
                         <Button variant="ghost" role="combobox" className="h-auto border-none bg-transparent p-0 text-[11pt] font-bold uppercase hover:bg-gray-50 w-full flex justify-start leading-tight mb-0.5 rounded-none">
-                          {invoice.clients?.name || invoice.client_name || "Sélectionner un client..."}
+                          {invoice.clients?.name || invoice.client_name || recipientPlaceholder}
                           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                         </Button>
                       }
@@ -208,10 +214,10 @@ export function EditableInvoiceEpure({
                     style={{ backgroundColor: accent, color: getContrastTextColor(accent) }}
                   >
                     <div className="flex-1 min-w-[260px] text-left">Désignation / Prestation</div>
-                    <div className="w-[120px] text-right">P.U (HT)</div>
+                    {showPricing && <div className="w-[120px] text-right">P.U (HT)</div>}
                     <div className="w-[70px] text-right">Qté</div>
                     <div className="w-[130px] text-center">U.M</div>
-                    <div className="w-[130px] text-right">Total HT</div>
+                    {showPricing && <div className="w-[130px] text-right">Total HT</div>}
                     <div className="w-[70px]" />
                   </div>
                   {pageItems.map((item: any, relIdx: number) => {
@@ -225,16 +231,20 @@ export function EditableInvoiceEpure({
                             <div className="font-normal text-[9px] leading-tight mt-1 text-gray-500">{item.product_description || item.products?.description || item.description}</div>
                           )}
                         </div>
-                        <div className="w-[120px] font-mono pt-1">
-                          <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-5 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-[9pt]" />
-                        </div>
+                        {showPricing && (
+                          <div className="w-[120px] font-mono pt-1">
+                            <Input type="number" step="0.01" value={item.unit_price} onChange={(e) => handleItemUpdate(globalIdx, 'unit_price', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-5 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-[9pt]" />
+                          </div>
+                        )}
                         <div className="w-[70px] font-mono pt-1">
                           <Input type="number" step="0.001" data-line-index={globalIdx} data-line-field="quantity" value={item.quantity} onChange={(e) => handleItemUpdate(globalIdx, 'quantity', parseFloat(e.target.value) || 0)} onKeyDown={handleLineEntryKeyDown} className="h-5 w-full text-right bg-transparent border-none shadow-none px-2 py-0 leading-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none rounded-sm hover:bg-zinc-50/80 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-zinc-300 transition-colors font-mono tabular-nums tracking-tight text-[9pt]" />
                         </div>
                         <div className="w-[130px] text-center text-gray-500 text-[11px] uppercase leading-6 whitespace-nowrap overflow-hidden text-ellipsis px-1 pt-1" title={unit}>{unit}</div>
-                        <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-[9pt]">
-                          {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
-                        </div>
+                        {showPricing && (
+                          <div className="w-[130px] text-right font-mono tabular-nums tracking-tight font-semibold pt-1 leading-6 text-[9pt]">
+                            {formatCurrency((item.quantity || 0) * (item.unit_price || 0))}
+                          </div>
+                        )}
                         <div className="w-[70px] flex items-center justify-end gap-0.5 pt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                           {!item.product_id && (item.product_name || item.name) && (
                             <button
@@ -327,6 +337,12 @@ export function EditableInvoiceEpure({
                     </div>
                   );
 
+                  // A bon de livraison never shows pricing/totals at all
+                  // (showPricing false) — notes get the full row width.
+                  if (!showPricing) {
+                    return isFirstPage && <div className="mb-6">{notesBox}</div>;
+                  }
+
                   // Notes (page 1) and totals (last page) share one row only
                   // when they're the same page — the overwhelmingly common
                   // single-page case. A multi-page invoice can't put them
@@ -350,20 +366,26 @@ export function EditableInvoiceEpure({
 
                 {isLastPage && (
                   <>
-                    {showMontantEnLettres && (
+                    {/* showMontantEnLettres alone is the order/delivery
+                        exclusion (see useEditableInvoiceLogic.ts); combined
+                        with show_amount_in_words so this block — and the
+                        stamp row's own spacing compensation just below —
+                        agree on the exact same condition. */}
+                    {showMontantEnLettres && readInvoiceBoolSetting(settings?.show_amount_in_words, false) && (
                       <div className="mt-8 mb-6">
                         <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide mb-1">
-                          {isCreditNote ? "Arrêté le présent avoir à la somme de" : "Arrêté la présente facture à la somme de"}
+                          {amountInWordsLabel}
                         </div>
                         <div className="text-[8.5pt] text-gray-700 uppercase leading-relaxed">{numberToWords(netTotal)}</div>
                       </div>
                     )}
 
-                    <div className={cn("flex justify-end items-end mb-4", !showMontantEnLettres && "mt-8")}>
+                    <div className={cn("flex justify-end items-end mb-4", !(showMontantEnLettres && readInvoiceBoolSetting(settings?.show_amount_in_words, false)) && "mt-8")}>
+                      {readInvoiceBoolSetting(settings?.show_stamp_signature, true) && (
                       <div className="flex flex-col items-center relative" style={{ minWidth: "160px" }}>
                         {(settings?.stamp_data || settings?.signature_data) && (
                           <>
-                            <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">Cachet et signature</div>
+                            <div className="text-[7.5pt] text-gray-400 uppercase tracking-wide">{stampLabel || "Cachet et signature"}</div>
                             <div className="w-full h-px bg-gray-300 mt-1 mb-2" />
                           </>
                         )}
@@ -374,8 +396,10 @@ export function EditableInvoiceEpure({
                           settings={settings}
                           stampSize={stampSize}
                           showTitle={false}
+                          label={stampLabel}
                         />
                       </div>
+                      )}
                     </div>
                   </>
                 )}
